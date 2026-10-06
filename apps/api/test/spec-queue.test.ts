@@ -295,6 +295,9 @@ describe('OD-5: right to work and sponsorship from the person\'s own record', ()
     const next = (await t.api.get('/agent/queue/next').expect(200)).body;
     expect(next.workRights).toEqual({ country: 'GB', fromRecord: true });
     expect(next.values).toMatchObject({ rightToWork: true, visaSponsorship: false });
+    // The tailored CV goes with it, to be attached to a field that asks for a CV.
+    expect(next.cv.fileName).toBe(`${PROFILE.firstName}_${PROFILE.lastName}_CV.pdf`);
+    expect(next.cv.text.length).toBeGreaterThan(0);
   });
 
   it('without a record the queue says so, and sponsorship has no value', async () => {

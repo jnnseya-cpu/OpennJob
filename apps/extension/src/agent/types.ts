@@ -66,6 +66,8 @@ export interface RunRequest {
   holdSubmit?: boolean;
   /** The job's country and whether the right-to-work answers come from the person's record (OD-5). */
   workRights?: WorkRightsContext;
+  /** The tailored CV, attached as a PDF to a field that asks for a CV (files.ts). */
+  cv?: { fileName: string; text: string };
 }
 
 export interface RunReport {
@@ -79,6 +81,8 @@ export interface RunReport {
   readyToSubmit?: boolean;
   /** File inputs (CV upload). The agent never sets a file, so a required one holds the form. */
   fileInputs?: { required: number; total: number };
+  /** How many CV fields got the CV attached. */
+  cvAttached?: number;
   fields: FieldReport[];
   message: string;
 }

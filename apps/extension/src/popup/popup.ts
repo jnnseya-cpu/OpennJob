@@ -380,7 +380,9 @@ async function run(dryRun: boolean): Promise<void> {
   }
   try {
     const mode = modeSelect.value as Mode;
-    const report = await sendToPage({ mode, values: fillValues(), confirmedFieldIds: [...confirmed], dryRun });
+    const cvText = selectedApplication()?.tailoredCv || profile?.cvText || '';
+    const cvName = `${`${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim().replace(/[^A-Za-z0-9]+/g, '_') || 'CV'}_CV.pdf`;
+    const report = await sendToPage({ mode, values: fillValues(), confirmedFieldIds: [...confirmed], dryRun, ...(cvText ? { cv: { fileName: cvName, text: cvText } } : {}) });
     render(report);
     if (!dryRun) await recordOutcome(report);
   } catch (err) {

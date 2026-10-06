@@ -20,3 +20,5 @@ NOT show that the extension works on any real employer's website.
 - queue-thanks.html          : the confirmation page ("Thank you. Your application has been received.")
 - queue-rtw.html, queue-rtw-convictions.html : right to work and sponsorship only, and the same with a convictions
   question (work-rights.spec.ts, OD-5). Fictional employer.
+- queue-cv.html, queue-cv-cover.html : a required CV upload, and the same with a required cover-letter
+  file (cv-upload.spec.ts). Fictional employer.

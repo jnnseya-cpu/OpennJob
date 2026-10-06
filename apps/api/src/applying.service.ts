@@ -271,6 +271,8 @@ export class ApplyingService {
       values: { ...buildFillValues(profile, passport, application.statement, { ...(jobCountry ? { jobCountry } : {}), today }), ...screeningFillValues(screening) },
       custom: customAnswers(screening),
       ...(workRights ? { workRights } : {}),
+      // The tailored CV, attached as a PDF to a field that asks for a CV (the extension's files.ts).
+      cv: { fileName: applicationEmail(job ?? { title: application.jobTitle, employer: application.employer, description: '' }, profile, '').cvFileName, text: application.tailoredCv || profile.cvText },
     };
   }
 

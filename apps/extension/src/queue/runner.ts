@@ -33,6 +33,8 @@ interface NextReply {
   custom?: Record<string, string>;
   /** The job's country and whether right to work comes from the person's record (OD-5). */
   workRights?: WorkRightsContext;
+  /** The tailored CV, attached to a field that asks for a CV. */
+  cv?: { fileName: string; text: string };
 }
 
 const STEP_LIMIT = 25;
@@ -130,7 +132,7 @@ export async function runQueue(): Promise<QueueState> {
       try {
         await waitForLoad(tabId);
         await inject(tabId);
-        const report = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true, ...(next.workRights ? { workRights: next.workRights } : {}) })) as RunReport;
+        const report = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true, ...(next.workRights ? { workRights: next.workRights } : {}), ...(next.cv ? { cv: next.cv } : {}) })) as RunReport;
         const reasons = holdReasonsOf(report);
         if (reasons.length > 0) {
           await api(`/agent/queue/${app.id}/result`, { method: 'POST', body: { outcome: 'held', reasons } });
