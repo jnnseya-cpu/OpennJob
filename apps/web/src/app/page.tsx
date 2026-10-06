@@ -213,6 +213,9 @@ export default function Landing() {
 
         <footer className="lp-foot">
           <span>© {new Date().getFullYear()} OpennJob</span>
+          <span>
+            Contact: <a href="mailto:support@opennjob.com">support@opennjob.com</a>
+          </span>
           <span>Pilot build. Terms and privacy notice in preparation.</span>
           <span>No job or interview is guaranteed.</span>
         </footer>

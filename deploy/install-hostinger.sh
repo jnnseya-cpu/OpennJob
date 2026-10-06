@@ -19,9 +19,16 @@ DIR="${OPENNJOB_DIR:-/opt/opennjob}"
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root (sudo bash install.sh)."; exit 1; }
 
-ask() { local prompt="$1" var; read -r -p "$prompt: " var; [ -n "$var" ] || { echo "A value is needed."; exit 1; }; printf '%s' "$var"; }
-DOMAIN="${DOMAIN:-$(ask 'Domain for the app (its DNS A record must point here), e.g. app.example.org')}"
-ACME_EMAIL="${ACME_EMAIL:-$(ask 'E-mail for HTTPS certificate notices')}"
+# ask "question" [default]: Enter keeps the default.
+ask() {
+  local prompt="$1" def="${2:-}" var
+  if [ -n "$def" ]; then read -r -p "$prompt [$def]: " var; var="${var:-$def}"; else read -r -p "$prompt: " var; fi
+  [ -n "$var" ] || { echo "A value is needed."; exit 1; }
+  printf '%s' "$var"
+}
+DOMAIN="${DOMAIN:-$(ask 'Domain for the app (its DNS A record must point here)' 'opennjob.com')}"
+SUPPORT_EMAIL="${SUPPORT_EMAIL:-$(ask 'Support inbox: certificate notices, operator alerts, sender of e-mails' 'support@opennjob.com')}"
+ACME_EMAIL="${ACME_EMAIL:-$SUPPORT_EMAIL}"
 ALLOWLIST="${OPENNJOB_REGISTRATION_ALLOWLIST:-$(ask 'Invited e-mail address(es), comma separated (only they can register)')}"
 
 echo "== Checking DNS for $DOMAIN"
@@ -62,12 +69,14 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 OPENNJOB_JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
 OPENNJOB_DATA_KEY=$(openssl rand -base64 32 | tr -d '\n')
 OPENNJOB_REGISTRATION_ALLOWLIST=$ALLOWLIST
+# Until RESEND_API_KEY is set, e-mail is recorded and not sent (deploy/email-dns.md).
 RESEND_API_KEY=
-OPENNJOB_EMAIL_FROM=
+OPENNJOB_EMAIL_FROM="OpennJob <$SUPPORT_EMAIL>"
+OPENNJOB_BRAND_FOOTER="OpennJob · $SUPPORT_EMAIL"
 ANTHROPIC_API_KEY=
 OPENNJOB_MODEL=
 OPENNJOB_SCHEDULER=true
-OPENNJOB_OPERATOR_EMAIL=$ACME_EMAIL
+OPENNJOB_OPERATOR_EMAIL=$SUPPORT_EMAIL
 OPENNJOB_RETENTION_DAYS=
 ENV
   chmod 600 "$ENV_FILE"

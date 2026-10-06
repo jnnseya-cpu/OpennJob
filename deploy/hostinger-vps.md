@@ -71,7 +71,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production logs migrat
 curl -s https://app.example.org/api/health      # {"status":"ok","persistence":"postgres","database":"up"}
 ```
 
-Open `https://app.example.org`: the landing page. Register with the invited address.
+Open `https://opennjob.com` (or your DOMAIN): the landing page. Register with the invited address. E-mail sending: `deploy/email-dns.md`.
 
 ## 6. Backups and a restore test
 
