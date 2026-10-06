@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Apply: Support Worker - Brookvale Care Agency (example)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <header class="site">
+    <strong>Brookvale Care Agency (example)</strong>
+    <p>Fictional agency. Test fixture for OpennJob. This page has a mock CAPTCHA widget.</p>
+  </header>
+  <form id="captcha-apply" action="#" method="post">
+    <label for="c-name">Full name</label>
+    <input type="text" id="c-name" name="fullName" required>
+    <label for="c-email">Email</label>
+    <input type="email" id="c-email" name="email" required>
+    <label for="c-phone">Phone</label>
+    <input type="tel" id="c-phone" name="phone">
+    <!-- Static mock-up shaped like a third-party "are you human" widget. It is not a real CAPTCHA and loads nothing. -->
+    <div class="g-recaptcha mock-captcha" data-sitekey="fixture-not-a-real-key">
+      <span class="box" aria-hidden="true"></span><span>I am not a robot (mock)</span>
+    </div>
+    <p><button type="submit" id="c-submit">Send application</button></p>
+  </form>
+  <p id="result" hidden>Thanks (fixture).</p>
+</body>
+</html>

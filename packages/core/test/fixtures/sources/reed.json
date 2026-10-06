@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "jobId": 55001122,
+      "employerId": 990011,
+      "employerName": "Brookvale Care Agency (example)",
+      "jobTitle": "Registered Mental Health Nurse",
+      "locationName": "Birmingham",
+      "minimumSalary": 38000,
+      "maximumSalary": 44000,
+      "currency": "GBP",
+      "expirationDate": "30/10/2026",
+      "date": "02/10/2026",
+      "jobDescription": "RMN required for a 16-bed unit. Valid NMC PIN essential. Experience in mental health settings.",
+      "applications": 4,
+      "jobUrl": "https://www.reed.co.uk/jobs/registered-mental-health-nurse/55001122"
+    },
+    {
+      "jobId": 55001123,
+      "employerName": "EXAMPLE CARE",
+      "jobTitle": "Healthcare assistant",
+      "locationName": "Leeds UK",
+      "minimumSalary": null,
+      "maximumSalary": null,
+      "date": "03/10/2026",
+      "jobDescription": "Personal care.",
+      "jobUrl": "https://www.reed.co.uk/jobs/healthcare-assistant/55001123"
+    }
+  ],
+  "totalResults": 2
+}

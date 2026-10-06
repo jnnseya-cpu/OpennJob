@@ -1,0 +1,19 @@
+[
+  {
+    "id": "a1b2c3d4-0000-4000-8000-000000000001",
+    "text": "Support Worker - Learning Disabilities",
+    "hostedUrl": "https://jobs.lever.co/examplesupport/a1b2c3d4-0000-4000-8000-000000000001",
+    "applyUrl": "https://jobs.lever.co/examplesupport/a1b2c3d4-0000-4000-8000-000000000001/apply",
+    "categories": { "location": "Coventry", "team": "Supported Living", "commitment": "Full-time" },
+    "descriptionPlain": "Support adults with learning disabilities.\nEssential\n- Safeguarding awareness\nDesirable\n- Driving licence",
+    "createdAt": 1758700800000
+  },
+  {
+    "id": "a1b2c3d4-0000-4000-8000-000000000002",
+    "text": "Healthcare Assistant",
+    "hostedUrl": "https://jobs.lever.co/examplesupport/a1b2c3d4-0000-4000-8000-000000000002",
+    "categories": { "location": "Leeds, UK" },
+    "descriptionPlain": "Personal care.",
+    "createdAt": 1758787200000
+  }
+]

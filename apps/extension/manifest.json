@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "OpennJob (development build)",
+  "version": "0.1.0",
+  "description": "Fills job application forms from your OpennJob profile, in your own browser. Sensitive fields wait for your confirmation.",
+  "action": {
+    "default_title": "OpennJob",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "scripting", "storage"]
+}

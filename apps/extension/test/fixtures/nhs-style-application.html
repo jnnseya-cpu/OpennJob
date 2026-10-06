@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Apply: Staff Nurse, Acute Medical Ward - Midshire University Hospitals (example)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <header class="site">
+    <strong>Midshire University Hospitals (example)</strong>
+    <p>Fictional employer. Test fixture for OpennJob. Vacancy MUH-EX-0412: Staff Nurse, Acute Medical Ward.</p>
+  </header>
+
+  <form id="application" action="#" method="post" novalidate>
+    <section aria-label="Personal details">
+      <h2>1. Personal details</h2>
+      <label for="vacancy-ref">Vacancy reference</label>
+      <input type="text" id="vacancy-ref" name="vacancyRef" value="MUH-EX-0412" readonly>
+      <label for="forename">First name</label>
+      <input type="text" id="forename" name="forename" autocomplete="given-name" required>
+      <label for="surname">Last name</label>
+      <input type="text" id="surname" name="surname" autocomplete="family-name" required>
+      <label for="contact-email">Email address</label>
+      <input type="email" id="contact-email" name="contactEmail" required>
+      <label for="contact-phone">Mobile telephone number</label>
+      <input type="tel" id="contact-phone" name="contactPhone">
+      <label for="addr1">Address line 1</label>
+      <input type="text" id="addr1" name="addr1">
+      <label for="addr2">Address line 2 (optional)</label>
+      <input type="text" id="addr2" name="addr2">
+      <label for="town">Town or city</label>
+      <input type="text" id="town" name="town">
+      <label for="pcode">Postcode</label>
+      <input type="text" id="pcode" name="pcode">
+      <label for="heard">Where did you see this vacancy?</label>
+      <select id="heard" name="heard">
+        <option value="">Please select</option>
+        <option>Our website</option>
+        <option>A job board</option>
+        <option>Word of mouth</option>
+      </select>
+    </section>
+
+    <section aria-label="Save your application">
+      <h2>2. Save your application</h2>
+      <label for="save-password">Choose a password so you can return to this form (optional)</label>
+      <input type="password" id="save-password" name="savePassword" autocomplete="new-password">
+    </section>
+
+    <section aria-label="Professional registration">
+      <h2>3. Professional registration</h2>
+      <label for="nmc-pin">NMC PIN</label>
+      <p class="hint">For example 12A3456E</p>
+      <input type="text" id="nmc-pin" name="nmcPin">
+    </section>
+
+    <section aria-label="Supporting information">
+      <h2>4. Supporting information</h2>
+      <label for="supporting-info">Supporting information</label>
+      <p class="hint">Tell us how you meet each essential criterion in the person specification.</p>
+      <textarea id="supporting-info" name="supportingInfo" required></textarea>
+    </section>
+
+    <section aria-label="Referees">
+      <h2>5. Referees</h2>
+      <fieldset>
+        <legend>Referee 1</legend>
+        <label for="ref1-name">Full name</label>
+        <input type="text" id="ref1-name" name="ref1Name">
+        <label for="ref1-org">Organisation</label>
+        <input type="text" id="ref1-org" name="ref1Org">
+        <label for="ref1-email">Email address</label>
+        <input type="email" id="ref1-email" name="ref1Email">
+        <label for="ref1-phone">Telephone</label>
+        <input type="tel" id="ref1-phone" name="ref1Phone">
+      </fieldset>
+    </section>
+
+    <section aria-label="Declarations">
+      <h2>6. Declarations</h2>
+      <fieldset id="rtw-group">
+        <legend>Do you have the right to work in the UK?</legend>
+        <input type="radio" id="rtw-yes" name="rtw" value="yes"><label class="inline" for="rtw-yes">Yes</label>
+        <input type="radio" id="rtw-no" name="rtw" value="no"><label class="inline" for="rtw-no">No</label>
+      </fieldset>
+      <fieldset id="convictions-group">
+        <legend>Do you have any unspent criminal convictions or conditional cautions?</legend>
+        <input type="radio" id="conv-yes" name="convictions" value="yes"><label class="inline" for="conv-yes">Yes</label>
+        <input type="radio" id="conv-no" name="convictions" value="no"><label class="inline" for="conv-no">No</label>
+      </fieldset>
+      <fieldset id="ftp-group">
+        <legend>Has your fitness to practise ever been investigated by a regulator?</legend>
+        <input type="radio" id="ftp-yes" name="ftp" value="yes"><label class="inline" for="ftp-yes">Yes</label>
+        <input type="radio" id="ftp-no" name="ftp" value="no"><label class="inline" for="ftp-no">No</label>
+      </fieldset>
+      <label for="dbs-number">DBS certificate number</label>
+      <input type="text" id="dbs-number" name="dbsNumber">
+      <p>
+        <input type="checkbox" id="dbs-update" name="dbsUpdate">
+        <label class="inline" for="dbs-update">I am subscribed to the DBS Update Service</label>
+      </p>
+    </section>
+
+    <section aria-label="Equality monitoring">
+      <h2>7. Equality monitoring</h2>
+      <p class="hint">This section is not seen by the shortlisting panel.</p>
+      <label for="ethnic-group">Ethnic group</label>
+      <select id="ethnic-group" name="ethnicGroup">
+        <option value="">Please select</option>
+        <option>Group A (fixture)</option>
+        <option>Group B (fixture)</option>
+        <option>Prefer not to say</option>
+      </select>
+    </section>
+
+    <section aria-label="Submit">
+      <h2>8. Submit</h2>
+      <p>
+        <input type="checkbox" id="final-declaration" name="finalDeclaration" required>
+        <label class="inline" for="final-declaration">I declare that the information I have given is true and complete</label>
+      </p>
+      <button type="submit" id="submit-application">Submit application</button>
+    </section>
+  </form>
+  <p id="result" hidden>Application received (fixture).</p>
+</body>
+</html>

@@ -1,0 +1,16 @@
+body { font: 16px/1.5 system-ui, sans-serif; color: #1b1f24; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+header.site { border-bottom: 4px solid #1f4e79; padding-bottom: 8px; margin-bottom: 16px; }
+header.site p { margin: 0; color: #55606c; }
+section { margin: 0 0 28px; }
+h2 { font-size: 20px; border-bottom: 1px solid #c9d1da; padding-bottom: 4px; }
+label { display: block; margin: 12px 0 4px; font-weight: 600; }
+label.inline { display: inline; font-weight: 400; margin: 0 16px 0 4px; }
+input[type="text"], input[type="email"], input[type="tel"], input[type="password"], textarea, select { width: 100%; padding: 8px; font: inherit; border: 2px solid #1b1f24; border-radius: 0; box-sizing: border-box; }
+textarea { min-height: 180px; }
+fieldset { border: 0; padding: 0; margin: 16px 0; }
+legend { font-weight: 600; padding: 0; }
+button { font: inherit; font-weight: 600; padding: 10px 18px; background: #1f6f43; color: #fff; border: 0; cursor: pointer; }
+#result { padding: 12px; background: #e6f4ea; border-left: 6px solid #1f6f43; }
+.hint { color: #55606c; margin: 0 0 4px; font-size: 14px; }
+.mock-captcha { border: 1px solid #c9d1da; background: #f6f8fa; padding: 14px; width: 300px; display: flex; align-items: center; gap: 10px; }
+.mock-captcha .box { width: 24px; height: 24px; border: 2px solid #55606c; background: #fff; }

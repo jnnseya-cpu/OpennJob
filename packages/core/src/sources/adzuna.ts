@@ -1,0 +1,78 @@
+/*
+ * UNVERIFIED RESPONSE SHAPE.
+ * The endpoint and response shape below were written from memory of Adzuna's public
+ * API docs and have NOT been checked against the live API. The tests use a fixture in
+ * that remembered shape, never a live call. Verify against the live API before relying
+ * on this adapter. Adzuna's terms of use for the API (attribution, caching, redirect
+ * links) have not been reviewed either.
+ *
+ * GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page}?app_id=&app_key=&what=&where=
+ * -> { results: [{ id, title, description, redirect_url, company: { display_name },
+ *                  location: { display_name }, salary_min, salary_max, created }] }
+ * Note: as remembered, `description` is a truncated snippet, not the full advert.
+ *
+ * COUNTRY: the country is a path segment of the URL (gb, us, fr, de, za, ...).
+ * ADZUNA_COUNTRIES_UNVERIFIED below is the list of country codes Adzuna supports AS
+ * REMEMBERED. It is from memory and has NOT been checked against Adzuna's documentation
+ * or the live API: codes may be missing, or listed here and not supported. Because of
+ * that the adapter does not refuse a two-letter code that is absent from the list; it
+ * only refuses something that is not two letters. Check the list before relying on it.
+ */
+import { arr, decodeEntities, getJson, normaliseJob, num, obj, present, str, stripTags, tidy, toIso } from './common';
+import type { FetchLike, JobSourceAdapter } from './common';
+
+/** FROM MEMORY, UNVERIFIED. See the comment at the top of this file. */
+export const ADZUNA_COUNTRIES_UNVERIFIED: readonly string[] = [
+  'gb', 'us', 'at', 'au', 'be', 'br', 'ca', 'ch', 'de', 'es', 'fr', 'in', 'it', 'mx', 'nl', 'nz', 'pl', 'sg', 'za',
+];
+
+export interface AdzunaOptions {
+  appId: string;
+  appKey: string;
+  /** Two-letter country code used as the URL path segment. Defaults to 'gb'. */
+  country?: string;
+  what: string;
+  where?: string;
+  page?: number;
+  fetch: FetchLike;
+}
+
+export function createAdzunaSource(options: AdzunaOptions): JobSourceAdapter {
+  const country = (options.country ?? 'gb').trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(country)) throw new Error(`adzuna: "${options.country}" is not a two-letter country code`);
+  // 'gb' keeps the v1 label so existing logs and configuration read the same.
+  const label = country === 'gb' ? 'adzuna' : `adzuna:${country}`;
+  return {
+    name: 'adzuna',
+    label,
+    async fetchJobs() {
+      const params = new URLSearchParams({ app_id: options.appId, app_key: options.appKey, what: options.what });
+      if (options.where) params.set('where', options.where);
+      const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${options.page ?? 1}?${params.toString()}`;
+      const body = obj(await getJson(options.fetch, label, url));
+      return arr(body.results)
+        .map((item) => {
+          const j = obj(item);
+          const postedAt = toIso(j.created);
+          const salaryMin = num(j.salary_min);
+          const salaryMax = num(j.salary_max);
+          return normaliseJob({
+            source: 'adzuna',
+            externalId: str(j.id),
+            title: tidy(decodeEntities(stripTags(str(j.title)))),
+            employer: str(obj(j.company).display_name),
+            location: str(obj(j.location).display_name),
+            // The search was scoped to this country, so every result is in it. (Adzuna's 'gb' is ISO 'GB'.)
+            country: country.toUpperCase(),
+            url: str(j.redirect_url),
+            applyUrl: str(j.redirect_url),
+            description: tidy(decodeEntities(stripTags(str(j.description)))),
+            ...(salaryMin !== undefined ? { salaryMin } : {}),
+            ...(salaryMax !== undefined ? { salaryMax } : {}),
+            ...(postedAt ? { postedAt } : {}),
+          });
+        })
+        .filter(present);
+    },
+  };
+}

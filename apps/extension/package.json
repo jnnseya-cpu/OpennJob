@@ -1,0 +1,10 @@
+{
+  "name": "@opennjob/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpennJob Chrome extension (Manifest V3)",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

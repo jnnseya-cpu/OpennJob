@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Quick apply: Healthcare Assistant - Brookvale Care Agency (example)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <header class="site">
+    <strong>Brookvale Care Agency (example)</strong>
+    <p>Fictional agency. Test fixture for OpennJob. Quick apply: Healthcare Assistant, days.</p>
+  </header>
+  <form id="quick-apply" action="#" method="post">
+    <label for="qa-name">Full name</label>
+    <input type="text" id="qa-name" name="fullName" required>
+    <label for="qa-email">Email</label>
+    <input type="email" id="qa-email" name="email" required>
+    <label for="qa-phone">Phone</label>
+    <input type="tel" id="qa-phone" name="phone" required>
+    <label for="qa-postcode">Postcode</label>
+    <input type="text" id="qa-postcode" name="postcode">
+    <label for="qa-cover">Cover letter (optional)</label>
+    <textarea id="qa-cover" name="coverLetter"></textarea>
+    <!-- A hidden trap field of the kind some sites use. The agent must leave it alone. -->
+    <div style="display:none">
+      <label for="qa-email2">Email (leave this blank)</label>
+      <input type="email" id="qa-email2" name="email2" tabindex="-1" autocomplete="off">
+    </div>
+    <p><button type="submit" id="qa-submit">Send application</button></p>
+  </form>
+  <p id="result" hidden>Thanks, we have your application (fixture).</p>
+</body>
+</html>

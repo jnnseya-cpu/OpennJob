@@ -1,0 +1,22 @@
+{
+  "jobs": [
+    {
+      "id": 4011223,
+      "title": "Registered Nurse - Community",
+      "absolute_url": "https://boards.greenhouse.io/examplecare/jobs/4011223",
+      "location": { "name": "Birmingham, UK" },
+      "updated_at": "2026-09-20T10:15:00-04:00",
+      "content": "&lt;p&gt;Join our community team.&lt;/p&gt;&lt;h3&gt;Essential&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Current NMC registration&lt;/li&gt;&lt;li&gt;Medication administration &amp;amp; wound care&lt;/li&gt;&lt;/ul&gt;&lt;h3&gt;Desirable&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Full UK driving licence&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Salary: &amp;pound;34,000&amp;nbsp;per year&lt;/p&gt;"
+    },
+    {
+      "id": 4011224,
+      "title": "Healthcare Assistant",
+      "absolute_url": "https://boards.greenhouse.io/examplecare/jobs/4011224",
+      "location": { "name": "Leeds, UK" },
+      "updated_at": "2026-09-21T09:00:00-04:00",
+      "content": "&lt;p&gt;Personal care for residents living with dementia.&lt;/p&gt;"
+    },
+    { "id": null, "title": "", "absolute_url": "", "location": null, "content": null }
+  ],
+  "meta": { "total": 3 }
+}

@@ -1,0 +1,25 @@
+{
+  "count": 2,
+  "results": [
+    {
+      "id": "5123456789",
+      "title": "<strong>Healthcare</strong> <strong>Assistant</strong>",
+      "description": "We need a caring <strong>Healthcare</strong> Assistant to provide personal care &amp; support with moving and handling ...",
+      "redirect_url": "https://www.adzuna.co.uk/jobs/land/ad/5123456789?se=example",
+      "company": { "display_name": "Example Care" },
+      "location": { "display_name": "Leeds, UK", "area": ["UK", "Yorkshire And The Humber", "Leeds"] },
+      "salary_min": 23500,
+      "salary_max": 25100.5,
+      "created": "2026-09-28T12:30:45Z"
+    },
+    {
+      "id": "5123456790",
+      "title": "Senior Carer",
+      "description": "Dementia care home. NVQ Level 3 desirable.",
+      "redirect_url": "https://www.adzuna.co.uk/jobs/land/ad/5123456790?se=example",
+      "company": {},
+      "location": { "display_name": "Wolverhampton, West Midlands" },
+      "created": "2026-09-29T07:00:00Z"
+    }
+  ]
+}

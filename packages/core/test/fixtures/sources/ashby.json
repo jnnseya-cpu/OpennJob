@@ -1,0 +1,15 @@
+{
+  "apiVersion": "1",
+  "jobs": [
+    {
+      "id": "7f3c1e9a-1111-4222-8333-444455556666",
+      "title": "Staff Nurse (RGN) - Nights",
+      "location": "Manchester",
+      "employmentType": "FullTime",
+      "jobUrl": "https://jobs.ashbyhq.com/examplehealth/7f3c1e9a-1111-4222-8333-444455556666",
+      "applyUrl": "https://jobs.ashbyhq.com/examplehealth/7f3c1e9a-1111-4222-8333-444455556666/application",
+      "descriptionPlain": "Night shifts on a 20-bed unit. You must hold a current NMC registration. Medication rounds and care planning.",
+      "publishedAt": "2026-09-25T08:00:00.000+00:00"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpennJob</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>OpennJob</h1>
+      <label class="mode">
+        <span>Mode</span>
+        <select id="mode">
+          <option value="review">Review</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="auto">Auto</option>
+        </select>
+      </label>
+    </header>
+
+    <p id="mode-help" class="help"></p>
+
+    <details id="settings">
+      <summary>Connection</summary>
+      <label>OpennJob API address <input id="apiBase" type="url" placeholder="http://127.0.0.1:3000" /></label>
+      <label>API token <input id="token" type="password" autocomplete="off" /></label>
+      <button id="save" type="button" class="secondary">Save and load my data</button>
+    </details>
+
+    <label class="block">Application
+      <select id="application"><option value="">No statement (profile details only)</option></select>
+    </label>
+
+    <div class="actions">
+      <button id="scan" type="button">Scan this page</button>
+      <button id="fill" type="button" disabled>Fill</button>
+    </div>
+
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <section id="results" hidden>
+      <div class="list-head">
+        <h2>Fields on this page</h2>
+        <button id="confirm-all" type="button" class="link" hidden>Tick all ordinary fields</button>
+      </div>
+      <ul id="fields"></ul>
+    </section>
+
+    <button id="mark-submitted" type="button" class="secondary" hidden>I have submitted this application</button>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
