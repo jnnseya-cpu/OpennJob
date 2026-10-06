@@ -1,37 +1,45 @@
 # NSEYA Career Agent (personal trial)
 
-A single-user Python tool, separate from OpennJob, built from the owner's own source package and
-specification (October 2026). It finds construction and infrastructure vacancies on known employer
-boards, scores them against an evidence ledger, builds sealed CV and cover-letter packs, fills
-application forms in a browser, and sends a 09:00 London report.
+A single-user Python tool, separate from OpennJob, built to the owner's "Developer Build and Test
+Requirements" (6 October 2026). It finds construction, grid/energy, infrastructure and
+mission-critical vacancies on known employer boards, scores them against an evidence ledger, builds
+sealed CV and cover-letter packs, applies through a browser on certified routes, sends a 09:00
+London report and prepares interviews from the documents actually sent.
 
-**You submit every application yourself.** The worker and the extension fill ordinary fields and
-upload the sealed documents. They never tick a declaration or consent box and never press submit.
-You answer the declarations (work rights, sponsorship, clearance, convictions, "I confirm") and click
-the employer's submit button; the agent then records the receipt and a screenshot. This replaces the
-"standing authorisation / automatic submit" mode in the original package, by the owner's decision on
-6 October 2026, to match the rules of the OpennJob repository it lives in.
+**Who presses submit.** Without standing authorisation the worker and the extension fill ordinary
+fields and upload the sealed documents, and you press submit. With standing authorisation
+(`python3 -m agent.authorize grant --confirmed`, given once, dated, to a named scope, revocable at any
+time) the agent presses submit itself, but only when **all** of these hold: the route is certified
+for automatic submission (which needs one supervised, receipt-proven submission on it); the form has
+**no declaration and no other sensitive question**; every required question has an answer you
+confirmed; raw coverage is at least 80% with every essential met; the vacancy and form were verified
+just now; today's cap is not reached; and a re-read of your authorisation, exclusions and inputs
+just before the click still allows it. Anything else is filled as far as allowed and waits for you.
+The agent never ticks a declaration or consent box, never answers equality or health questions, and
+never works around a CAPTCHA or a login.
 
-Not a launched product. No employer application has been submitted with it, no report e-mail has been
-delivered, no LLM call has been made, and no live job board was called while building this version.
+Not a launched product. No employer application has been submitted with it, no report has reached
+an inbox, no paid LLM call has been made, and no live board was called while building this version.
+`docs/ACCEPTANCE.md` lists every acceptance case (T01-T60) with its actual result.
 
 ## Your data stays local
 
 Everything personal lives in `data/local/` (or `CAREER_DATA`), which is git-ignored: `profile.json`,
-`jobs.json`, `answer_library.json`, `search_profiles.json`, the SQLite database, packs, receipts,
-adapters, the browser profile and `worker.lock`. The committed `data/*.example.json` files are
-fictional. `dashboard/data.json` (made by `export-dashboard`) is git-ignored too.
+`jobs.json`, `answer_library.json`, `search_profiles.json`, your `policy.json` (standing
+authorisation, exclusions), the SQLite ledger, packs, sealed attempts, receipts, adapters, documents,
+the browser profile and `worker.lock`. Committed `data/*.example.json` files are fictional.
 
 ## Set up
 
 ```bash
 cd career-agent
 python3 -m venv .venv && . .venv/bin/activate
-python3 -m pip install -r requirements.txt
-python3 -m playwright install chromium      # or set CAREER_BROWSER_EXECUTABLE
+python3 -m pip install -r requirements.lock        # the tested lock (requirements.txt holds the ranges)
+python3 -m playwright install chromium             # or set CAREER_BROWSER_EXECUTABLE
 mkdir -p data/local && cp data/profile.example.json data/local/profile.json   # then replace every value
 cp data/jobs.example.json data/local/jobs.json; cp data/answer_library.example.json data/local/answer_library.json
-cp data/search_profiles.example.json data/local/search_profiles.json
+cp data/search_profiles.example.json data/local/search_profiles.json          # set "confirmed": true on profiles you mean
+scripts/verify.sh                                   # the regression check (T01)
 ```
 
 Settings come from environment variables (see `.env.example`; nothing loads a `.env` file).
@@ -39,73 +47,84 @@ Settings come from environment variables (see `.env.example`; nothing loads a `.
 ## Daily use
 
 ```bash
-python3 -m agent.cli seed                    # load data/local/jobs.json
-python3 -m agent.cli status                  # every job, its score and application state
-python3 -m agent.discovery --once --max-matches 10   # read known boards (data/boards.json); LLM matching, capped
-python3 -m agent.cli match --job ID          # LLM requirement extraction (validated; marked unreviewed)
-python3 -m agent.cli gate --job ID           # what still blocks this job
-python3 -m agent.cli prepare --job ID        # sealed pack in data/local/packs/ID (80% or more only)
-python3 -m agent.rights add --country "United Kingdom" --right-to-work yes --sponsorship no --document PATH --confirmed
-python3 -m agent.rights list | missing        # your records; countries the agent will ask you about
+python3 -m agent.worker --preflight                 # exits 1 with the fix for each missing piece
+python3 -m agent.discovery --once --max-matches 10  # boards in data/boards.json; LLM matching under the budget
+python3 -m agent.cli status | gate --job ID | prepare --job ID
 python3 -m agent.review confirm-profile --confirmed
-python3 -m agent.review verify-job --job ID --confirmed      # you checked the live advert (valid 15 minutes)
-python3 -m agent.review approve-pack --job ID --adapter data/local/adapters/ID.json --confirmed
-python3 -m agent.worker --once               # dry run: fill and upload, never submit
-python3 -m agent.worker --submit             # fill, upload, wait for YOUR submit, capture the receipt
-python3 -m agent.review reconcile --job ID --receipt "Ref from the employer's email" --confirmed
-python3 -m agent.review retry --job ID --confirmed           # failed or blocked back to ready (never uncertain)
-python3 -m agent.cli report | send-report | schedule         # 09:00 Europe/London digest
-python3 -m agent.launch --submit [--no-email]                # discovery + worker (assist) + scheduler
-python3 -m agent.interview --job ID [--answer-file a.txt]    # LLM preparation from the submitted pack
-python3 -m agent.server                      # loopback API for the extension (127.0.0.1:8765)
-python3 -m agent.cli export-dashboard        # writes dashboard/data.json for the static dashboard
+python3 -m agent.review review-matching --job ID --confirmed   # first-trial extraction review (not a submit permission)
+python3 -m agent.rights add --country "United Kingdom" --right-to-work yes --sponsorship no --document PATH --confirmed
+python3 -m agent.authorize status | grant --confirmed | revoke | pause | resume | exclude --employer NAME
+python3 -m agent.routes schema --adapter PATH        # the live form schema and its hash
+python3 -m agent.routes certify --adapter PATH --confirmed [--auto --job ID]   # --auto needs a supervised receipt on this route
+python3 -m agent.routes status | release --route ID --confirmed
+python3 -m agent.worker --once                       # dry run: verify, fill and upload, never submit
+python3 -m agent.worker --submit                     # automatic where allowed, otherwise waits for you
+python3 -m agent.review reconcile --job ID --receipt "Ref from the employer" --confirmed
+python3 -m agent.outcomes add --job ID --kind interview_invitation --date YYYY-MM-DD --evidence-file reply.txt
+python3 -m agent.outcomes metrics
+python3 -m agent.cli report | send-report | schedule | report-reconcile --day YYYY-MM-DD --sent|--not-sent
+python3 -m agent.cli export-application --job ID     # the full sealed record of every attempt (T31)
+python3 -m agent.cli coverage | import-job --url URL --company C --title T --file advert.txt
+python3 -m agent.cli backup --file PATH | restore --file PATH --confirmed
+python3 -m agent.interview --job ID [--answer-file a.txt] [--ai]
+python3 -m agent.server                              # local API + dashboard at http://127.0.0.1:8765
+python3 -m agent.launch --submit [--no-email]        # discovery + worker + scheduler, supervised
 ```
 
 ## Rules the code enforces
 
-- Score = weighted requirement coverage (met 1, partial 0.5, unknown and unmet 0), rounded **down**.
-  Minimum 80, and the code refuses a lower threshold. An unresolved essential blocks at any score.
-- Evidence citations must exist in the ledger and be confirmed by you; LLM quotations must be exact
-  substrings of the advert; weights must total 100. LLM output is marked unreviewed.
-- Packs copy evidence lines exactly, leave out unknown dates, refuse placeholders, and are sealed
-  with SHA-256; a changed pack or document is refused before filling.
-- **Right to work and sponsorship, per country, from documents you attach** (`agent/rights.py`).
-  `python3 -m agent.rights add --country "United Kingdom" --right-to-work yes --sponsorship no --document
-  ~/passport.pdf --basis "British passport" [--expires YYYY-MM-DD] --confirmed` copies the document into
-  `data/local/documents/` (git-ignored) and records its SHA-256. A record is used only while it is
-  confirmed, the document is unchanged and it has not expired. It then decides the work-rights gate for
-  jobs in that country, and the worker answers that form's right-to-work and sponsorship questions from
-  it (adapter fields with `"source": "work_rights"`). **Where there is no valid record the agent asks
-  you:** the job waits as needs input, the field is highlighted on the form, and the 09:00 report lists
-  the question. `agent.rights missing` lists the countries of your 80%+ matches without a record. The
-  old document-free `right_to_work` flag no longer counts.
-- Every other declaration (convictions, clearance and vetting, conflicts, health, equality monitoring,
-  consent, "I confirm") is never filled (`agent/answers.py`); you answer it on the form. The extension
-  leaves right to work to you as well; only the worker uses the records.
-- CAPTCHA, login walls, redirects and a changed description stop the worker; it never works around them.
-- `submitted` needs a receipt. A page that leaves before a receipt shows is `uncertain` and is never
-  retried automatically; a worker restart turns `submitting` into `uncertain`. One worker at a time.
-- 20 attempts a day at most (an attempt counts even if you then do not submit).
+- **Exact 80% floor.** Coverage is computed in Decimal (met 1, partial 0.5, unknown and unmet 0);
+  eligibility is raw coverage >= 80 with nothing rounded first, so 79.999 is not eligible. Display
+  floors. An unresolved essential blocks at any score. Model scorecards need finite weights totalling
+  100, a state and an essential flag for every requirement, and exact advert quotations.
+- **Evidence only.** Citations must exist in your ledger and be confirmed by you. Job text is
+  untrusted data: an instruction inside an advert cannot add evidence or credentials (T14). Packs copy
+  evidence lines exactly, leave out unknown dates and refuse placeholders.
+- **One posting, one application.** Identity is employer plus posting id, or the canonical URL with
+  tracking parameters removed; every original URL is kept as provenance.
+- **Transactional claims.** ready to submitting, the attempt, its event and the daily cap are one
+  compare-and-swap transaction shared by the worker and the extension; a loser never clicks (T27).
+- **Sealed attempts.** Before a click the agent writes, once and read-only, the snapshot (JD and its
+  hash, scorecard, versions of profile, policy and answers, every filled answer, CV and cover hashes,
+  route and certification), validated against `contracts/attempt-snapshot.schema.json`, with copies of
+  the documents.
+- **Live checks.** The JD is verified at its own URL when the route has one; closed, gone or
+  past-deadline vacancies are withdrawn; redirects outside the route stop; a form that differs from its
+  certified schema stops and counts towards quarantine (three failures).
+- **Receipts.** submitted needs a new, visible receipt matching the route's job-specific pattern and
+  correlated with this posting. A claim the agent never clicked is failed after a crash; anything after
+  the click without a receipt is uncertain and never retried automatically. A screenshot failure does
+  not lose a proven receipt.
+- **Answers.** Unknown required answers stay unknown and hold the application; salary history and
+  target day rate are never a floor or an expected-salary answer. Style notes and facts are versioned
+  separately: a factual change makes prepared packs stale, a style change does not.
+- **Right to work and sponsorship** come only from per-country records backed by a document you
+  attached (`agent/rights.py`). An advert offering sponsorship does not prove you are eligible for it.
+- **Budget.** No LLM call without `LLM_BUDGET_GBP_DAILY`; each call reserves its worst case first;
+  timeouts are charged; nothing is retried automatically.
+- **Report.** One digest per London day at 09:00, event-based with watermarks, a labelled catch-up when
+  the host was off, an outbox that never re-sends an ambiguous message.
 
 ## Tests
 
 ```bash
-cd career-agent && .venv/bin/python -m unittest discover -s tests     # or, from the repo root: npm run test:agent
+scripts/verify.sh                         # compileall, node --check, the whole suite
+python3 scripts/release_gate.py --check   # the same run, mapped to T01-T60 in docs/ACCEPTANCE.md
 ```
 
-57 tests, all on fictional data: the control rules, sources against recorded response shapes, LLM
-validation with a fake transport, discovery, document-backed work rights, deterministic documents, the scheduler across BST and
-GMT, the loopback server, the review commands, and real Chromium runs of the worker, the extension's
-fill code and the dashboard against `fixtures/application.html`. No test touches the network.
+125 tests on fictional data, including real Chromium runs over local HTTPS against fixture forms
+that record every POST: automatic submission, multi-step and iframe routes, redirects, changed forms
+and quarantine, unknown answers, sensitive questions and pre-selected answers, receipts and crashes,
+the live dashboard with refused or missing speech, and the 09:00 schedule across both 2026/27 clock
+changes. No test touches the network beyond 127.0.0.1.
 
 ## Not done or not verified
 
-- No real employer adapter; no route has been tried on a real employer site. Treat every route as
-  untested until a controlled first application succeeds.
-- Discovery was not run against the live boards in this build. The source package reports a small
-  live smoke test of three SmartRecruiters listings; that was not repeated here. Check each board's
-  terms of use before automating against it.
-- No LLM key, so `match`, `tailor` and `interview` were tested only against a fake transport.
-- No SMTP delivery tested. SMTP acceptance is not proof of inbox delivery.
-- The extension was not loaded into Chrome; its page functions were tested in Chromium.
-- Single user, local only: no multi-tenant isolation, no encryption at rest, a shared-token loopback API.
+- No route has been certified on a real employer site, so automatic submission has never run on one.
+  The first real route needs a supervised submission with a genuine receipt (T52).
+- Discovery was not run against the live boards in this build; check each board's terms first
+  (`data/source_registry.json` lists 30 targets, none with terms recorded as checked).
+- No LLM key: matching, tailoring and coaching were tested only with fake transports.
+- No SMTP delivery tested; SMTP acceptance is not proof of inbox delivery.
+- T15 (a human-labelled 50-JD evaluation) needs labelled data that was not supplied.
+- Single user, local only: no multi-tenant isolation (commercial B20-B22 are off by decision).

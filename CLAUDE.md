@@ -39,8 +39,11 @@ npm run test:pg -- npm run test:e2e                # e2e with a throwaway Postgr
 npm run test:agent                                 # career-agent/ Python tests (uses career-agent/.venv if present)
 ```
 
-`career-agent/` follows the same non-negotiable rules: it never fills a declaration (except right to work and sponsorship, from the applicant's own document-backed record for that country), never clicks
-submit (the applicant does), and never commits personal data (`career-agent/data/local/` is git-ignored).
+`career-agent/` follows the same non-negotiable rules: it never fills a declaration (except right to work and sponsorship, from the applicant's own document-backed record for that country), never ticks a
+declaration or consent box, and never commits personal data (`career-agent/data/local/` is git-ignored). It presses submit itself only under the applicant's standing authorisation (dated, to a named scope,
+revocable) and only on a route certified for it (one supervised, receipt-proven submission), when the form has no declaration and no other sensitive question, every required answer is confirmed, and a
+re-read of authorisation and inputs just before the click still allows it (owner's NSEYA build requirements, 6 October 2026). Otherwise the applicant presses submit. `npm run test:agent` or
+`career-agent/scripts/release_gate.py` (writes `career-agent/docs/ACCEPTANCE.md`, T01-T60).
 
 - Do not run `playwright install` where Chromium is pre-installed
   (`PLAYWRIGHT_BROWSERS_PATH`); `@playwright/test` is pinned to match that browser.
@@ -90,8 +93,8 @@ apps/extension/               Chrome MV3 extension, bundled by esbuild into dist
   test/fixtures/                fictional application forms
   test/e2e/                     Playwright tests
 career-agent/                 SEPARATE single-user Python tool (personal trial), not part of OpennJob. See its README.
-  agent/                        stdlib core (core, policy, answers, sources, discovery, llm, report, review, server)
-                                + documents (reportlab, python-docx) + worker (Playwright). You submit; it never clicks submit.
+  agent/                        store (SQLite, migrations, atomic claims), scoring (Decimal), contracts (JSON Schema), policy,
+                                worker (Playwright, certified routes), discovery, budget, report, server (local API + dashboard)
   data/*.example.json           fictional; personal data only in data/local/ (git-ignored, CAREER_DATA overrides)
   tests/                        unittest, fictional data; `npm run test:agent`
 db/migrations/                NNN_name.sql, applied in order, tracked in schema_migrations

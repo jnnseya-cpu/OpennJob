@@ -1,19 +1,22 @@
 # Launch checklist (personal trial)
 
-1. Set up as in `README.md`; run `python3 -m agent.worker --preflight` and fix what it lists.
-2. Put your confirmed details in `data/local/profile.json` and `data/local/answer_library.json`, and add
-   your right to work and sponsorship status for each country you can work in, each with its supporting
-   document: `python3 -m agent.rights add ... --confirmed`. Countries with no record are asked of you.
-   Unknown answers stay unknown (`"confirmed": false`); the worker leaves those fields to you.
-3. Seed or discover jobs. For each job you want: replace any researched summary with the full current
-   advert, review every requirement, run `agent.cli prepare`, read the pack.
-4. Write an adapter for the exact application page (`data/adapter.example.json`): selectors, uploads,
-   the description selector, CAPTCHA and login blockers, the submit control and a receipt pattern that
-   matches only real success. Mark declaration fields `"declaration": true`. Try it on
-   `fixtures/application.html` first, then set `reviewed` and `route_tested`.
-5. `agent.review verify-job`, then `approve-pack`. Run `agent.worker --once` (dry run) and look.
-6. `agent.worker --submit` (or `agent.launch --submit`): the browser fills the form and uploads the
-   documents; you answer the declarations, check everything and click submit. The receipt is recorded.
-7. Send one report by hand (`agent.cli send-report`) before relying on the 09:00 schedule.
-8. Check needs-input events, uncertain attempts and source failures every day. Do not lower the 80%
-   threshold because the queue is short.
+1. Install from the lock and run `scripts/verify.sh`. Run `python3 -m agent.worker --preflight` and fix
+   everything it lists (it exits 1 until the browser, LLM key and budget, SMTP, a certified route and a
+   confirmed profile are in place).
+2. Put your confirmed details in `data/local/profile.json` and `data/local/answer_library.json`. Add right
+   to work and sponsorship for each country, each with its document (`agent.rights add ... --confirmed`).
+   Unknown answers stay `"confirmed": false`: forms that need them wait for you.
+3. Confirm the search profiles you mean (`"confirmed": true` in `data/local/search_profiles.json`).
+4. Discover, then review each extraction once (`agent.review review-matching`). This is a quality check
+   for the first trial, not a permission to submit.
+5. Write an adapter for one relevant employer form (`data/adapter.example.json`). Mark every declaration
+   field `"declaration": true`. Record its schema (`agent.routes schema`) and certify it
+   (`agent.routes certify --confirmed`).
+6. Run `agent.worker --submit` without standing authorisation and submit that first application yourself.
+   The receipt is captured. That is the supervised submission: `agent.routes certify --auto --job ID`.
+7. Only now, if you want it: `agent.authorize grant --confirmed`. Revoke with `agent.authorize revoke`;
+   it stops the next click, even one already being filled.
+8. Send one report by hand (`agent.cli send-report`) and check it arrived before relying on 09:00.
+9. Start `agent.launch --submit`. Each day: reconcile uncertain attempts, answer needs-input questions,
+   record outcomes with `agent.outcomes add`. Never lower the 80% floor to fill the queue.
+10. Back up daily: `agent.cli backup --file PATH` (and the data directory with it).
