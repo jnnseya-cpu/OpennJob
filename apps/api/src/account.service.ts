@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EmailTakenError, SYSTEM_USER_ID } from '@opennjob/core';
 import type { User } from '@opennjob/core';
 import { hashPassword, passwordProblems, signAccessToken, verifyPassword } from './auth';
@@ -32,11 +32,19 @@ export class AccountService {
   }
 
   versions() {
-    return { termsVersion: this.deps.config.termsVersion, privacyVersion: this.deps.config.privacyVersion };
+    return {
+      termsVersion: this.deps.config.termsVersion,
+      privacyVersion: this.deps.config.privacyVersion,
+      registration: this.deps.config.registrationAllowlist.length > 0 ? ('invite' as const) : ('open' as const),
+    };
   }
 
   async register(input: RegisterInput) {
-    const { termsVersion, privacyVersion } = this.deps.config;
+    const { termsVersion, privacyVersion, registrationAllowlist } = this.deps.config;
+    // Private pilot: only invited addresses may create an account. The email schema has already lower-cased it.
+    if (registrationAllowlist.length > 0 && !registrationAllowlist.includes(input.email)) {
+      throw new ForbiddenException('Registration is by invitation only during the pilot');
+    }
     // Consent is to a named version. Accepting some other version is not accepting this one.
     if (input.acceptedTermsVersion !== termsVersion || input.acceptedPrivacyVersion !== privacyVersion) {
       throw new BadRequestException({

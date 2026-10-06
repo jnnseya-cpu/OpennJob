@@ -17,6 +17,7 @@ describe('loadConfig', () => {
       authRateLimitMax: 10,
       authRateLimitWindowMs: 900_000,
       corsOrigins: [],
+      registrationAllowlist: [],
       corsAllowAnyExtension: true,
       bodyLimit: '256kb',
       llmCriteria: false,

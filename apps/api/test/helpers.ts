@@ -30,6 +30,7 @@ export function testConfig(overrides: Partial<OpennJobConfig> = {}): OpennJobCon
     authRateLimitMax: 1000,
     authRateLimitWindowMs: 60_000,
     corsOrigins: [],
+    registrationAllowlist: [],
     corsAllowAnyExtension: true,
     bodyLimit: '256kb',
     llmCriteria: false,

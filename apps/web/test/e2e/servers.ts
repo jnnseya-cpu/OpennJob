@@ -89,7 +89,7 @@ async function run(entry: string, env: NodeJS.ProcessEnv): Promise<{ code: numbe
   return { code, out };
 }
 
-export async function startApi(webOrigin: string): Promise<ApiProcess> {
+export async function startApi(webOrigin: string, extraEnv: Record<string, string> = {}): Promise<ApiProcess> {
   const port = await freePort();
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
@@ -99,6 +99,7 @@ export async function startApi(webOrigin: string): Promise<ApiProcess> {
     OPENNJOB_BCRYPT_ROUNDS: '4',
     OPENNJOB_DEMO_JOBS: 'true',
     OPENNJOB_CORS_ORIGINS: webOrigin,
+    ...extraEnv,
   };
   let schema = '';
   let admin: Client | undefined;

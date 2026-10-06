@@ -187,6 +187,10 @@ How the web app keeps the product rules:
 - Not built, and the screens say so: email verification, password reset, password or
   email change, CV upload as PDF or Word, billing, server-side sign-out.
 
+**Private pilot.** Set `OPENNJOB_REGISTRATION_ALLOWLIST` to the invited email addresses and only
+those can register (403 for anyone else); `GET /auth/versions` reports `registration: "invite"` and the
+register page says so. Leave it empty to open registration. Existing accounts always sign in.
+
 One API route was added for it: `PUT /applications/:id/statement` saves the user's edit
 of a drafted statement (the extension fills the saved text). It is refused once the
 application is submitted, is covered by `isolation.test.ts`, and its event carries the

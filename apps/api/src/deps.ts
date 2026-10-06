@@ -39,6 +39,11 @@ export interface OpennJobConfig {
   authRateLimitWindowMs: number;
   /** Browser origins allowed to call the API (OPENNJOB_CORS_ORIGINS). */
   corsOrigins: string[];
+  /**
+   * Invite-only registration (a private pilot). Lower-case email addresses allowed to register.
+   * Empty means anyone may register. Existing accounts can always sign in.
+   */
+  registrationAllowlist: string[];
   /** Allow any chrome-extension:// origin. Default: true outside production, false in production. */
   corsAllowAnyExtension: boolean;
   /** Largest request body accepted, e.g. '256kb'. */
@@ -123,6 +128,7 @@ export function loadConfig(env: Env): OpennJobConfig {
     authRateLimitMax: int(env.OPENNJOB_AUTH_RATE_LIMIT_MAX, 10, 1, 100_000),
     authRateLimitWindowMs: int(env.OPENNJOB_AUTH_RATE_LIMIT_WINDOW_SECONDS, 900, 1, 86_400) * 1000,
     corsOrigins: list(env.OPENNJOB_CORS_ORIGINS).map((o) => o.replace(/\/+$/, '')),
+    registrationAllowlist: list(env.OPENNJOB_REGISTRATION_ALLOWLIST).map((e) => e.toLowerCase()),
     corsAllowAnyExtension: allowAnyExtension ? flag(allowAnyExtension) : !isProduction(env),
     bodyLimit: /^\d{1,6}(b|kb|mb)$/i.test((env.OPENNJOB_BODY_LIMIT ?? '').trim()) ? (env.OPENNJOB_BODY_LIMIT as string).trim().toLowerCase() : '256kb',
     llmCriteria: flag(env.OPENNJOB_LLM_CRITERIA),

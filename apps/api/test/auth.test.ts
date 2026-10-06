@@ -98,7 +98,7 @@ describe('RateLimiter', () => {
 describe('POST /auth/register', () => {
   it('creates an account, records consent with a timestamp, and returns a working token', async () => {
     t = await createTestApp();
-    await t.raw().get('/auth/versions').expect(200, { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1' });
+    await t.raw().get('/auth/versions').expect(200, { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1', registration: 'open' });
     const res = await t.raw().post('/auth/register').send(registration({ email: '  Bola.Adeyemi@Example.org ' })).expect(201);
     expect(res.body).toEqual({
       user: { id: 'id-1', email: EMAIL, createdAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } },
@@ -118,6 +118,23 @@ describe('POST /auth/register', () => {
     await mine.get('/account').expect(200, res.body.user);
     await mine.get('/profile').expect(404); // a new account starts empty: it does not see the first user's data
     expect((await t.deps.repository.listEvents('id-1')).map((e) => [e.type, e.payload])).toEqual([['account.registered', { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1' }]]);
+  });
+
+  it('invite-only pilot: only listed addresses may register; others get 403 and no account; sign-in is unaffected', async () => {
+    t = await createTestApp({ config: testConfig({ registrationAllowlist: ['bola.adeyemi@example.org'] }) });
+    await t.raw().get('/auth/versions').expect(200, { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1', registration: 'invite' });
+    const refused = await t.raw().post('/auth/register').send(registration({ email: 'chidi.eze@example.org' })).expect(403);
+    expect(refused.body.message).toBe('Registration is by invitation only during the pilot');
+    expect(await t.deps.repository.getUserByEmail('chidi.eze@example.org')).toBeUndefined();
+    // The invited address, in any case and with spaces, is accepted.
+    await t.raw().post('/auth/register').send(registration({ email: '  Bola.Adeyemi@Example.org ' })).expect(201);
+    // The existing account (made before the allow-list) still signs in.
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(200);
+  });
+
+  it('reads OPENNJOB_REGISTRATION_ALLOWLIST as lower-case addresses; empty means open', () => {
+    expect(loadConfig({ OPENNJOB_REGISTRATION_ALLOWLIST: ' Bola.Adeyemi@Example.org , x@example.org ' }).registrationAllowlist).toEqual(['bola.adeyemi@example.org', 'x@example.org']);
+    expect(loadConfig({}).registrationAllowlist).toEqual([]);
   });
 
   it('requires acceptedTermsVersion and acceptedPrivacyVersion, and they must be the current versions', async () => {

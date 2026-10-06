@@ -9,6 +9,7 @@ import type { AuthResult } from '../../lib/types';
 interface Versions {
   termsVersion: string;
   privacyVersion: string;
+  registration?: 'open' | 'invite';
 }
 
 export default function RegisterPage() {
@@ -52,6 +53,11 @@ export default function RegisterPage() {
         Test build. The terms and the privacy notice have not been written yet, and email addresses are not verified. Do not enter real
         personal data.
       </div>
+      {versions?.registration === 'invite' ? (
+        <div className="note ok" role="status">
+          OpennJob is in a private pilot. Only invited email addresses can create an account.
+        </div>
+      ) : null}
       <form className="card" onSubmit={submit}>
         <label className="field">
           <span>Email address</span>

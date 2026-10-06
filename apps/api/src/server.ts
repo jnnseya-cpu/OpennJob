@@ -63,6 +63,8 @@ export async function startServer(env: Env = process.env, logger: Logger = conso
 
   logger.info({ msg: 'listening', url, production: isProduction(env) });
   logger.info({ msg: 'persistence', kind: deps.persistence });
+  if (deps.config.registrationAllowlist.length === 0) logger.warn({ msg: 'OPENNJOB_REGISTRATION_ALLOWLIST is empty: anyone who can reach the API can register.' });
+  else logger.info({ msg: 'registration is invite-only', invited: deps.config.registrationAllowlist.length });
   if (deps.persistence === 'memory') logger.warn({ msg: 'DATABASE_URL is not set: data is held in memory and is lost when this process stops.' });
   if (!(env.OPENNJOB_DATA_KEY ?? '').trim()) logger.warn({ msg: 'OPENNJOB_DATA_KEY is not set: CV text, passports and statements are stored unencrypted.' });
   logger.info({ msg: 'llm', configured: Boolean(deps.llm) });

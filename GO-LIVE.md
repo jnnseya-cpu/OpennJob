@@ -27,6 +27,9 @@ pass; it does not mean it was tried in a real deployment.
       built process. `auth.test.ts`, `server.test.ts`, `api-process.spec.ts`
 - [x] Rate limiting on `/auth/*`, per client address and per email address.
       `auth.test.ts`
+- [x] Invite-only registration for the private pilot: `OPENNJOB_REGISTRATION_ALLOWLIST`
+      (empty means open, with a start-up warning); others get 403 and no account; the web app
+      says the pilot is invite-only. `auth.test.ts`, `invite-only.spec.ts`
 - [x] Consent recorded at registration: `acceptedTermsVersion` and
       `acceptedPrivacyVersion` are required, must equal the configured current versions,
       and are stored with a timestamp. `auth.test.ts`, `repository.contract.ts`
