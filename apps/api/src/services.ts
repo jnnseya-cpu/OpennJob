@@ -33,6 +33,7 @@ import type {
   MatchFilterInput,
   PassportInput,
   ProfileInput,
+  StatementInput,
 } from './schemas';
 
 /** zod leaves `undefined` on absent optional keys; drop them so stored objects are clean. */
@@ -327,6 +328,16 @@ export class OpennJobService {
 
   getApplication(userId: string, id: string): Promise<Application> {
     return this.mustGetApplication(userId, id);
+  }
+
+  /** Replaces the statement with the user's own edit. Not allowed once the application is submitted. */
+  async editStatement(userId: string, id: string, input: StatementInput): Promise<Application> {
+    const application = await this.mustGetApplication(userId, id);
+    if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
+    const updated: Application = { ...application, statement: input.statement };
+    await this.deps.repository.updateApplication(updated);
+    await this.emit(userId, 'application.statement.edited', { applicationId: id, statementCharacters: input.statement.length });
+    return updated;
   }
 
   /** Records which fields the user explicitly confirmed. This is the audit trail for sensitive fields. */

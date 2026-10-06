@@ -324,6 +324,31 @@ describe('applications', () => {
     await t.api.get('/applications/unknown').expect(404);
   });
 
+  it("PUT /applications/:id/statement saves the user's own edit; validated, and refused once submitted", async () => {
+    await seeded();
+    const id = (await t.api.post('/applications').send({ jobId: NURSE_JOB, mode: 'hybrid' }).expect(201)).body.id as string;
+    const edited = 'I give medication rounds for eight patients a shift and escalate with SBAR. (fictional edit)';
+
+    await t.api.put(`/applications/${id}/statement`).send({}).expect(400);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: '   ' }).expect(400);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: edited, status: 'submitted' }).expect(400);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: 'x'.repeat(20_001) }).expect(400);
+    await t.api.put('/applications/unknown/statement').send({ statement: edited }).expect(404);
+
+    const saved = await t.api.put(`/applications/${id}/statement`).send({ statement: `  ${edited}  ` }).expect(200);
+    expect(saved.body).toMatchObject({ id, statement: edited, status: 'draft' });
+    expect((await t.api.get(`/applications/${id}`).expect(200)).body.statement).toBe(edited);
+
+    const events = await t.deps.repository.listEvents('dev-user');
+    const event = events.find((e) => e.type === 'application.statement.edited');
+    expect(event?.payload).toEqual({ applicationId: id, statementCharacters: edited.length });
+    expect(JSON.stringify(events)).not.toContain('SBAR');
+
+    await t.api.post(`/applications/${id}/submitted`).expect(200);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: 'changed after sending' }).expect(409);
+    expect((await t.api.get(`/applications/${id}`).expect(200)).body.statement).toBe(edited);
+  });
+
   it('GET /applications lists every application', async () => {
     await seeded();
     const a = (await t.api.post('/applications').send({ jobId: NURSE_JOB }).expect(201)).body;

@@ -36,6 +36,7 @@ const ROUTES = [
   'POST /employer/jobs',
   'POST /interview/feedback',
   'POST /jobs/refresh',
+  'PUT /applications/:id/statement',
   'PUT /passport',
   'PUT /profile',
 ];
@@ -126,9 +127,10 @@ for (const backend of BACKENDS) {
       expect(JSON.stringify(res.body)).not.toContain(aApp.statement);
     });
 
-    it("POST /applications/:id/confirm and /submitted: B cannot change A's application", async () => {
+    it("POST /applications/:id/confirm and /submitted, PUT /applications/:id/statement: B cannot change A's application", async () => {
       await b.post(`/applications/${aApp.id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(404);
       await b.post(`/applications/${aApp.id}/submitted`).expect(404);
+      await b.put(`/applications/${aApp.id}/statement`).send({ statement: 'Overwritten by B.' }).expect(404);
       expect((await t.api.get(`/applications/${aApp.id}`).expect(200)).body).toEqual(aApp);
       expect((await t.deps.repository.listEvents(B_ID)).map((e) => e.type)).toEqual([]);
     });
@@ -230,6 +232,7 @@ for (const backend of BACKENDS) {
         await b.get(`/applications/${encodeURIComponent(id)}`).expect((r) => expect([400, 404]).toContain(r.status));
         await b.post(`/applications/${encodeURIComponent(id)}/confirm`).send({ confirmedFields: ['x'] }).expect((r) => expect([400, 404]).toContain(r.status));
         await b.post(`/applications/${encodeURIComponent(id)}/submitted`).expect((r) => expect([400, 404]).toContain(r.status));
+        await b.put(`/applications/${encodeURIComponent(id)}/statement`).send({ statement: 'Overwritten by B.' }).expect((r) => expect([400, 404]).toContain(r.status));
       }
       await b.get('/usage').expect(200);
       await b.get('/account/export').expect(200);

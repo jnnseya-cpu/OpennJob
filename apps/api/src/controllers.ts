@@ -19,9 +19,10 @@ import {
   passportSchema,
   profileSchema,
   questionQuerySchema,
+  statementSchema,
 } from './schemas';
 import type { DeleteAccountInput, LoginInput, RegisterInput } from './schemas';
-import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput } from './schemas';
+import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
 // Note: every constructor parameter uses an explicit @Inject(...) so the app does not
 // depend on emitDecoratorMetadata (the test runner's transpiler does not emit it).
@@ -177,6 +178,12 @@ export class ApplicationsController {
   @Get(':id')
   get(@CurrentUser() userId: string, @Param('id') id: string) {
     return this.service.getApplication(userId, id);
+  }
+
+  /** The user's edit of the drafted statement. The extension fills the saved text. */
+  @Put(':id/statement')
+  statement(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(statementSchema)) body: StatementInput) {
+    return this.service.editStatement(userId, id, body);
   }
 
   @Post(':id/confirm')

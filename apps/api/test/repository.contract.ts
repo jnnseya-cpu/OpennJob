@@ -290,6 +290,9 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         const submitted: Application = { ...confirmed, status: 'submitted', submittedAt: '2026-10-06T09:06:00.123Z' };
         await repo.updateApplication(submitted);
         expect(await repo.getApplication(a, app.id)).toEqual(submitted);
+        const edited: Application = { ...confirmed, statement: 'My own wording, edited after the draft. (fictional)' };
+        await repo.updateApplication(edited);
+        expect(await repo.getApplication(a, app.id)).toEqual(edited);
         await expect(repo.updateApplication({ ...app, id: unique('missing') })).rejects.toThrow(/not found/);
       });
 

@@ -123,6 +123,9 @@ export const confirmApplicationSchema = z
   .object({ confirmedFields: z.array(text(200)).min(1).max(200) })
   .strict();
 
+/** The user's own edit of a drafted statement. Same upper bound as an LLM draft could reach, with room to spare. */
+export const statementSchema = z.object({ statement: z.string().trim().min(1).max(20_000) }).strict();
+
 export const interviewFeedbackSchema = z
   .object({ questionId: text(80).optional(), question: text(500).optional(), answer: z.string().trim().min(1).max(8000) })
   .strict()
@@ -204,4 +207,5 @@ export type EmployerJobInput = z.infer<typeof employerJobSchema>;
 export type PassportInput = z.infer<typeof passportSchema>;
 export type CreateApplicationInput = z.infer<typeof createApplicationSchema>;
 export type ConfirmApplicationInput = z.infer<typeof confirmApplicationSchema>;
+export type StatementInput = z.infer<typeof statementSchema>;
 export type InterviewFeedbackInput = z.infer<typeof interviewFeedbackSchema>;
