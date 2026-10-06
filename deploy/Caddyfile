@@ -26,7 +26,9 @@
 	}
 
 	handle_path /api/* {
-		reverse_proxy api:8080
+		# A name only OpennJob's API answers to: on a shared server the web container also joins another
+		# network, where a container of another app may be called "api".
+		reverse_proxy opennjob-api:8080
 	}
 
 	handle {

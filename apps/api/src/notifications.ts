@@ -1,5 +1,6 @@
 import { DEFAULT_NOTIFICATION_PREFERENCES, SYSTEM_USER_ID, eventsForTrigger, notificationEvent, renderEmailHtml, renderTemplate, routeChannels } from '@opennjob/core';
 import type { Brand, Channel, DomainEvent, NotificationDelivery, NotificationEventDef, NotificationPreferences, NotificationVars } from '@opennjob/core';
+import { createTransport } from 'nodemailer';
 import type { OpennJobDeps } from './deps';
 
 /**
@@ -9,7 +10,8 @@ import type { OpennJobDeps } from './deps';
  *
  *  - in-app: stored in the user's inbox (always on);
  *  - email: through the configured EmailSender (Resend when RESEND_API_KEY and
- *    OPENNJOB_EMAIL_FROM are set), otherwise recorded as "logged" in sandbox mode;
+ *    OPENNJOB_EMAIL_FROM are set, else SMTP when SMTP_HOST, SMTP_USER and SMTP_PASSWORD are set),
+ *    otherwise recorded as "logged" in sandbox mode;
  *  - SMS, push and WhatsApp: no provider is wired; every attempt is recorded as "logged".
  *
  * Every attempt, and every channel skipped because the user opted out, is a delivery row
@@ -70,6 +72,51 @@ export function resendEmail(apiKey: string, from: string, fetchFn: PostFn = (url
         body: JSON.stringify({ from, to: [m.to], subject: m.subject, text: m.text, html: m.html }),
       });
       return res.ok ? 'sent' : 'failed';
+    },
+  };
+}
+
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+  /** TLS from the first byte (port 465). Otherwise STARTTLS is required before logging in. */
+  secure: boolean;
+  /** Tests only: accept the test server's self-signed certificate. Never set from the environment. */
+  allowSelfSignedForTests?: boolean;
+}
+
+/**
+ * SMTP, for a mailbox such as Hostinger Email (smtp.hostinger.com, port 465). The password is
+ * never logged; a failure is reported as "failed" with no driver message, which can carry
+ * addresses or server replies.
+ */
+export function smtpEmail(settings: SmtpSettings): EmailSender {
+  const transport = createTransport({
+    host: settings.host,
+    port: settings.port,
+    secure: settings.secure,
+    requireTLS: !settings.secure,
+    auth: { user: settings.user, pass: settings.password },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 30_000,
+    disableFileAccess: true,
+    disableUrlAccess: true,
+    tls: { minVersion: 'TLSv1.2', ...(settings.allowSelfSignedForTests ? { rejectUnauthorized: false } : {}) },
+  });
+  return {
+    name: 'smtp',
+    live: true,
+    async send(m) {
+      try {
+        await transport.sendMail({ from: settings.from, to: m.to, subject: m.subject, text: m.text, html: m.html });
+        return 'sent';
+      } catch {
+        return 'failed';
+      }
     },
   };
 }

@@ -35,6 +35,9 @@ services:
   api:
     build: .
     restart: unless-stopped
+    networks:
+      default:
+        aliases: [opennjob-api]
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -55,6 +58,11 @@ services:
       OPENNJOB_BRAND_NAME: ${OPENNJOB_BRAND_NAME:-OpennJob}
       OPENNJOB_BRAND_FOOTER: ${OPENNJOB_BRAND_FOOTER:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Or a mailbox over SMTP (Hostinger Email: smtp.hostinger.com, 465). Set with deploy/set-smtp.sh.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       OPENNJOB_EMAIL_FROM: ${OPENNJOB_EMAIL_FROM:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENNJOB_MODEL: ${OPENNJOB_MODEL:-}

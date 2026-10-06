@@ -143,7 +143,11 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 OPENNJOB_JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
 OPENNJOB_DATA_KEY=$(openssl rand -base64 32 | tr -d '\n')
 OPENNJOB_REGISTRATION_ALLOWLIST=$ALLOWLIST
-# Until RESEND_API_KEY is set, e-mail is recorded and not sent (deploy/email-dns.md).
+# E-mail is recorded and not sent until SMTP is set: bash deploy/set-smtp.sh (asks for the mailbox password).
+SMTP_HOST=
+SMTP_PORT=465
+SMTP_USER=
+SMTP_PASSWORD=
 RESEND_API_KEY=
 OPENNJOB_EMAIL_FROM="OpennJob <$SUPPORT_EMAIL>"
 OPENNJOB_BRAND_FOOTER="OpennJob · $SUPPORT_EMAIL"
@@ -154,9 +158,12 @@ OPENNJOB_OPERATOR_EMAIL=$SUPPORT_EMAIL
 OPENNJOB_RETENTION_DAYS=
 ENV
   chmod 600 "$ENV_FILE"
+  # The key is written to a root-only file, not printed, so it does not end up in a terminal log or a chat.
+  KEYFILE=/root/opennjob-data-key.txt
+  ( umask 077; grep '^OPENNJOB_DATA_KEY=' "$ENV_FILE" | cut -d= -f2- > "$KEYFILE" )
   warn ""
-  warn "   Copy this key somewhere safe and offline NOW. Losing it loses every stored CV:"
-  grep '^OPENNJOB_DATA_KEY=' "$ENV_FILE" >&2
+  warn "   The data encryption key is in $KEYFILE (root only). Copy it somewhere safe and offline,"
+  warn "   then delete that file. Losing the key loses every stored CV. Do not paste it anywhere."
   warn ""
 fi
 # How this server runs OpennJob (kept for updates).
@@ -228,8 +235,18 @@ https_for() { # $1 = nginx | apache
 
 if [ "$MODE" = proxy ]; then
   say "== OpennJob is listening on $UPSTREAM (this machine only)"
-  for _ in $(seq 1 60); do curl -fsS "$UPSTREAM/api/health" >/dev/null 2>&1 && break; sleep 5; done
-  curl -fsS "$UPSTREAM/api/health" && say "" || { warn "OpennJob does not answer on $UPSTREAM. See: ./oj ps ; ./oj logs api ; ./oj logs web"; exit 1; }
+  printf '   waiting for it to answer'
+  for _ in $(seq 1 36); do curl -fsS --max-time 5 "$UPSTREAM/api/health" >/dev/null 2>&1 && break; printf '.'; sleep 5; done
+  say ""
+  if ! curl -fsS --max-time 5 "$UPSTREAM/api/health"; then
+    warn "OpennJob does not answer on $UPSTREAM/api/health after 3 minutes. What it shows:"
+    curl -sS --max-time 5 -o /dev/null -w '   web answers HTTP %{http_code} on /api/health\n' "$UPSTREAM/api/health" >&2 || true
+    ./oj ps >&2 || true
+    ./oj logs --tail 25 web api >&2 || true
+    warn "Send this output (it holds no passwords or keys) to whoever set up OpennJob."
+    exit 1
+  fi
+  say ""
 
   case "$PROXY_KIND" in
     nginx)
@@ -292,7 +309,11 @@ fi
 
 say "== Checking https://$DOMAIN/api/health"
 for _ in $(seq 1 24); do
-  if out="$(curl -fsS --max-time 10 "https://$DOMAIN/api/health" 2>/dev/null)"; then say "$out"; say "== Up: https://$DOMAIN"; exit 0; fi
+  if out="$(curl -fsS --max-time 10 "https://$DOMAIN/api/health" 2>/dev/null)"; then
+    say "$out"; say "== Up: https://$DOMAIN"
+    grep -q '^SMTP_PASSWORD=.' "$ENV_FILE" || say "Next: turn on e-mail with   cd $DIR && bash deploy/set-smtp.sh"
+    exit 0
+  fi
   sleep 5
 done
 warn "https://$DOMAIN does not answer yet. If the web server step above is done, check: ./oj ps ; ./oj logs web ; ./oj logs api"

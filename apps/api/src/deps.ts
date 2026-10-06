@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Brand } from '@opennjob/core';
-import { DEFAULT_BRAND, fileMailbox, resendEmail } from './notifications';
+import { DEFAULT_BRAND, fileMailbox, resendEmail, smtpEmail } from './notifications';
+import type { SmtpSettings } from './notifications';
 import type { EmailSender, Notifier } from './notifications';
 import {
   AnthropicLlm,
@@ -216,6 +217,17 @@ export function loadConfig(env: Env): OpennJobConfig {
 
 export const MIN_JWT_SECRET_LENGTH = 32;
 
+/** SMTP settings from the environment, or undefined when SMTP is not configured. */
+export function smtpSettings(env: Env): SmtpSettings | undefined {
+  const host = (env.SMTP_HOST ?? '').trim();
+  const user = (env.SMTP_USER ?? '').trim();
+  const password = env.SMTP_PASSWORD ?? '';
+  if (!host || !user || !password.trim()) return undefined;
+  const port = Number.parseInt((env.SMTP_PORT ?? '465').trim(), 10);
+  const from = (env.OPENNJOB_EMAIL_FROM ?? '').trim() || user;
+  return { host, port, user, password, from, secure: port === 465 };
+}
+
 /**
  * What must be true before the API may start. Returns the list of problems; the caller
  * prints them and exits when it is not empty.
@@ -238,6 +250,10 @@ export function startupProblems(env: Env): string[] {
   }
   if (production && !key) problems.push('OPENNJOB_DATA_KEY is not set. It is required when NODE_ENV=production (32 random bytes, base64).');
   if (production && (env.OPENNJOB_DEV_MAILBOX_DIR ?? '').trim()) problems.push('OPENNJOB_DEV_MAILBOX_DIR writes e-mails to files and is for development only. Unset it in production.');
+  const smtpParts = [env.SMTP_HOST, env.SMTP_USER, env.SMTP_PASSWORD].map((v) => (v ?? '').trim() !== '');
+  if (smtpParts.some(Boolean) && !smtpParts.every(Boolean)) problems.push('SMTP needs SMTP_HOST, SMTP_USER and SMTP_PASSWORD together (one or two of them are set).');
+  const smtpPort = (env.SMTP_PORT ?? '').trim();
+  if (smtpPort && !(/^\d{1,5}$/.test(smtpPort) && Number(smtpPort) > 0 && Number(smtpPort) < 65536)) problems.push('SMTP_PORT must be a port number, for example 465.');
   const retention = (env.OPENNJOB_RETENTION_DAYS ?? '').trim();
   if (retention && !(/^\d{1,5}$/.test(retention) && Number(retention) >= 30)) problems.push('OPENNJOB_RETENTION_DAYS must be a whole number of days, 30 or more.');
   return problems;
@@ -300,7 +316,9 @@ export function createDefaultDeps(env: Env = process.env, fetchFn: FetchLike = f
   }
   const resendKey = (env.RESEND_API_KEY ?? '').trim();
   const emailFrom = (env.OPENNJOB_EMAIL_FROM ?? '').trim();
+  const smtp = smtpSettings(env);
   if (resendKey && emailFrom) deps.emailSender = resendEmail(resendKey, emailFrom);
+  else if (smtp) deps.emailSender = smtpEmail(smtp);
   else if (config.devMailboxDir && !isProduction(env)) deps.emailSender = fileMailbox(config.devMailboxDir);
   if ((env.ANTHROPIC_API_KEY ?? '').trim()) {
     deps.llm = new AnthropicLlm({ apiKey: env.ANTHROPIC_API_KEY as string, ...(env.OPENNJOB_MODEL ? { model: env.OPENNJOB_MODEL } : {}) });
