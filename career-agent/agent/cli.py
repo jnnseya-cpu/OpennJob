@@ -9,8 +9,9 @@ from .report import report, send, schedule
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog='python3 -m agent.cli')
-    p.add_argument('command', choices=['seed', 'discover', 'match', 'prepare', 'report', 'send-report', 'schedule', 'gate', 'status', 'export-dashboard'])
-    p.add_argument('--job'); p.add_argument('--db', default=None)
+    p.add_argument('command', choices=['seed', 'discover', 'match', 'prepare', 'report', 'send-report', 'schedule', 'gate', 'status', 'export-dashboard', 'report-reconcile', 'export-application', 'backup', 'restore', 'coverage', 'import-job'])
+    p.add_argument('--job'); p.add_argument('--db', default=None); p.add_argument('--day'); p.add_argument('--sent', action='store_true'); p.add_argument('--not-sent', action='store_true')
+    p.add_argument('--file'); p.add_argument('--url'); p.add_argument('--company'); p.add_argument('--title'); p.add_argument('--country'); p.add_argument('--confirmed', action='store_true')
     args = p.parse_args(argv)
     s = Store(args.db or paths.db_path())
     if args.command == 'seed':
@@ -59,6 +60,28 @@ def main(argv=None):
         send(s)
     elif args.command == 'schedule':
         schedule(s)
+    elif args.command == 'report-reconcile':
+        from .report import reconcile
+        if args.sent == args.not_sent or not args.day:
+            raise SystemExit('report-reconcile needs --day and exactly one of --sent or --not-sent (check the inbox first)')
+        reconcile(s, args.day, args.sent); print('Recorded.')
+    elif args.command == 'export-application':
+        from .snapshot import export
+        print(json.dumps(export(s, args.job), indent=2, ensure_ascii=False))
+    elif args.command in ('backup', 'restore'):
+        from . import ops
+        if not args.file:
+            raise SystemExit('--file is required')
+        print(json.dumps(ops.backup(s, args.file) if args.command == 'backup' else ops.restore(args.file, paths.db_path(), confirmed=args.confirmed), indent=2))
+    elif args.command == 'coverage':
+        from . import coverage
+        print(json.dumps(coverage.matrix(s), indent=2))
+    elif args.command == 'import-job':
+        from . import coverage
+        if not (args.url and args.file and args.company and args.title):
+            raise SystemExit('import-job needs --url, --company, --title and --file (the pasted job description)')
+        job = coverage.import_job(s, args.url, args.company, args.title, Path(args.file).read_text(encoding='utf-8'), args.country)
+        print('Imported as ' + job['id'] + '. The live posting is checked again before any application.')
 
 
 if __name__ == '__main__':

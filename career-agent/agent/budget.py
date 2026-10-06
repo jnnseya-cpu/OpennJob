@@ -67,16 +67,19 @@ def spent_total(store):
 def reserve(store, model, purpose, input_chars, max_output_tokens):
     s = settings()
     worst = cost(s, (input_chars // 3) + 1, max_output_tokens)
+    refused = None
     with store.tx():
         if spent(store) + worst > s['daily']:
-            store.event('budget_reached', {'purpose': purpose, 'limit': 'daily'})
-            raise BudgetExceeded(f'Daily LLM budget of £{s["daily"]} would be passed; analysis paused until tomorrow')
-        if s['total'] is not None and spent_total(store) + worst > s['total']:
-            store.event('budget_reached', {'purpose': purpose, 'limit': 'total'})
-            raise BudgetExceeded(f'Total LLM budget of £{s["total"]} would be passed; analysis paused')
-        cur = store.db.execute('INSERT INTO usage(at,local_day,provider,model,purpose,status,reserved) VALUES(?,?,?,?,?,?,?)',
-                               (now(), london_day(), 'openai-responses', model, purpose, 'reserved', float(worst)))
-        return cur.lastrowid
+            refused = ('daily', f'Daily LLM budget of £{s["daily"]} would be passed; analysis paused until tomorrow')
+        elif s['total'] is not None and spent_total(store) + worst > s['total']:
+            refused = ('total', f'Total LLM budget of £{s["total"]} would be passed; analysis paused')
+        else:
+            cur = store.db.execute('INSERT INTO usage(at,local_day,provider,model,purpose,status,reserved) VALUES(?,?,?,?,?,?,?)',
+                                   (now(), london_day(), 'openai-responses', model, purpose, 'reserved', float(worst)))
+            return cur.lastrowid
+    # Recorded after the transaction, so the refusal itself is never rolled back.
+    store.event('budget_reached', {'purpose': purpose, 'limit': refused[0]})
+    raise BudgetExceeded(refused[1])
 
 
 def settle(store, usage_id, input_tokens, output_tokens):
