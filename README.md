@@ -24,6 +24,8 @@ promising anything to anyone.
 | `README.md` | What it is, how to run it, how it works |
 | `GO-LIVE.md` | The checklist: done and tested / not done |
 | `CLAUDE.md` | Working on the code with Claude Code: commands, map, rules |
+| `deploy/hostinger-vps.md` | **Recommended for the pilot.** One server, `docker-compose.prod.yml`: PostgreSQL, API, web app behind Caddy (HTTPS), nightly backups (written, not executed) |
+| `deploy/vercel.md` | Web app on Vercel, API elsewhere (written, not executed) |
 | `deploy/gcp-cloud-run.md` | Cloud Run + Cloud SQL + Secret Manager steps (from memory, not executed) |
 | `career-agent/README.md` | A separate single-user Python tool (NSEYA Career Agent personal trial); not part of OpennJob |
 

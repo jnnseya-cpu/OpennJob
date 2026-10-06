@@ -1,0 +1,105 @@
+# Production on one machine (a Hostinger VPS, or any Linux server with Docker):
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# Services: PostgreSQL, a one-shot migration, the API (internal only), the web app behind Caddy
+# (ports 80 and 443, automatic HTTPS) and a nightly database backup. See deploy/hostinger-vps.md.
+# Never run with real users before the items in GO-LIVE.md under "Before the first real user".
+
+x-db-url: &db-url postgres://opennjob:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/opennjob
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: opennjob
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: opennjob
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opennjob -d opennjob"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: .
+    command: ["node", "apps/api/dist/migrate-cli.js"]
+    restart: "no"
+    environment:
+      DATABASE_URL: *db-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATABASE_URL: *db-url
+      OPENNJOB_JWT_SECRET: ${OPENNJOB_JWT_SECRET:?Set OPENNJOB_JWT_SECRET}
+      OPENNJOB_DATA_KEY: ${OPENNJOB_DATA_KEY:?Set OPENNJOB_DATA_KEY}
+      # One proxy (Caddy) in front: trust exactly one hop so the rate limit sees the real client.
+      OPENNJOB_TRUST_PROXY: "1"
+      OPENNJOB_REGISTRATION_ALLOWLIST: ${OPENNJOB_REGISTRATION_ALLOWLIST:?Set the invited addresses (private pilot)}
+      OPENNJOB_TERMS_VERSION: ${OPENNJOB_TERMS_VERSION:-draft-1}
+      OPENNJOB_PRIVACY_VERSION: ${OPENNJOB_PRIVACY_VERSION:-draft-1}
+      OPENNJOB_CORS_ORIGINS: ${OPENNJOB_CORS_ORIGINS:-}
+      OPENNJOB_CORS_ALLOW_ANY_EXTENSION: "false"
+      OPENNJOB_APPLY_THRESHOLD: ${OPENNJOB_APPLY_THRESHOLD:-80}
+      OPENNJOB_DEMO_JOBS: ${OPENNJOB_DEMO_JOBS:-false}
+      OPENNJOB_APP_URL: https://${DOMAIN:?Set DOMAIN}
+      OPENNJOB_BRAND_NAME: ${OPENNJOB_BRAND_NAME:-OpennJob}
+      OPENNJOB_BRAND_FOOTER: ${OPENNJOB_BRAND_FOOTER:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      OPENNJOB_EMAIL_FROM: ${OPENNJOB_EMAIL_FROM:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENNJOB_MODEL: ${OPENNJOB_MODEL:-}
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for certificate notices}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+
+  backup:
+    # A compressed dump every 24 hours into ./backups on the host; the last 14 are kept.
+    # Copy them off the machine too, and test a restore (deploy/hostinger-vps.md).
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["sh", "-c", "while true; do pg_dump -h postgres -U opennjob -d opennjob -Fc -f /backups/opennjob-$$(date +%Y%m%d-%H%M).dump && ls -1t /backups/*.dump | tail -n +15 | xargs -r rm --; sleep 86400; done"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:

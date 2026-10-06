@@ -1,0 +1,33 @@
+# OpennJob on one machine: the web app (static files) and the API behind one HTTPS origin.
+# Caddy obtains and renews the TLS certificate for {$DOMAIN} automatically (Let's Encrypt).
+# The browser calls the API at https://{$DOMAIN}/api/..., so no CORS is needed.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Next.js inlines its bootstrap scripts, hence 'unsafe-inline' for scripts; everything else is same-origin only.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		-Server
+	}
+
+	handle_path /api/* {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		@immutable path /_next/static/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		root * /srv
+		try_files {path} {path}/index.html /404.html
+		file_server
+	}
+}

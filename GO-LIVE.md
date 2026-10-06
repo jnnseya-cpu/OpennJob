@@ -166,6 +166,10 @@ Every item here is open. None has a workaround in the code.
 - [ ] **LLM API key and model name are not confirmed.** No call to Anthropic has ever
       been made by this code. `OPENNJOB_MODEL` has no verified value; the fallback
       constant is a placeholder. Statement quality from a real model is unknown.
+- [ ] **Production files for one server exist and were never run**: `docker-compose.prod.yml`,
+      `deploy/web.Dockerfile`, `deploy/Caddyfile`, `deploy/hostinger-vps.md`. `docker compose config`
+      validates the file; the same-origin `/api` layout is tested with a proxy in `same-origin.spec.ts`;
+      no image was built (the Docker daemon could not be started where this was written).
 - [ ] **The Docker image has never been built**, and `docker compose up` has never been
       run (no Docker daemon was available). The Dockerfile's steps were run by hand
       outside Docker once; that is not the same thing.

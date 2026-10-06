@@ -97,6 +97,7 @@ career-agent/                 SEPARATE single-user Python tool (personal trial),
 db/migrations/                NNN_name.sql, applied in order, tracked in schema_migrations
 deploy/gcp-cloud-run.md       Cloud Run + Cloud SQL + Secret Manager steps (from memory, not executed)
 Dockerfile docker-compose.yml .github/workflows/ci.yml .env.example
+docker-compose.prod.yml deploy/   production on one server (Caddy + API + PostgreSQL + backups), Vercel, Cloud Run
 ```
 
 Data flow for a request: `AccessTokenGuard` verifies the JWT and that the account still
@@ -144,6 +145,8 @@ as needing explicit sign-off from the owner.
 ## Conventions
 
 - TypeScript strict, `noUncheckedIndexedAccess`. No `any`; no non-null `!` in `src/`.
+- Layers: shared `packages/core`, backend `apps/api`, frontend `apps/web`. `packages/core/test/boundaries.test.ts`
+  fails if the frontend imports anything but `@core/web`, or shared imports a framework or an app.
 - `packages/core` imports no framework and nothing from `apps/`. Database and HTTP code
   lives in `apps/api`.
 - NestJS: explicit `@Inject(...)` on every constructor parameter; zod (`ZodPipe`), not

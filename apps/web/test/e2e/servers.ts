@@ -47,13 +47,30 @@ export interface WebServer {
 }
 
 /** Serves apps/web/out. `/x/` is `/x/index.html`. Nothing outside out/ is reachable. */
-export async function startWeb(port: number, apiBase: string): Promise<WebServer> {
+/**
+ * With `proxyApi`, requests to /api/* are forwarded to that API with the prefix removed, the way
+ * deploy/Caddyfile does in production, and the site is told to use the same-origin base "/api".
+ */
+export async function startWeb(port: number, apiBase: string, options: { proxyApi?: string } = {}): Promise<WebServer> {
   if (!existsSync(path.join(WEB_OUT, 'index.html'))) throw new Error('apps/web/out is missing: run `npm run build` first (npm run test:e2e does).');
   const server = http.createServer((req, res) => {
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
     if (pathname === '/opennjob-config.json') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ apiBase }));
+      res.end(JSON.stringify({ apiBase: options.proxyApi ? '/api' : apiBase }));
+      return;
+    }
+    if (options.proxyApi && (pathname === '/api' || pathname.startsWith('/api/'))) {
+      const target = new URL(options.proxyApi);
+      const upstream = http.request(
+        { host: target.hostname, port: target.port, method: req.method, path: (req.url ?? '/').replace(/^\/api/, '') || '/', headers: { ...req.headers, host: target.host, 'x-forwarded-for': '127.0.0.1' } },
+        (up) => {
+          res.writeHead(up.statusCode ?? 502, up.headers);
+          up.pipe(res);
+        },
+      );
+      upstream.on('error', () => res.writeHead(502).end());
+      req.pipe(upstream);
       return;
     }
     let file = path.normalize(path.join(WEB_OUT, pathname));
