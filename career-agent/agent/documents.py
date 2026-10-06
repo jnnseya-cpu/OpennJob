@@ -136,3 +136,31 @@ def build(job, profile, out_dir):
     }
     pack['integrity'] = pack_digest(pack)
     return pack
+
+
+_PDF_STRING = re.compile(rb'\((?:\\.|[^\\()])*\)\s*Tj')
+_ESC = {b'n': b'\n', b'r': b'\r', b't': b'\t', b'b': b'\b', b'f': b'\f', b'(': b'(', b')': b')', b'\\': b'\\'}
+
+
+def _unescape(raw):
+    out, i = bytearray(), 0
+    while i < len(raw):
+        c = raw[i:i + 1]
+        if c == b'\\' and i + 1 < len(raw):
+            nxt = raw[i + 1:i + 2]
+            if nxt in _ESC:
+                out += _ESC[nxt]; i += 2; continue
+            m = re.match(rb'[0-7]{1,3}', raw[i + 1:i + 4])
+            if m:
+                out.append(int(m.group(), 8)); i += 1 + len(m.group()); continue
+            i += 1; continue
+        out += c; i += 1
+    return bytes(out)
+
+
+def pdf_text(path):
+    """The text of a pack PDF, one drawn line per line (T25). Works for the uncompressed files
+    this module writes; it is a check that the text is really there, not a general PDF reader."""
+    data = Path(path).read_bytes()
+    lines = [_unescape(m.group()[1:m.group().rindex(b')')]).decode('cp1252') for m in _PDF_STRING.finditer(data)]
+    return '\n'.join(lines)

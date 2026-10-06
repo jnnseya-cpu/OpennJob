@@ -15,29 +15,33 @@ def normal(company,source,pid,title,location,url,description,**extra):
     if not url.startswith('https://'):raise ValueError('HTTPS employer URL required')
     return {'id':canonical_id(company,url,pid),'posting_id':str(pid),'company':company,'source':source,'title':title,'location':location,'url':url,'description':plain(description),'fetched_at':now(),'live_verified':False,'requirements':[],'status':'discovered','country':'Unconfirmed'}|extra
 
-def fetch(board):
+def fetch(board,start=0,meta=None):
+    """All postings of one board. meta (a dict) receives pages, truncated and the next cursor: a
+    source capped by max_details resumes from the cursor next cycle, so no page is starved (T07)."""
     company=board['company'];name=urllib.parse.quote(board['board'],safe='');kind=board['type'];out=[]
+    meta=meta if meta is not None else {}
+    meta.update(pages=0,truncated=False,next=0)
     if kind=='greenhouse':
-        a=get(f'https://boards-api.greenhouse.io/v1/boards/{name}/jobs?content=true')['jobs']
-        out=[normal(company,kind,j['id'],j['title'],j['location']['name'],j['absolute_url'],j.get('content','')) for j in a]
+        a=get(f'https://boards-api.greenhouse.io/v1/boards/{name}/jobs?content=true')['jobs'];meta['pages']=1
+        out=[normal(company,kind,j['id'],j['title'],j['location']['name'],j['absolute_url'],j.get('content',''),jd_url=j['absolute_url']) for j in a]
     elif kind=='lever':
         domain='api.eu.lever.co' if board.get('region')=='eu' else 'api.lever.co';skip=0
         while True:
-            a=get(f'https://{domain}/v0/postings/{name}?mode=json&skip={skip}&limit=100')
+            a=get(f'https://{domain}/v0/postings/{name}?mode=json&skip={skip}&limit=100');meta['pages']+=1
             for j in a:
                 desc=j.get('descriptionPlain','')+' '+ ' '.join(x.get('text','')+' '+plain(x.get('content','')) for x in j.get('lists',[]))+' '+j.get('additionalPlain','')
-                out.append(normal(company,kind,j['id'],j['text'],j.get('categories',{}).get('location',''),j['applyUrl'],desc))
+                out.append(normal(company,kind,j['id'],j['text'],j.get('categories',{}).get('location',''),j['applyUrl'],desc,jd_url=j.get('hostedUrl') or j['applyUrl'],work_type=j.get('categories',{}).get('commitment','Unconfirmed')))
             if len(a)<100:break
             skip+=100
             if skip>10000:raise RuntimeError('Pagination safety limit reached')
     elif kind=='ashby':
-        a=get(f'https://api.ashbyhq.com/posting-api/job-board/{name}?includeCompensation=true')['jobs']
-        out=[normal(company,kind,j['jobUrl'],j['title'],j.get('location',''),j['applyUrl'],j.get('descriptionPlain',''),salary=j.get('compensation',{})) for j in a if j.get('isListed',True)]
+        a=get(f'https://api.ashbyhq.com/posting-api/job-board/{name}?includeCompensation=true')['jobs'];meta['pages']=1
+        out=[normal(company,kind,j['jobUrl'],j['title'],j.get('location',''),j['applyUrl'],j.get('descriptionPlain',''),salary=j.get('compensation',{}),jd_url=j['jobUrl'] if str(j.get('jobUrl','')).startswith('https://') else j['applyUrl'],work_type=j.get('employmentType','Unconfirmed')) for j in a if j.get('isListed',True)]
     elif kind=='smartrecruiters':
-        offset=0
+        origin=offset=int(start or 0);limit=board.get('max_details',100);wrapped=False
         while True:
             query=urllib.parse.urlencode({'q':board.get('query',''),'limit':100,'offset':offset,'destination':'PUBLIC'})
-            a=get(f'https://api.smartrecruiters.com/v1/companies/{name}/postings?'+query)
+            a=get(f'https://api.smartrecruiters.com/v1/companies/{name}/postings?'+query);meta['pages']+=1
             content=a.get('content',[])
             for item in content:
                 terms=board.get('title_keywords',['construction','project manager','programme','program manager','epc','subcontract','delivery','site manager','package manager'])
@@ -48,11 +52,16 @@ def fetch(board):
                 desc=' '.join(v.get('text','') for v in sections.values() if isinstance(v,dict))
                 loc=j.get('location',{});url=j.get('applyUrl') or item.get('applyUrl') or j.get('postingUrl')
                 if not url:continue
-                out.append(normal(company,kind,item['id'],j.get('name',item.get('name','')),loc.get('city',''),url,desc,country_code=loc.get('country',''),country={'gb':'United Kingdom','uk':'United Kingdom','ie':'Ireland','fr':'France','de':'Germany','ae':'United Arab Emirates','sa':'Saudi Arabia','cd':'Democratic Republic of the Congo','us':'United States','ca':'Canada','au':'Australia'}.get(str(loc.get('country','')).lower(),'Unconfirmed'),description_full=True,employment_type=j.get('typeOfEmployment',{}).get('label','Unconfirmed'),work_type=j.get('typeOfEmployment',{}).get('id','Unconfirmed')))
-                if len(out)>=board.get('max_details',100):break
-            if len(out)>=board.get('max_details',100):break
+                out.append(normal(company,kind,item['id'],j.get('name',item.get('name','')),loc.get('city',''),url,desc,jd_url=j.get('postingUrl') if str(j.get('postingUrl','')).startswith('https://') else url,country_code=loc.get('country',''),country={'gb':'United Kingdom','uk':'United Kingdom','ie':'Ireland','fr':'France','de':'Germany','ae':'United Arab Emirates','sa':'Saudi Arabia','cd':'Democratic Republic of the Congo','us':'United States','ca':'Canada','au':'Australia'}.get(str(loc.get('country','')).lower(),'Unconfirmed'),description_full=True,employment_type=j.get('typeOfEmployment',{}).get('label','Unconfirmed'),work_type=j.get('typeOfEmployment',{}).get('id','Unconfirmed')))
+                if len(out)>=limit:break
+            if len(out)>=limit:
+                meta.update(truncated=True,next=offset+content.index(item)+1);break
             offset+=len(content)
-            if not content or offset>=int(a.get('totalFound',offset)):break
+            if wrapped and offset>=origin:break  # back where this cycle started: everything was read once
+            if not content or offset>=int(a.get('totalFound',offset)):
+                # Reached the end: wrap once to cover what came before the cursor, then stop.
+                if origin and not wrapped and len(out)<limit:offset=0;wrapped=True;continue
+                break
             if offset>10000:raise RuntimeError('Pagination safety limit reached')
     else:raise ValueError('Unsupported public feed: '+kind)
     return out

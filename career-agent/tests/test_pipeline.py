@@ -42,7 +42,7 @@ class Discovery(unittest.TestCase):
             s = Store(paths.db_path())
             many = [dict(self.feed('d')[0], id=f'j{i}', posting_id=str(i), url=f'https://example.org/{i}') for i in range(5)]
             calls = []
-            with patch.object(discovery, 'fetch', lambda b: many), patch.object(discovery.llm, 'match', lambda j, p: calls.append(j['id']) or j):
+            with patch.object(discovery, 'fetch', lambda b: many), patch.object(discovery.llm, 'match', lambda j, p, **kw: calls.append(j['id']) or j):
                 discovery.once(s, max_matches=2)
             self.assertEqual(len(calls), 2); s.db.close()
 

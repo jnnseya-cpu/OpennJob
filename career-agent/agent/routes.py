@@ -67,7 +67,9 @@ def review_form(controls, adapter):
     unknown_required  required ordinary questions the route does not map: needs input, never guessed (T23)
     defaults          sensitive questions that already carry a pre-selected answer: never accepted (T24)
     """
-    mapped = [f for f in adapter.get('fields', [])] + [{'selector': u['selector'], 'upload': True} for u in adapter.get('uploads', [])]
+    steps = adapter.get('steps') or []
+    mapped = [f for f in adapter.get('fields', [])] + [f for st in steps for f in st.get('fields', [])] + \
+             [{'selector': u['selector'], 'upload': True} for u in adapter.get('uploads', []) + [u for st in steps for u in st.get('uploads', [])]]
     sensitive, unknown, defaults = [], [], []
     for c in controls:
         field = next((f for f in mapped if matches(c, f['selector'])), None)

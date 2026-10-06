@@ -14,7 +14,8 @@ def reply(obj, fenced=False):
     return lambda body, key: {'output': [{'content': [{'type': 'output_text', 'text': text}]}]}
 
 
-ENV = {'OPENAI_API_KEY': 'test-key-not-real', 'LLM_MODEL': 'test-model'}
+# A live call needs a spending limit and prices (R20); these are test values.
+ENV = {'OPENAI_API_KEY': 'test-key-not-real', 'LLM_MODEL': 'test-model', 'LLM_BUDGET_GBP_DAILY': '5', 'LLM_PRICE_GBP_PER_MTOK_INPUT': '2', 'LLM_PRICE_GBP_PER_MTOK_OUTPUT': '8'}
 
 
 class Llm(unittest.TestCase):

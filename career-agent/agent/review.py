@@ -1,13 +1,15 @@
 """Explicit local review actions; never silently approve applications.
 
   confirm-profile   you confirm your profile and evidence (not an independent credential check)
+  review-matching   you checked that the extraction is complete (every material requirement, quote and
+                    essential flag). This is a quality control, not permission to submit (T16).
   verify-job        you checked the live posting, the requirements and your preferences (valid 15 minutes)
   approve-pack      you read the pack and reviewed the adapter: the application becomes ready
   retry             a failed or blocked application goes back to ready (never an uncertain one)
   reconcile         an uncertain application becomes submitted (with your receipt) or failed
 
-The agent never submits on its own. A ready application is filled by the worker or the
-extension; you answer the declarations and click submit yourself.
+Without standing authorisation (python3 -m agent.authorize grant) you click submit yourself. With
+it, the agent submits only on certified routes whose form has no declaration or sensitive question.
 """
 import argparse, json
 from pathlib import Path
@@ -17,14 +19,14 @@ from . import paths
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog='python3 -m agent.review')
-    p.add_argument('action', choices=['confirm-profile', 'verify-job', 'approve-pack', 'retry', 'reconcile'])
+    p.add_argument('action', choices=['confirm-profile', 'review-matching', 'verify-job', 'approve-pack', 'retry', 'reconcile'])
     p.add_argument('--job'); p.add_argument('--adapter'); p.add_argument('--confirmed', action='store_true')
     p.add_argument('--auto-submit', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--receipt', help='reconcile: the confirmation reference or text you received')
     p.add_argument('--not-submitted', action='store_true', help='reconcile: you confirmed nothing was sent')
     a = p.parse_args(argv)
     if a.auto_submit:
-        raise SystemExit('Automatic submission is not available: you click submit yourself on every application.')
+        raise SystemExit('Per-application automatic submission flags are not used: you click submit yourself unless you grant standing authorisation (python3 -m agent.authorize grant).')
     if not a.confirmed:
         raise SystemExit('Review first, then explicitly pass --confirmed')
     pp = paths.data_file('profile.json'); profile = json.loads(pp.read_text(encoding='utf-8')); s = Store(paths.db_path())
@@ -43,7 +45,17 @@ def main(argv=None):
     job = next((j for j in s.jobs() if j['id'] == a.job), None)
     if not job:
         raise SystemExit('Unknown --job; see python3 -m agent.cli status')
-    if a.action == 'verify-job':
+    if a.action == 'review-matching':
+        if not job.get('requirements'):
+            raise SystemExit('Nothing extracted yet: python3 -m agent.cli match --job ' + job['id'])
+        from .scoring import validate_scorecard
+        try:
+            validate_scorecard(job['requirements'], job.get('description'), require_total_100=False)
+        except ValueError as e:
+            raise SystemExit('The extraction is not complete: ' + str(e))
+        job.update(matching_reviewed=True, matching_reviewed_at=now()); s.put_job(job); s.event('matching_reviewed', {'id': job['id']})
+        print('Extraction review recorded. No submission permission is asked or given here.')
+    elif a.action == 'verify-job':
         job.update(live_verified=True, verified_at=now(), matching_reviewed=True, preferences_confirmed=True); s.put_job(job); s.event('job_reviewed', {'id': job['id']})
         print('Current vacancy, requirements and preferences review recorded. Expires in 15 minutes.')
     elif a.action == 'approve-pack':

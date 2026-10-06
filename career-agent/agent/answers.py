@@ -32,10 +32,18 @@ def is_declaration(field, library=None):
     return item.get('kind') in DECLARATION_KINDS or bool(DECLARATION_KEY.search(key))
 
 
+# Keys whose answer must never be derived from history or a target (R08, T49).
+NEVER_DERIVED = re.compile(r'expected|desired|salary_expect|day_rate_expect|notice|start_date|earlier_|chronolog|employment_dates', re.I)
+
+
 def answer(key, library):
     item = library.get('answers', {}).get(key)
-    if not item or not item.get('confirmed') or item.get('value') is None:
+    if not item or not item.get('confirmed') or item.get('value') is None or item.get('value') == '':
         raise ValueError('Confirmed answer required: ' + key)
+    if item.get('kind') == 'narrative':
+        raise ValueError('A writing-style note is not an answer: ' + key)
+    if item.get('derived_from'):
+        raise ValueError('Derived answers are not accepted; confirm the value itself: ' + key)
     return item['value']
 
 

@@ -330,6 +330,11 @@ def execute(page, store, job, profile, policy, adapter, library, submit=False, w
             if form.count() != 1:
                 raise RouteError('Application form missing after a step')
             controls += form.evaluate(SCAN)
+        # A control seen on more than one step (one form, shown in parts) is one control.
+        unique = {}
+        for c in controls:
+            unique.setdefault((c['tag'], c['type'], c['name'], c['id']), c)
+        controls = list(unique.values())
         fhash = schema_hash(controls)
         cert = adapter.get('certification') or {}
         if cert.get('form_schema_hash') and cert['form_schema_hash'] != fhash:

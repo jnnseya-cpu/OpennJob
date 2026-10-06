@@ -27,6 +27,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def do_GET(self):
+        if self.path.startswith('/redirect/'):
+            self.send_response(302); self.send_header('Location', '/' + self.path.split('/redirect/', 1)[1]); self.send_header('Content-Length', '0'); self.end_headers()
+            return
+        if self.path.startswith('/gone/'):
+            self.send_response(410); self.send_header('Content-Length', '0'); self.end_headers()
+            return
+        super().do_GET()
+
     def do_POST(self):
         length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(length)
