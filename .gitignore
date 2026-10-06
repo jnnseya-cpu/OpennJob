@@ -34,3 +34,5 @@ career-agent/.venv/
 /oj
 /compose.local.yml
 /.env.production
+/.auto-update.lock
+/.auto-update.rejected

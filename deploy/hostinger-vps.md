@@ -103,6 +103,22 @@ in the dump. Without the key, a restored database cannot be read.
 
 ## 7. Updates
 
+Automatic (recommended once the site is running):
+
+```bash
+bash /opt/opennjob/deploy/enable-auto-update.sh        # every 10 minutes; "off" to stop
+journalctl -u opennjob-update --since today            # what it did
+```
+
+Every 10 minutes the server checks the branch. When a new version was pushed it rebuilds and
+restarts, then checks `/api/health` for up to 3 minutes. If the new version is not healthy, or the
+build fails, it goes back to the previous version and skips that version until a newer one
+arrives. It never overwrites a file edited on the server (the update stops and says so), and it
+does not touch `.env.production`. Migrations run on start, as with any update; they are forward
+only, so a rolled-back version runs on the newer schema (the API accepts that).
+
+By hand:
+
 ```bash
 git pull && docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
