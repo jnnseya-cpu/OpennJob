@@ -8,7 +8,7 @@ import { api, errorText } from '../../lib/api';
 import { STATUS_LABEL } from '../../lib/labels';
 import type { Application } from '../../lib/types';
 
-const ORDER: Record<Application['status'], number> = { draft: 0, confirmed: 1, submitted: 2 };
+const ORDER: Record<Application['status'], number> = { needs_you: 0, uncertain: 1, draft: 2, confirmed: 3, interview: 4, submitted: 5, closed: 6 };
 const MODE_NAME: Record<Application['mode'], string> = { review: 'review all', hybrid: 'hybrid', auto: 'auto' };
 
 export default function TrackerPage() {

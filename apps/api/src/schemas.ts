@@ -57,7 +57,7 @@ export const preferencesSchema = z
       .max(100)
       .default([])
       .transform(unique),
-    searchTypes: z.array(z.enum(['uk-permanent', 'uk-contract', 'international'])).max(3).default([]).transform(unique),
+    searchTypes: z.array(z.enum(['uk-permanent', 'uk-contract', 'international'])).max(3).optional().transform((v) => (v ? unique(v) : undefined)),
   })
   .strict();
 

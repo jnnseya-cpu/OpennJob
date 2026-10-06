@@ -3,9 +3,13 @@ import type { Region } from './core';
 import type { Application } from './types';
 
 export const STATUS_LABEL: Record<Application['status'], string> = {
-  draft: 'Waiting for you',
+  draft: 'Prepared',
   confirmed: 'Approved, not sent',
+  needs_you: 'Needs you',
   submitted: 'Submitted',
+  uncertain: 'Check: no confirmation seen',
+  interview: 'Interview',
+  closed: 'Closed',
 };
 
 export function placeOf(job: { city?: string; country?: string; location: string }): string {
