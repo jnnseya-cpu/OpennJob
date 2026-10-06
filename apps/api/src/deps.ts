@@ -271,8 +271,9 @@ export function buildSources(env: Env, fetchFn: FetchLike): JobSourceAdapter[] {
   if (env.ADZUNA_APP_ID && env.ADZUNA_APP_KEY) {
     // One adapter per country code in ADZUNA_COUNTRIES (default gb). Entries that are not two letters are ignored.
     const countries = list(env.ADZUNA_COUNTRIES).map((c) => c.toLowerCase()).filter((c) => /^[a-z]{2}$/.test(c));
+    const perPage = Number.parseInt((env.ADZUNA_RESULTS_PER_PAGE ?? '').trim(), 10);
     for (const country of countries.length ? [...new Set(countries)] : ['gb']) {
-      sources.push(createAdzunaSource({ appId: env.ADZUNA_APP_ID, appKey: env.ADZUNA_APP_KEY, country, what: keywords, ...(location ? { where: location } : {}), fetch: fetchFn }));
+      sources.push(createAdzunaSource({ appId: env.ADZUNA_APP_ID, appKey: env.ADZUNA_APP_KEY, country, what: keywords, ...(location ? { where: location } : {}), ...(Number.isFinite(perPage) ? { resultsPerPage: perPage } : {}), fetch: fetchFn }));
     }
   }
   if (env.REED_API_KEY) {

@@ -109,12 +109,22 @@ describe('ashby adapter', () => {
 });
 
 describe('adzuna adapter', () => {
+  it('asks for the largest page (50) by default; a configured size is kept within 1 to 50', async () => {
+    const sizes: (string | null)[] = [];
+    for (const resultsPerPage of [undefined, 20, 500, 0]) {
+      const { fetch, calls } = fakeFetch(fixture('adzuna.json'));
+      await createAdzunaSource({ appId: 'a', appKey: 'b', what: 'site manager', fetch, ...(resultsPerPage !== undefined ? { resultsPerPage } : {}) }).fetchJobs();
+      sizes.push(new URL(calls[0]?.url ?? '').searchParams.get('results_per_page'));
+    }
+    expect(sizes).toEqual(['50', '20', '50', '1']);
+  });
+
   it('builds the gb search URL with credentials and query, and normalises results', async () => {
     const { fetch, calls } = fakeFetch(fixture('adzuna.json'));
     const jobs = await createAdzunaSource({ appId: 'ID123', appKey: 'KEY456', what: 'healthcare assistant', where: 'Leeds', page: 2, fetch }).fetchJobs();
     const url = new URL(calls[0]?.url as string);
     expect(url.origin + url.pathname).toBe('https://api.adzuna.com/v1/api/jobs/gb/search/2');
-    expect(Object.fromEntries(url.searchParams)).toEqual({ app_id: 'ID123', app_key: 'KEY456', what: 'healthcare assistant', where: 'Leeds' });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ app_id: 'ID123', app_key: 'KEY456', results_per_page: '50', what: 'healthcare assistant', where: 'Leeds' });
     expect(jobs).toHaveLength(2);
     expect(jobs[0]).toMatchObject({
       id: 'adzuna:5123456789',
@@ -133,7 +143,7 @@ describe('adzuna adapter', () => {
   it('defaults to page 1 and omits where when not given', async () => {
     const { fetch, calls } = fakeFetch({ results: [] });
     await createAdzunaSource({ appId: 'a', appKey: 'b', what: 'nurse', fetch }).fetchJobs();
-    expect(calls[0]?.url).toBe('https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id=a&app_key=b&what=nurse');
+    expect(calls[0]?.url).toBe('https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id=a&app_key=b&results_per_page=50&what=nurse');
   });
 });
 

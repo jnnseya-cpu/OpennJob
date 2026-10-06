@@ -6,7 +6,8 @@
  * on this adapter. Adzuna's terms of use for the API (attribution, caching, redirect
  * links) have not been reviewed either.
  *
- * GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page}?app_id=&app_key=&what=&where=
+ * GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page}?app_id=&app_key=&results_per_page=&what=&where=
+ * results_per_page: 50 is the largest page Adzuna allows, AS REMEMBERED (default 10). Unverified.
  * -> { results: [{ id, title, description, redirect_url, company: { display_name },
  *                  location: { display_name }, salary_min, salary_max, created }] }
  * Note: as remembered, `description` is a truncated snippet, not the full advert.
@@ -26,6 +27,9 @@ export const ADZUNA_COUNTRIES_UNVERIFIED: readonly string[] = [
   'gb', 'us', 'at', 'au', 'be', 'br', 'ca', 'ch', 'de', 'es', 'fr', 'in', 'it', 'mx', 'nl', 'nz', 'pl', 'sg', 'za',
 ];
 
+/** The largest page Adzuna allows, as remembered from its documentation. Unverified against the live API. */
+export const ADZUNA_MAX_RESULTS_PER_PAGE = 50;
+
 export interface AdzunaOptions {
   appId: string;
   appKey: string;
@@ -34,6 +38,8 @@ export interface AdzunaOptions {
   what: string;
   where?: string;
   page?: number;
+  /** Jobs per request, 1 to ADZUNA_MAX_RESULTS_PER_PAGE. Defaults to the maximum. */
+  resultsPerPage?: number;
   fetch: FetchLike;
 }
 
@@ -46,7 +52,8 @@ export function createAdzunaSource(options: AdzunaOptions): JobSourceAdapter {
     name: 'adzuna',
     label,
     async fetchJobs() {
-      const params = new URLSearchParams({ app_id: options.appId, app_key: options.appKey, what: options.what });
+      const perPage = Math.min(ADZUNA_MAX_RESULTS_PER_PAGE, Math.max(1, Math.trunc(options.resultsPerPage ?? ADZUNA_MAX_RESULTS_PER_PAGE)));
+      const params = new URLSearchParams({ app_id: options.appId, app_key: options.appKey, results_per_page: String(perPage), what: options.what });
       if (options.where) params.set('where', options.where);
       const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${options.page ?? 1}?${params.toString()}`;
       const body = obj(await getJson(options.fetch, label, url));
