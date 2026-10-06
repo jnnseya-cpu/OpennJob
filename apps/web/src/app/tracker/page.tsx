@@ -22,6 +22,7 @@ export default function TrackerPage() {
   const { agentMessage } = useApp();
   const [apps, setApps] = useState<Application[]>();
   const [error, setError] = useState('');
+  const [showClosed, setShowClosed] = useState(false);
 
   useEffect(() => {
     api<Application[]>('/applications')
@@ -39,7 +40,7 @@ export default function TrackerPage() {
         <>
           <StatTiles
             items={[
-              { label: 'Applications', value: apps.length },
+              { label: 'Open applications', value: apps.filter((a) => a.status !== 'closed').length },
               { label: 'Average match', value: `${Math.round(apps.reduce((n, a) => n + a.score, 0) / apps.length)}%` },
               { label: 'Submitted', value: apps.filter((a) => a.status === 'submitted').length },
             ]}
@@ -58,7 +59,7 @@ export default function TrackerPage() {
       ) : null}
       {apps && !apps.length ? <div className="empty">No applications yet. Open a match, or tap Run agent on the Matches tab.</div> : null}
       <div className="stack list">
-        {apps?.map((a) => (
+        {apps?.filter((a) => showClosed || a.status !== 'closed').map((a) => (
           <div key={a.id} className="card" data-testid="application">
             <div className="row">
               <div className="grow">
@@ -100,6 +101,11 @@ export default function TrackerPage() {
           </div>
         ))}
       </div>
+      {apps?.some((a) => a.status === 'closed') ? (
+        <button type="button" className="link" onClick={() => setShowClosed((v) => !v)} data-testid="toggle-closed">
+          {showClosed ? 'Hide closed applications' : `Show closed applications (${apps.filter((a) => a.status === 'closed').length})`}
+        </button>
+      ) : null}
       <p className="small muted">Replies from employers are not tracked yet: OpennJob does not read your email.</p>
     </>
   );

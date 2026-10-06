@@ -8,7 +8,9 @@ import {
   createAshbySource,
   createGreenhouseSource,
   createLeverSource,
+  createReedSearch,
   createReedSource,
+  createAdzunaSearch,
   createSampleSource,
   decodeEntities,
   dedupeJobs,
@@ -151,7 +153,7 @@ describe('reed adapter', () => {
   it('uses HTTP Basic auth with the API key as username and an empty password', async () => {
     const { fetch, calls } = fakeFetch(fixture('reed.json'));
     await createReedSource({ apiKey: 'my-reed-key', keywords: 'mental health nurse', locationName: 'Birmingham', fetch }).fetchJobs();
-    expect(calls[0]?.url).toBe('https://www.reed.co.uk/api/1.0/search?keywords=mental+health+nurse&locationName=Birmingham');
+    expect(calls[0]?.url).toBe('https://www.reed.co.uk/api/1.0/search?keywords=mental+health+nurse&resultsToTake=100&locationName=Birmingham');
     const auth = calls[0]?.headers.Authorization as string;
     expect(auth).toBe(reedAuthHeader('my-reed-key'));
     expect(Buffer.from(auth.replace('Basic ', ''), 'base64').toString('utf8')).toBe('my-reed-key:');
@@ -173,6 +175,34 @@ describe('reed adapter', () => {
     });
     expect(jobs[1]?.salaryMin).toBeUndefined();
     expect(jobs[1]?.salaryMax).toBeUndefined();
+  });
+});
+
+describe('per-person searches read more than the snippet', () => {
+  it('reed: reads the full advert for the first results, so requirements come from the whole text', async () => {
+    const calls: string[] = [];
+    const fetch: FetchLike = async (url) => {
+      calls.push(url);
+      const body = url.includes('/jobs/55001122')
+        ? { jobDescription: `<p>${'A fictional mental health unit looking for a registered nurse. '.repeat(4)}</p><p>Essential:</p><ul><li>NMC registration</li><li>Medication administration and care planning</li></ul>` }
+        : url.includes('/jobs/')
+          ? null
+          : fixture('reed.json');
+      return { ok: body !== null, status: body !== null ? 200 : 500, json: async () => body };
+    };
+    const jobs = await createReedSearch({ apiKey: 'k', fetch, detailsPerSearch: 2 }).search({ what: 'nurse', country: 'GB' });
+    expect(calls.filter((u) => u.includes('/api/1.0/jobs/'))).toHaveLength(2);
+    expect(jobs[0]?.description).toContain('Medication administration and care planning');
+    expect(jobs[0]?.criteria.map((c) => c.label)).toContain('Care planning');
+    // A failed detail call keeps the snippet.
+    expect(jobs[1]?.description.length).toBeGreaterThan(0);
+  });
+
+  it('adzuna: sends the CV job title as an exact phrase', async () => {
+    const { fetch, calls } = fakeFetch(fixture('adzuna.json'));
+    await createAdzunaSearch({ appId: 'id', appKey: 'key', fetch }).search({ what: 'project manager', where: 'Leeds', country: 'GB' });
+    expect(calls[0]?.url).toContain('what_phrase=project+manager');
+    expect(calls[0]?.url).not.toContain('&what=');
   });
 });
 

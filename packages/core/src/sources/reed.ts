@@ -11,6 +11,10 @@
  * -> { results: [{ jobId, employerName, jobTitle, locationName, minimumSalary,
  *                  maximumSalary, jobDescription, jobUrl, date }] }
  * Note: as remembered, `jobDescription` in search results is a truncated snippet.
+ * GET https://www.reed.co.uk/api/1.0/jobs/{jobId} -> { jobDescription, ... } gives the full advert
+ * (as remembered). Per-person searches read the full advert for the first REED_DETAILS_PER_SEARCH
+ * results, so requirements are read from the whole text, not the snippet. A failed detail call
+ * keeps the snippet.
  */
 import { arr, decodeEntities, getJson, normaliseJob, num, obj, present, str, stripTags, tidy, toIso } from './common';
 import type { FetchLike, JobSourceAdapter, SearchSource } from './common';
@@ -30,28 +34,51 @@ export function createReedSource(options: ReedOptions): JobSourceAdapter {
   return { name: 'reed', label: 'reed', fetchJobs: () => reedSearch(options.apiKey, options.fetch, options.keywords, options.locationName) };
 }
 
+/** How many results of one search get their full advert read. */
+export const REED_DETAILS_PER_SEARCH = 25;
+
 /** Reed asked per search (job title from the CV, city from the preferences). UK only. */
-export function createReedSearch(options: { apiKey: string; fetch: FetchLike }): SearchSource {
+export function createReedSearch(options: { apiKey: string; fetch: FetchLike; detailsPerSearch?: number }): SearchSource {
   return {
     name: 'reed',
     label: 'reed',
     countries: ['GB'],
-    search: (q) => (q.country.toUpperCase() === 'GB' ? reedSearch(options.apiKey, options.fetch, q.what, q.where) : Promise.resolve([])),
+    search: (q) =>
+      q.country.toUpperCase() === 'GB' ? reedSearch(options.apiKey, options.fetch, q.what, q.where, options.detailsPerSearch ?? REED_DETAILS_PER_SEARCH) : Promise.resolve([]),
   };
 }
 
-async function reedSearch(apiKey: string, fetchFn: FetchLike, keywords: string, locationName: string | undefined) {
+/** The full advert text for one Reed job, or undefined when the call fails. */
+async function reedFullDescription(apiKey: string, fetchFn: FetchLike, jobId: string): Promise<string | undefined> {
+  try {
+    const body = obj(await getJson(fetchFn, 'reed', `https://www.reed.co.uk/api/1.0/jobs/${encodeURIComponent(jobId)}`, { Authorization: reedAuthHeader(apiKey) }));
+    const text = tidy(decodeEntities(stripTags(str(body.jobDescription).replace(/<\/(p|li|div|h\d)>|<br\s*\/?>/gi, '\n'))));
+    return text || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function reedSearch(apiKey: string, fetchFn: FetchLike, keywords: string, locationName: string | undefined, details = 0) {
   const label = 'reed';
-  const params = new URLSearchParams({ keywords });
+  const params = new URLSearchParams({ keywords, resultsToTake: '100' });
   if (locationName) params.set('locationName', locationName);
   const url = `https://www.reed.co.uk/api/1.0/search?${params.toString()}`;
   const body = obj(await getJson(fetchFn, label, url, { Authorization: reedAuthHeader(apiKey) }));
-  return arr(body.results)
-    .map((item) => {
-      const j = obj(item);
+  const items = arr(body.results).map((item) => obj(item));
+  const full = new Map<string, string>();
+  for (const j of items.slice(0, details)) {
+    const id = str(j.jobId);
+    const text = id ? await reedFullDescription(apiKey, fetchFn, id) : undefined;
+    if (text) full.set(id, text);
+  }
+  return items
+    .map((j) => {
       const postedAt = toIso(j.date);
       const salaryMin = num(j.minimumSalary);
       const salaryMax = num(j.maximumSalary);
+      const snippet = tidy(decodeEntities(stripTags(str(j.jobDescription))));
+      const whole = full.get(str(j.jobId));
       return normaliseJob({
         source: 'reed',
         externalId: str(j.jobId),
@@ -62,7 +89,7 @@ async function reedSearch(apiKey: string, fetchFn: FetchLike, keywords: string, 
         country: 'GB',
         url: str(j.jobUrl),
         applyUrl: str(j.jobUrl),
-        description: tidy(decodeEntities(stripTags(str(j.jobDescription)))),
+        description: whole && whole.length > snippet.length ? whole : snippet,
         ...(salaryMin !== undefined ? { salaryMin } : {}),
         ...(salaryMax !== undefined ? { salaryMax } : {}),
         ...(postedAt ? { postedAt } : {}),

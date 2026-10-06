@@ -161,6 +161,10 @@ function boards(v: string | undefined): { id: string; employer?: string }[] {
   });
 }
 
+/** "unlimited" (or "off", "none") means no ceiling: the owner's choice (6 October 2026). Anthropic still bills every call. */
+const UNLIMITED = /^(unlimited|off|none|no limit)$/i;
+const ceiling = (v: string | undefined, fallback: number, min: number, max: number): number => (UNLIMITED.test((v ?? '').trim()) ? Number.POSITIVE_INFINITY : int(v, fallback, min, max));
+
 const int = (v: string | undefined, fallback: number, min: number, max: number): number => {
   const raw = (v ?? '').trim();
   if (!/^\d{1,9}$/.test(raw)) return fallback;
@@ -186,7 +190,7 @@ export function loadConfig(env: Env): OpennJobConfig {
     corsAllowAnyExtension: allowAnyExtension ? flag(allowAnyExtension) : !isProduction(env),
     bodyLimit: /^\d{1,6}(b|kb|mb)$/i.test((env.OPENNJOB_BODY_LIMIT ?? '').trim()) ? (env.OPENNJOB_BODY_LIMIT as string).trim().toLowerCase() : '256kb',
     llmCriteria: flag(env.OPENNJOB_LLM_CRITERIA),
-    llmCriteriaMaxJobs: Number.isFinite(max) && max >= 0 ? max : 25,
+    llmCriteriaMaxJobs: UNLIMITED.test((env.OPENNJOB_LLM_CRITERIA_MAX_JOBS ?? '').trim()) ? Number.POSITIVE_INFINITY : Number.isFinite(max) && max >= 0 ? max : 25,
   };
   // Only a whole number from 0 to 100 is accepted; anything else leaves the default (80) in force.
   const rawThreshold = (env.OPENNJOB_APPLY_THRESHOLD ?? '').trim();
@@ -211,8 +215,8 @@ export function loadConfig(env: Env): OpennJobConfig {
   config.searchMaxQueriesPerUser = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_USER, 6, 1, 30);
   config.searchMaxQueriesPerRefresh = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH, 60, 1, 1000);
   config.dailyApplicationLimit = int(env.OPENNJOB_DAILY_APPLICATION_LIMIT, DEFAULT_DAILY_APPLICATION_LIMIT, 0, 1000);
-  config.llmDailyAcuPerUser = int(env.OPENNJOB_LLM_DAILY_ACU_PER_USER, DEFAULT_LLM_DAILY_ACU_PER_USER, 0, 1_000_000);
-  config.llmDailyAcuTotal = int(env.OPENNJOB_LLM_DAILY_ACU_TOTAL, DEFAULT_LLM_DAILY_ACU_TOTAL, 0, 100_000_000);
+  config.llmDailyAcuPerUser = ceiling(env.OPENNJOB_LLM_DAILY_ACU_PER_USER, DEFAULT_LLM_DAILY_ACU_PER_USER, 0, 1_000_000);
+  config.llmDailyAcuTotal = ceiling(env.OPENNJOB_LLM_DAILY_ACU_TOTAL, DEFAULT_LLM_DAILY_ACU_TOTAL, 0, 100_000_000);
   const operatorEmail = (env.OPENNJOB_OPERATOR_EMAIL ?? '').trim().toLowerCase();
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(operatorEmail)) config.operatorEmail = operatorEmail;
   const mailbox = (env.OPENNJOB_DEV_MAILBOX_DIR ?? '').trim();

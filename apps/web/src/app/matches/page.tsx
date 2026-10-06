@@ -188,6 +188,7 @@ export default function MatchesPage() {
                 <span className="chip plain">{regionLabel(m.job.region)}</span>
                 <span className="chip plain">{m.job.origin === 'employer' ? 'Posted by employer' : 'Found by OpennJob'}</span>
                 {m.job.language === 'fr' ? <span className="chip plain">Applies in French</span> : null}
+                {m.otherField ? <span className="chip bad">Not your field: your CV does not mention {m.otherField.missing.join(', ')}</span> : null}
                 {!m.eligible ? (
                   <span className="chip bad">Needs {needsLabel(m.missingCredential)}</span>
                 ) : gaps ? (

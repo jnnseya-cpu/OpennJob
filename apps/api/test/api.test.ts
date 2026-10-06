@@ -194,7 +194,10 @@ describe('GET /jobs/matches', () => {
       expect(rank[i - 1][0] > rank[i][0] || (rank[i - 1][0] === rank[i][0] && rank[i - 1][1] >= rank[i][1])).toBe(true);
     }
     expect(res.body[0].job.id).toBe(NURSE_JOB);
-    expect(new Set(res.body.map((m: { score: number }) => m.score)).size).toBe(3); // three distinct scores, so the order is meaningful
+    // The nurse's CV names neither "healthcare assistant" nor "support worker": those two posts are
+    // capped as another field (OTHER_FIELD_MAX_SCORE), below the nurse post, so the order is meaningful.
+    const others = res.body.filter((m: { job: { id: string } }) => m.job.id !== NURSE_JOB).map((m: { score: number }) => m.score);
+    expect(others.every((s: number) => s <= 30 && s < res.body[0].score)).toBe(true);
     const nurse = res.body[0];
     expect(nurse.eligible).toBe(true);
     expect(nurse.job).toMatchObject({ title: 'Staff Nurse - Acute Medical Ward', requiresRegistration: true, applyUrl: 'https://example.org/jobs/staff-nurse-medical' });
@@ -203,7 +206,9 @@ describe('GET /jobs/matches', () => {
       const weight = (h: { essential: boolean }) => (h.essential ? 2 : 1);
       const total = m.hits.reduce((a: number, h: { essential: boolean }) => a + weight(h), 0);
       const matched = m.hits.filter((h: { matched: boolean }) => h.matched).reduce((a: number, h: { essential: boolean }) => a + weight(h), 0);
-      expect(m.score).toBe(Math.round((100 * matched) / total));
+      const raw = Math.round((100 * matched) / total);
+      // A post the CV does not show (otherField) is capped at 30.
+      expect(m.score).toBe(m.otherField ? Math.min(raw, 30) : raw);
       for (const h of m.hits) {
         if (h.matched) expect(CV_TEXT).toContain(h.evidence);
         else expect(h.evidence).toBeUndefined();

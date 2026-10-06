@@ -36,6 +36,12 @@ describe('loadConfig', () => {
 
   it('reads the owner limits (APP-6, APP-8, NFR-5) and ignores values out of range', () => {
     expect(loadConfig({ OPENNJOB_DUPLICATE_DAYS: '14', OPENNJOB_DAILY_APPLICATION_LIMIT: '5', OPENNJOB_LLM_DAILY_ACU_PER_USER: '10', OPENNJOB_LLM_DAILY_ACU_TOTAL: '0' })).toMatchObject({ duplicateDays: 14, dailyApplicationLimit: 5, llmDailyAcuPerUser: 10, llmDailyAcuTotal: 0 });
+    // "unlimited" removes the AI ceiling and the per-refresh cap on AI-read adverts (owner's choice).
+    expect(loadConfig({ OPENNJOB_LLM_DAILY_ACU_PER_USER: 'unlimited', OPENNJOB_LLM_DAILY_ACU_TOTAL: 'off', OPENNJOB_LLM_CRITERIA_MAX_JOBS: 'unlimited' })).toMatchObject({
+      llmDailyAcuPerUser: Number.POSITIVE_INFINITY,
+      llmDailyAcuTotal: Number.POSITIVE_INFINITY,
+      llmCriteriaMaxJobs: Number.POSITIVE_INFINITY,
+    });
     expect(loadConfig({ OPENNJOB_DUPLICATE_DAYS: '0', OPENNJOB_DAILY_APPLICATION_LIMIT: 'many', OPENNJOB_LLM_DAILY_ACU_PER_USER: '-1' })).toMatchObject({ duplicateDays: 30, dailyApplicationLimit: 20, llmDailyAcuPerUser: 50 });
   });
 });
@@ -84,8 +90,8 @@ describe('buildSearchSources: the job-search APIs take only keys; what they are 
     await reed?.search({ what: 'site manager', where: 'London', country: 'GB' });
     await reed?.search({ what: 'site manager', country: 'FR' }); // Reed is UK only: not asked
     expect(urls).toEqual([
-      'https://api.adzuna.com/v1/api/jobs/fr/search/1?app_id=id&app_key=key&results_per_page=50&what=site+manager&where=Lyon',
-      'https://www.reed.co.uk/api/1.0/search?keywords=site+manager&locationName=London',
+      'https://api.adzuna.com/v1/api/jobs/fr/search/1?app_id=id&app_key=key&results_per_page=50&what_phrase=site+manager&where=Lyon',
+      'https://www.reed.co.uk/api/1.0/search?keywords=site+manager&resultsToTake=100&locationName=London',
     ]);
   });
 });

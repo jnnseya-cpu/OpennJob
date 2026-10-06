@@ -56,7 +56,7 @@ describe('spec T-01: a job at 79% is left alone; at 80% it is prepared', () => {
   const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet'];
   const cv = `Fictional skills: ${words.slice(0, 9).join(', ')} and kilo.`;
   const job79 = {
-    title: 'Coordinator 79 (fictional)',
+    title: 'Alpha Lead 79 (fictional)',
     employer: 'Threshold Works (fictional)',
     description: 'A fictional vacancy used to test the 80% rule.',
     country: 'gb',
@@ -65,7 +65,7 @@ describe('spec T-01: a job at 79% is left alone; at 80% it is prepared', () => {
     criteria: [...words.map((w) => ({ label: `Skill ${w}`, essential: true, keywords: [w] })), ...['kilo', 'lima', 'mike', 'november'].map((w) => ({ label: `Bonus ${w}`, essential: false, keywords: [w] }))],
   };
   const job80 = {
-    title: 'Coordinator 80 (fictional)',
+    title: 'Alpha Lead 80 (fictional)',
     employer: 'Threshold Works (fictional)',
     description: 'A fictional vacancy used to test the 80% rule.',
     country: 'gb',

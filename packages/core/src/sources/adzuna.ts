@@ -7,6 +7,7 @@
  * links) have not been reviewed either.
  *
  * GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page}?app_id=&app_key=&results_per_page=&what=&where=
+ * Per-person searches send the CV job title as what_phrase (exact phrase), as remembered. Unverified.
  * results_per_page: 50 is the largest page Adzuna allows, AS REMEMBERED (default 10). Unverified.
  * -> { results: [{ id, title, description, redirect_url, company: { display_name },
  *                  location: { display_name }, salary_min, salary_max, created }] }
@@ -74,7 +75,8 @@ export function createAdzunaSearch(options: AdzunaSearchOptions): SearchSource {
     search: (q) => {
       const country = q.country.toLowerCase();
       if (!/^[a-z]{2}$/.test(country)) return Promise.resolve([]);
-      return adzunaSearch(options, country === 'gb' ? 'adzuna' : `adzuna:${country}`, country, q.what, q.where, 1);
+      // The job title as an exact phrase (what_phrase): "project manager" must not bring back every "manager".
+      return adzunaSearch(options, country === 'gb' ? 'adzuna' : `adzuna:${country}`, country, q.what, q.where, 1, true);
     },
   };
 }
@@ -86,9 +88,11 @@ async function adzunaSearch(
   what: string,
   where: string | undefined,
   page: number,
+  phrase = false,
 ) {
   const perPage = Math.min(ADZUNA_MAX_RESULTS_PER_PAGE, Math.max(1, Math.trunc(options.resultsPerPage ?? ADZUNA_MAX_RESULTS_PER_PAGE)));
-  const params = new URLSearchParams({ app_id: options.appId, app_key: options.appKey, results_per_page: String(perPage), what });
+  const params = new URLSearchParams({ app_id: options.appId, app_key: options.appKey, results_per_page: String(perPage) });
+  params.set(phrase ? 'what_phrase' : 'what', what);
   if (where) params.set('where', where);
   const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}?${params.toString()}`;
   const body = obj(await getJson(options.fetch, label, url));

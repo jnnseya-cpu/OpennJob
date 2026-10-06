@@ -7,6 +7,68 @@ import { extractJsonObject, keywordInText, splitSentences } from './text';
 
 export const ESSENTIAL_WEIGHT = 2;
 export const DESIRABLE_WEIGHT = 1;
+/** The highest score a job in another field can get: well under any threshold the agent prepares at. */
+export const OTHER_FIELD_MAX_SCORE = 30;
+
+/**
+ * Words in a job title that say how senior or what kind of post, not what field. They are left out
+ * when the title is checked against the CV. "Assistant", "graduate", "junior", "administrator" and
+ * "coordinator" are kept on purpose: a CV without them is not evidence for those posts.
+ */
+const TITLE_GENERIC = new Set([
+  'senior', 'snr', 'sr', 'lead', 'head', 'of', 'principal', 'chief', 'deputy', 'interim', 'acting', 'the', 'and', 'for', 'in', 'a', 'an', 'to', 'with',
+  'manager', 'management', 'director', 'officer', 'partner', 'specialist', 'consultant', 'executive', 'advisor', 'adviser', 'supervisor', 'engineer',
+  'professional', 'expert', 'practitioner', 'leader', 'team', 'role', 'job', 'vacancy', 'opportunity', 'uk', 'wide', 'permanent', 'contract', 'temporary',
+  'temp', 'ftc', 'fixed', 'term', 'hybrid', 'remote', 'level', 'grade', 'band', 'i', 'ii', 'iii', 'iv', 'new', 'urgent', 'immediate', 'start',
+  'consultancy', 'consulting', 'sector', 'semi', 'staff', 'country', 'regional', 'region', 'national', 'global', 'international', 'area', 'group', 'emea', 'europe', 'general', 'qualified', 'experienced', 'registered',
+]);
+
+/** "Senior Project Manager - Water & Environment (UK Wide)" -> "Senior Project Manager": the post, before any dash, bracket or slash detail. */
+export function coreTitle(title: string): string {
+  return title.split(/\s[-–—|]\s|[(\[|]|\s-(?=\S)|(?<=\S)-\s/)[0]?.trim() ?? '';
+}
+
+/** The words of the post that name its field: "Tax Director" -> ["tax"]. */
+export function titleFieldWords(title: string): string[] {
+  const own = fieldWordsOf(coreTitle(title));
+  // "Senior Manager - Group Reporting": the post alone names no field, so the detail does.
+  return own.length > 0 ? own : fieldWordsOf(title);
+}
+
+function fieldWordsOf(text: string): string[] {
+  const words = text.toLowerCase().replace(/&/g, ' ').replace(/[^a-zà-ÿ0-9\s/]+/g, ' ').split(/[\s/]+/);
+  return [...new Set(words.filter((w) => w.length > 1 && !/^\d+$/.test(w) && !TITLE_GENERIC.has(w)))];
+}
+
+/** Does the CV use this word ("surveyor" also matches "surveyors", "proposal" matches "proposals")? */
+function cvHasWord(word: string, cvLower: string): boolean {
+  const stem = word.length > 4 && word.endsWith('s') ? word.slice(0, -1) : word;
+  const esc = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![a-zà-ÿ0-9])${esc}(s|es)?(?![a-zà-ÿ0-9])`, 'i').test(cvLower);
+}
+
+export interface RoleFit {
+  /** The post as checked, e.g. "Tax Director". */
+  role: string;
+  /** More than half of the title's field words appear in the CV. true when the title has no field words. */
+  fits: boolean;
+  /** The field words the CV does not use. */
+  missing: string[];
+}
+
+/**
+ * Is the job in the person's field? More than half of the words of the post that name a field must
+ * appear somewhere in the CV: "Tax Director" needs "tax", "Sales Performance Manager" needs both
+ * "sales" and "performance", "Associate Project Manager Construction" two of its three words. A heuristic, deliberately strict in one direction: a job in another field must not be
+ * scored as a match because its advert and the CV share a word like "team".
+ */
+export function roleFit(title: string, cvText: string): RoleFit {
+  const role = coreTitle(title) || title.trim();
+  const words = titleFieldWords(title);
+  const cvLower = cvText.toLowerCase();
+  const missing = words.filter((w) => !cvHasWord(w, cvLower));
+  return { role, fits: words.length === 0 || (words.length - missing.length) * 2 > words.length, missing };
+}
 
 export interface CriterionHit {
   criterion: Criterion;
@@ -35,6 +97,8 @@ export interface MatchResult {
   hits: CriterionHit[];
   /** Labels of essential criteria with no evidence in the CV. */
   unmetEssential: string[];
+  /** The job title checked against the CV. Absent when the job has no title. */
+  role?: RoleFit;
 }
 
 /**
@@ -46,7 +110,7 @@ export interface MatchResult {
  * empty list excludes nothing).
  */
 export function matchJob(
-  job: Pick<Job, 'criteria' | 'requiresRegistration'> & Partial<Pick<Job, 'requiredCredential'>>,
+  job: Pick<Job, 'criteria' | 'requiresRegistration'> & Partial<Pick<Job, 'requiredCredential' | 'title' | 'language'>>,
   cvText: string,
   passport: Pick<Passport, 'nmcPin' | 'credentials'> | undefined,
   preferences?: Pick<Preferences, 'languages'>,
@@ -72,16 +136,22 @@ export function matchJob(
     return { criterion, matched: true, keyword, ...(evidence ? { evidence } : {}) };
   });
 
+  // The post itself: a job in another field is never a match, however many words the advert shares with the CV.
+  // It caps the score; it does not add to it, so the requirements still decide among jobs in the field.
+  // Not for a French title: its words cannot be checked against an English CV without translating them.
+  const role = job.title && job.language !== 'fr' ? roleFit(job.title, cvText) : undefined;
   const required = requiredCredentialOf(job);
   const eligible = required === undefined || credentialOf(passport, required).length > 0;
+  const raw = totalWeight === 0 ? 0 : Math.round((100 * matchedWeight) / totalWeight);
   return {
-    score: totalWeight === 0 ? 0 : Math.round((100 * matchedWeight) / totalWeight),
+    score: role && !role.fits ? Math.min(raw, OTHER_FIELD_MAX_SCORE) : raw,
     eligible,
     ...(eligible || required === undefined ? {} : { missingCredential: required }),
     matchedWeight,
     totalWeight,
     hits,
     unmetEssential: hits.filter((h) => !h.matched && h.criterion.essential).map((h) => h.criterion.label),
+    ...(role ? { role } : {}),
   };
 }
 

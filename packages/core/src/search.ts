@@ -77,7 +77,7 @@ export interface SearchPlan {
 
 /** The searches for one person, at most `maxQueries`: titles in rank order, each in every place. */
 export function searchPlan(profile: Pick<Profile, 'cvText' | 'city' | 'preferences'>, maxQueries = 6): SearchPlan {
-  const titles = titlesFromCv(profile.cvText ?? '');
+  const titles = titlesFromCv(profile.cvText ?? '', 5);
   const prefs = profile.preferences;
   const places: { where?: string; country: string }[] = [];
   const countriesWithCity = new Set<string>();

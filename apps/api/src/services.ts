@@ -252,6 +252,8 @@ export class OpennJobService {
       eligible: match.eligible,
       missingCredential: match.missingCredential,
       unmetEssential: match.unmetEssential,
+      // The job title checked against the CV: otherField means the CV does not show this kind of post.
+      ...(match.role && !match.role.fits ? { otherField: { role: match.role.role, missing: match.role.missing } } : {}),
       hits: match.hits.map((h) => ({ label: h.criterion.label, essential: h.criterion.essential, matched: h.matched, evidence: h.evidence, statedLanguage: h.statedLanguage })),
     };
   }
@@ -440,6 +442,18 @@ export class OpennJobService {
     const existing = await this.deps.repository.listApplications(userId);
     const jobs = await this.deps.repository.listJobs();
 
+    // Unsent drafts for posts the CV does not show (scored before the title was checked) are closed.
+    let closedOtherField = 0;
+    for (const a of existing) {
+      if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined) continue;
+      const job = jobs.find((j) => j.id === a.jobId);
+      if (!job || matchJob(job, profile.cvText, passport, preferences).role?.fits !== false) continue;
+      const closed: Application = { ...a, status: 'closed' };
+      await this.deps.repository.updateApplication(closed);
+      existing.splice(existing.indexOf(a), 1, closed);
+      closedOtherField += 1;
+    }
+
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
@@ -465,8 +479,8 @@ export class OpennJobService {
       prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
     }
 
-    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped });
-    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped };
+    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField });
+    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField };
   }
 
   private async mustGetApplication(userId: string, id: string): Promise<Application> {
