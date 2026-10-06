@@ -34,3 +34,7 @@ export function needsLabel(credential: string | undefined): string {
   if (!credential || credential === 'pin') return 'professional registration number';
   return credentialLabel(credential).toLowerCase();
 }
+
+/** Adzuna's terms ask for "Jobs by Adzuna" wherever its adverts are shown (docs/sources.md). */
+export const isAdzuna = (job: { source: string }): boolean => job.source === 'adzuna' || job.source.startsWith('adzuna:');
+export const ADZUNA_URL = 'https://www.adzuna.co.uk';

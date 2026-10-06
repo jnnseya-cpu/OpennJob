@@ -15,7 +15,7 @@ operator's responsibility.
 | `greenhouse` | `GET https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | An employer's public job board API | not checked | Check the Job Board API terms, and the employer's own wishes for its board. |
 | `lever` | `GET https://api.lever.co/v0/postings/{company}?mode=json` | An employer's public postings API | not checked | Check Lever's postings API terms. |
 | `ashby` | `GET https://api.ashbyhq.com/posting-api/job-board/{name}` | An employer's public job board API | not checked | Check Ashby's public job posting API terms. |
-| `adzuna` | `GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page}` | Aggregator API with a free key | not checked | The API terms set attribution, caching and permitted use. Needs `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`. |
+| `adzuna` | `GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page}` | Aggregator API with a free key | not checked | The API terms set attribution, caching and permitted use. The web app shows "Jobs by Adzuna" (linked) on matches and the review screen, and applies through Adzuna's own redirect link. Needs `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`. |
 | `reed` | `GET https://www.reed.co.uk/api/1.0/search` | Aggregator API with a free key | not checked | Check the Reed API terms (attribution, caching). Needs `REED_API_KEY`. |
 | `sample` | none (in the code) | Fictional demonstration jobs | not needed | Fictional data only. Off unless `OPENNJOB_DEMO_JOBS=true`. |
 

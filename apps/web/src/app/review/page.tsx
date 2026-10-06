@@ -6,7 +6,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useApp } from '../../components/AppShell';
 import { api, errorText } from '../../lib/api';
 import { ALL_FIELDS_CHECKED, STATEMENT_FIELD, declarationField, declarationsFor } from '../../lib/declarations';
-import { HOLD_LABEL, STATUS_LABEL, needsLabel, placeOf } from '../../lib/labels';
+import { ADZUNA_URL, HOLD_LABEL, STATUS_LABEL, isAdzuna, needsLabel, placeOf } from '../../lib/labels';
 import { describeWorkRights, workRightsProblem } from '../../lib/core';
 import type { WorkRightsRecord } from '../../lib/core';
 import type { AgentStatus, Application, MatchView, PassportView, PublicUser } from '../../lib/types';
@@ -179,6 +179,14 @@ function Review() {
         <p className="muted">
           {match ? `${match.job.employer} · ${placeOf(match.job)}` : app?.employer}
           {status ? ` · ${STATUS_LABEL[status]}` : ''}
+          {match && isAdzuna(match.job) ? (
+            <>
+              {' · '}
+              <a href={ADZUNA_URL} target="_blank" rel="noopener noreferrer">
+                Jobs by Adzuna
+              </a>
+            </>
+          ) : null}
         </p>
       </div>
       {match && !match.eligible ? <div className="note">This post needs your {needsLabel(match.missingCredential)}. Add it in Profile to apply.</div> : null}
