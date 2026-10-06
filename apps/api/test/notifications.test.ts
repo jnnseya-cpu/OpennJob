@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NOTIFICATION_CATALOGUE, NOTIFICATION_CATEGORIES, eventsForTrigger, renderEmailHtml, routeChannels } from '@opennjob/core';
 import { memoryLogger } from '../src/logging';
 import { resendEmail } from '../src/notifications';
+import { loadConfig } from '../src/deps';
 import type { EmailSender } from '../src/notifications';
 import { PASSPORT, PROFILE, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, testConfig } from './helpers';
 import type { TestApp } from './helpers';
@@ -52,6 +53,25 @@ describe('the catalogue', () => {
     expect(m.html).not.toContain('<script>x');
     expect(m.html).toContain('&lt;script&gt;');
     expect(m.html).toContain('Brandly'); expect(m.html).toContain('#123456'); expect(m.html).toContain('1 Example Street (fictional)');
+  });
+
+  it('shows the logo at the top of every e-mail when an https logo address is configured, never an http one', () => {
+    const def = NOTIFICATION_CATALOGUE.find((e) => e.key === 'account.email_verified');
+    if (!def) throw new Error('catalogue entry missing');
+    const brand = { name: 'OpennJob', colour: '#1A3C8A', footer: 'OpennJob (fictional footer)' };
+    const withLogo = renderEmailHtml(def, {}, { ...brand, logoUrl: 'https://app.example.org/brand/opennjob-logo-192.png' }).html;
+    expect(withLogo).toContain('<img src="https://app.example.org/brand/opennjob-logo-192.png" width="56" height="56" alt=""');
+    expect(withLogo).toContain('>OpennJob</span>'); // the name still reads where images are blocked
+    expect(withLogo).toContain('border-bottom:4px solid #1A3C8A');
+    expect(renderEmailHtml(def, {}, brand).html).not.toContain('<img');
+    expect(renderEmailHtml(def, {}, { ...brand, logoUrl: 'http://app.example.org/logo.png' }).html).not.toContain('<img');
+    expect(renderEmailHtml(def, {}, { ...brand, logoUrl: 'https://x.example.org/a.png" onerror="alert(1)' }).html).not.toContain('" onerror="');
+  });
+
+  it('takes the e-mail logo from OPENNJOB_APP_URL, or OPENNJOB_BRAND_LOGO_URL when set', () => {
+    expect(loadConfig({ OPENNJOB_APP_URL: 'https://app.example.org/' }).brand?.logoUrl).toBe('https://app.example.org/brand/opennjob-logo-192.png');
+    expect(loadConfig({ OPENNJOB_APP_URL: 'http://127.0.0.1:3001' }).brand?.logoUrl).toBeUndefined();
+    expect(loadConfig({ OPENNJOB_APP_URL: 'https://app.example.org', OPENNJOB_BRAND_LOGO_URL: 'https://cdn.example.org/logo.png' }).brand?.logoUrl).toBe('https://cdn.example.org/logo.png');
   });
 });
 

@@ -195,12 +195,16 @@ export function loadConfig(env: Env): OpennJobConfig {
   const brandColour = (env.OPENNJOB_BRAND_COLOUR ?? '').trim();
   const brandFooter = (env.OPENNJOB_BRAND_FOOTER ?? '').trim();
   const appUrl = (env.OPENNJOB_APP_URL ?? '').trim();
-  if (brandName || brandColour || brandFooter || appUrl) {
+  // The logo in e-mails: OPENNJOB_BRAND_LOGO_URL, else the copy the web app serves. https only.
+  const logoCandidate = (env.OPENNJOB_BRAND_LOGO_URL ?? '').trim() || (/^https:\/\//.test(appUrl) ? `${appUrl.replace(/\/+$/, '')}/brand/opennjob-logo-192.png` : '');
+  const logoUrl = /^https:\/\//.test(logoCandidate) ? logoCandidate : '';
+  if (brandName || brandColour || brandFooter || appUrl || logoUrl) {
     config.brand = {
       name: brandName || DEFAULT_BRAND.name,
       colour: /^#[0-9a-fA-F]{6}$/.test(brandColour) ? brandColour : DEFAULT_BRAND.colour,
       footer: brandFooter || DEFAULT_BRAND.footer,
       ...(/^https?:\/\//.test(appUrl) ? { appUrl } : {}),
+      ...(logoUrl ? { logoUrl } : {}),
     };
   }
   config.duplicateDays = int(env.OPENNJOB_DUPLICATE_DAYS, DEFAULT_DUPLICATE_DAYS, 1, 3650);

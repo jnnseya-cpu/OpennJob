@@ -167,16 +167,25 @@ export interface Brand {
   colour: string;
   footer: string;
   appUrl?: string;
+  /** https address of the logo shown at the top of every e-mail. Absent: the name only. */
+  logoUrl?: string;
 }
 
-/** The branded e-mail. Plain table layout, inline styles, no images, no tracking. */
+/**
+ * The branded e-mail. Plain table layout, inline styles, no tracking. The only image is the logo,
+ * loaded from the site; where images are blocked the name beside it still reads.
+ */
 export function renderEmailHtml(event: NotificationEventDef, vars: NotificationVars, brand: Brand): { subject: string; text: string; html: string } {
   const v = { ...vars, app: brand.name };
   const subject = renderTemplate(event.subject, v);
   const body = renderTemplate(event.body, v);
   const colour = /^#[0-9a-fA-F]{6}$/.test(brand.colour) ? brand.colour : '#1A3C8A';
-  const link = brand.appUrl && /^https?:\/\//.test(brand.appUrl) ? `<p style="margin:24px 0 0"><a href="${escapeHtml(brand.appUrl)}" style="background:${colour};color:#04201B;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600">Open ${escapeHtml(brand.name)}</a></p>` : '';
-  const html = `<!doctype html><html><body style="margin:0;background:#F2F6F5;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#12211E"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border:1px solid #D7E1DE;border-radius:12px"><tr><td style="padding:18px 24px;border-bottom:4px solid ${colour}"><span style="font-size:22px;font-weight:700;letter-spacing:-.02em">${escapeHtml(brand.name)}</span></td></tr><tr><td style="padding:24px"><h1 style="font-size:20px;margin:0 0 12px">${escapeHtml(subject)}</h1><p style="margin:0;line-height:1.5">${escapeHtml(body)}</p>${link}</td></tr><tr><td style="padding:16px 24px;border-top:1px solid #D7E1DE;font-size:12px;color:#566964">${escapeHtml(brand.footer)}${event.mandatory ? '<br>This is a service notice: it is sent even if you turned off optional messages.' : '<br>You can change which messages you receive in Notifications, Settings.'}</td></tr></table></td></tr></table></body></html>`;
+  const link = brand.appUrl && /^https?:\/\//.test(brand.appUrl) ? `<p style="margin:24px 0 0"><a href="${escapeHtml(brand.appUrl)}" style="background:${colour};color:#FFFFFF;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600">Open ${escapeHtml(brand.name)}</a></p>` : '';
+  const logo = brand.logoUrl && /^https:\/\//.test(brand.logoUrl)
+    ? `<td style="padding:0 12px 0 0;vertical-align:middle"><img src="${escapeHtml(brand.logoUrl)}" width="56" height="56" alt="" style="display:block;border:0;outline:none;width:56px;height:56px"></td>`
+    : '';
+  const header = `<table role="presentation" cellpadding="0" cellspacing="0"><tr>${logo}<td style="vertical-align:middle"><span style="font-size:22px;font-weight:700;letter-spacing:-.02em;color:#000000">${escapeHtml(brand.name)}</span></td></tr></table>`;
+  const html = `<!doctype html><html><body style="margin:0;background:#F4F6FB;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#000000"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border:1px solid #D6DCEA;border-radius:12px"><tr><td style="padding:14px 24px;border-bottom:4px solid ${colour}">${header}</td></tr><tr><td style="padding:24px"><h1 style="font-size:20px;margin:0 0 12px;color:#000000">${escapeHtml(subject)}</h1><p style="margin:0;line-height:1.5">${escapeHtml(body)}</p>${link}</td></tr><tr><td style="padding:16px 24px;border-top:1px solid #D6DCEA;font-size:12px;color:#4A5468">${escapeHtml(brand.footer)}${event.mandatory ? '<br>This is a service notice: it is sent even if you turned off optional messages.' : '<br>You can change which messages you receive in Notifications, Settings.'}</td></tr></table></td></tr></table></body></html>`;
   const text = `${subject}\n\n${body}\n\n${brand.footer}`;
   return { subject, text, html };
 }
