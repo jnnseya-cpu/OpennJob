@@ -3,9 +3,15 @@
 # The browser calls the API at https://{$DOMAIN}/api/..., so no CORS is needed.
 {
 	email {$ACME_EMAIL}
+	servers {
+		# Behind another web server on this machine (deploy/docker-compose.behind-proxy.yml), keep the
+		# client address it passes on. A client on the internet never comes from a private range.
+		trusted_proxies static private_ranges
+	}
 }
 
-{$DOMAIN} {
+# The domain (Caddy gets the certificate), or ":8080" when another web server in front does HTTPS.
+{$SITE_ADDRESS} {
 	encode zstd gzip
 
 	header {

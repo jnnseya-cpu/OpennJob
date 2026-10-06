@@ -43,7 +43,7 @@ services:
       OPENNJOB_JWT_SECRET: ${OPENNJOB_JWT_SECRET:?Set OPENNJOB_JWT_SECRET}
       OPENNJOB_DATA_KEY: ${OPENNJOB_DATA_KEY:?Set OPENNJOB_DATA_KEY}
       # One proxy (Caddy) in front: trust exactly one hop so the rate limit sees the real client.
-      OPENNJOB_TRUST_PROXY: "1"
+      OPENNJOB_TRUST_PROXY: ${OPENNJOB_TRUST_PROXY:-1}
       OPENNJOB_REGISTRATION_ALLOWLIST: ${OPENNJOB_REGISTRATION_ALLOWLIST:?Set the invited addresses (private pilot)}
       OPENNJOB_TERMS_VERSION: ${OPENNJOB_TERMS_VERSION:-draft-1}
       OPENNJOB_PRIVACY_VERSION: ${OPENNJOB_PRIVACY_VERSION:-draft-1}
@@ -78,6 +78,7 @@ services:
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN}
+      SITE_ADDRESS: ${SITE_ADDRESS:-${DOMAIN}}
       ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for certificate notices}
     ports:
       - "80:80"

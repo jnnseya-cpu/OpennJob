@@ -18,8 +18,21 @@ curl -fsSL https://raw.githubusercontent.com/jnnseya-cpu/OpennJob/claude/busy-fe
 bash install.sh
 ```
 
-It asks for the domain, a certificate e-mail and the invited address(es), then does steps 2 (firewall
-only, not SSH settings), 3, 4 and 5 below. Written and syntax-checked; not yet run on a real server.
+It asks for the domain, the support e-mail and the invited address(es), installs Docker, generates
+the secrets and starts OpennJob. It does not change SSH settings, and never turns a firewall on.
+
+- **Ports 80/443 free:** OpennJob's own Caddy takes them and gets the certificate.
+- **The server already hosts other sites** (ports 80/443 taken): OpennJob listens on
+  `127.0.0.1:8090` only (`deploy/docker-compose.behind-proxy.yml`). For nginx or Apache the script
+  offers to add the domain as a new site, tests the configuration before reloading, removes its own
+  file if the test fails, and can get the certificate with certbot. For anything else it prints the
+  lines to add. Other sites are not touched.
+
+Afterwards, `/opt/opennjob/oj` runs docker compose with the right files: `./oj ps`, `./oj logs api`,
+`./oj up -d --build` after `git pull`.
+
+Checked in parts (shell syntax and shellcheck, the prompts, both compose modes, the Caddyfile in
+both modes, nginx → Caddy → API forwarding in containers); not yet run end to end on a real server.
 
 ## 1. Server and domain
 
