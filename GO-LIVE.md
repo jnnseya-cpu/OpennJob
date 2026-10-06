@@ -307,6 +307,15 @@ Every item here is open. None has a workaround in the code.
 - [ ] Referees' details are third parties' personal data, supplied by someone else. How
       they are told has not been decided.
 - [ ] No age check. No check that the person registering is the person the CV describes.
+- [ ] **Employment agency status, before charging anyone.** If OpennJob is paid for and
+      finds work for people or applies for them, it may count as an employment agency
+      under the Employment Agencies Act 1973 and the Conduct of Employment Agencies and
+      Employment Businesses Regulations 2003, which restrict charging work-seekers fees.
+      Take legal advice before setting prices. Not done.
+- [ ] **E-mail applications and UK GDPR/PECR.** The view that e-mailing an application to
+      the address an advert gives for applications is not direct marketing is an
+      interpretation, not legal advice. Confirm it, and that sending in the person's name
+      from OpennJob's mailbox is covered by the privacy notice. Not done.
 
 ### Security
 

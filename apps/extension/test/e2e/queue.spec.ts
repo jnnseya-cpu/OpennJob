@@ -249,7 +249,7 @@ test('T-22 in the browser: a paused agent sends nothing', async () => {
 test('the queue: sends the plain form, holds the rest for the person, and stops at a site it may not open', async () => {
   const page = await popup();
   const state = await runQueue(page);
-  expect(state).toMatchObject({ sent: 1, held: 4, uncertain: 1, needsSite: 'localhost' });
+  expect(state).toMatchObject({ sent: 2, held: 3, uncertain: 1, needsSite: 'localhost' });
   await expect(page.locator('#allow-site')).toHaveText('Allow OpennJob on localhost');
 
   // T-07: sent with no approval; the receipt is the site's own confirmation page.
@@ -267,8 +267,9 @@ test('the queue: sends the plain form, holds the rest for the person, and stops 
   expect(await app('declaration')).toMatchObject({ status: 'needs_you', holdReasons: ['sensitive:convictions'] });
   // T-14: an unknown required question holds it, with the question named.
   expect(await app('unknown')).toMatchObject({ status: 'needs_you', holdReasons: ['question:Are you able to work nights?'] });
-  // A required CV upload is never faked.
-  expect(await app('upload')).toMatchObject({ status: 'needs_you', holdReasons: ['file-upload'] });
+  // A required CV upload gets the person's tailored CV as a PDF (files.ts), so that form is sent.
+  // Any other required document (a cover letter, a certificate) still holds it: cv-upload.spec.ts.
+  expect(await app('upload')).toMatchObject({ status: 'submitted', automatic: true });
   // T-13: a CAPTCHA stops it with the reason.
   expect((await app('captcha')).holdReasons).toEqual(['captcha']);
   // T-11: submitted but no confirmation from the site: uncertain, never "submitted".
@@ -278,8 +279,8 @@ test('the queue: sends the plain form, holds the rest for the person, and stops 
   // The site without permission was not touched.
   expect((await app('otherhost')).status).toBe('draft');
 
-  // Exactly two forms were really submitted: the plain one and the one with no confirmation.
-  expect([...hits].sort()).toEqual(['noconfirm', 'plain']);
+  // Exactly three forms were really submitted: the plain one, the CV upload and the one with no confirmation.
+  expect([...hits].sort()).toEqual(['noconfirm', 'plain', 'upload']);
   await page.close();
 });
 

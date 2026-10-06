@@ -877,6 +877,30 @@ OpennJob handles personal data, and some of the most sensitive kinds.
   product must not submit anything the user has not seen. That is why review and hybrid
   never submit, and why auto is so narrow.
 
+## Not copied from auto-apply services, and why
+
+A review of AI auto-apply services in October 2026 (LazyApply, JobCopilot, AIApply,
+LoopCV, Massive, Simplify, Jobright and others) found features OpennJob deliberately does
+not copy:
+
+- **Filling equality-monitoring questions from stored data.** Equality monitoring is
+  voluntary under the Equality Act 2010 and special-category data under UK GDPR; the person
+  answers it, every time.
+- **AI answers sent without the person seeing them.** An application is a statement in the
+  person's name; a wrong answer (a visa answer, a qualification) can cost them the offer.
+  Screening answers come only from what the person stored.
+- **Automating LinkedIn Easy Apply or Indeed.** Both prohibit it; LinkedIn detects
+  job-hunting extensions and restricts accounts. No automation against a site whose terms
+  forbid it.
+- **Unattended high-volume sending from servers.** The one measured case found about 0.4%
+  of mass-sent applications led to an interview, against 7-10% for targeted ones; employers
+  are adding bot detection and knockout questions. OpennJob caps sending with a daily
+  limit and a minimum match score, and the person can skip anything before it goes.
+- **Using ATS apply APIs without the employer.** Greenhouse, Lever, Ashby and
+  SmartRecruiters issue apply keys to the employer, not to third parties.
+- **E-mailing addresses found anywhere but the advert.** Only the address the advert gives
+  for applications is used.
+
 ## Later seams (deliberately not built)
 
 - **Kafka.** Not added. Domain events go through the `EventBus` interface
