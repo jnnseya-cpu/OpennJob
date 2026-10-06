@@ -32,8 +32,11 @@ def gates(job,profile,threshold=80):
     for field in ('email','phone','ge_end_date'):
         if not profile.get(field): reasons.append('Missing '+field)
     country=job.get('country','Unconfirmed')
-    authorised=profile.get('right_to_work') if country=='United Kingdom' else profile.get('work_authorisation_by_country',{}).get(country)
-    if authorised is not True and job.get('sponsorship_confirmed') is not True: reasons.append('Work authorisation or sponsorship not confirmed for '+country)
+    # Work rights come only from a confirmed, document-backed record for that country (agent/rights.py).
+    from .rights import record_for
+    record,question=record_for(profile,country)
+    if record is None: reasons.append(question)
+    elif record['right_to_work'] is not True and not (record['requires_sponsorship'] and job.get('sponsorship_confirmed') is True): reasons.append('Work authorisation or sponsorship not confirmed for '+country)
     if country!='United Kingdom' and profile.get('relocation') is not True and not job.get('remote_from_home_confirmed'): reasons.append('International relocation/remote arrangement not confirmed')
     for lang in job.get('required_languages',[]):
         if profile.get('languages',{}).get(lang) is not True: reasons.append('Language not confirmed: '+lang)

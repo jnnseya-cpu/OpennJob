@@ -39,7 +39,7 @@ npm run test:pg -- npm run test:e2e                # e2e with a throwaway Postgr
 npm run test:agent                                 # career-agent/ Python tests (uses career-agent/.venv if present)
 ```
 
-`career-agent/` follows the same non-negotiable rules: it never fills a declaration, never clicks
+`career-agent/` follows the same non-negotiable rules: it never fills a declaration (except right to work and sponsorship, from the applicant's own document-backed record for that country), never clicks
 submit (the applicant does), and never commits personal data (`career-agent/data/local/` is git-ignored).
 
 - Do not run `playwright install` where Chromium is pre-installed

@@ -16,7 +16,7 @@ never retried automatically.
 import argparse, hashlib, json, os, re, time
 from pathlib import Path
 from .core import Store, now, score
-from .answers import resolve, is_declaration, LeftForApplicant
+from .answers import resolve, is_declaration, LeftForApplicant, AskApplicant
 from .policy import authorize, daily_attempt_count, pack_digest
 from .documents import build
 from . import paths
@@ -75,19 +75,36 @@ def preflight(store):
     }
 
 
-def _fill(page, adapter, pack, library):
+def _fill(page, adapter, pack, library, profile=None, country=None, ask=None):
     filled, left = [], []
     for field in adapter['fields']:
+        if field.get('source') == 'work_rights' and field.get('type') == 'radio':
+            # A yes/no radio group: the selector matches the group, the mapped value picks one.
+            try:
+                value = resolve(field, pack, library, profile, country)
+            except AskApplicant as question:
+                if ask:
+                    ask(str(question))
+                page.locator(field['selector']).first.evaluate(HIGHLIGHT); left.append(field['key']); continue
+            choice = page.locator(f"{field['selector']}[value=\"{value}\"]")
+            if choice.count() != 1:
+                raise ValueError('Option unavailable: ' + field['key'])
+            choice.check(); filled.append({'key': field['key'], 'selector': field['selector'], 'value': value, 'type': 'radio'}); continue
         element = page.locator(field['selector'])
         if element.count() != 1 or not element.is_visible():
             raise ValueError('Field missing or ambiguous: ' + field['key'])
         actual = element.evaluate('(el)=>({tag:el.tagName,type:el.type})')
         if actual['type'] in ('password', 'hidden', 'file', 'submit'):
             raise ValueError('Invalid answer target')
-        if is_declaration(field, library) or actual['type'] in ('checkbox', 'radio'):
+        work_rights = field.get('source') == 'work_rights'
+        if not work_rights and (is_declaration(field, library) or actual['type'] in ('checkbox', 'radio')):
             element.evaluate(HIGHLIGHT); left.append(field['key']); continue
         try:
-            value = resolve(field, pack, library)
+            value = resolve(field, pack, library, profile, country)
+        except AskApplicant as question:
+            if ask:
+                ask(str(question))
+            element.evaluate(HIGHLIGHT); left.append(field['key']); continue
         except LeftForApplicant:
             element.evaluate(HIGHLIGHT); left.append(field['key']); continue
         kind = field.get('type', 'text')
@@ -154,7 +171,7 @@ def execute(page, store, job, profile, policy, adapter, library, submit=False, w
         receipt = page.locator(adapter['receipt_selector'])
         if receipt.count() and receipt.first.is_visible():
             raise ValueError('Receipt already present: possible duplicate')
-        pack['answers'], pack['left_for_applicant'] = _fill(page, adapter, pack, library)
+        pack['answers'], pack['left_for_applicant'] = _fill(page, adapter, pack, library, profile, job.get('country'), lambda q: record_need(store, job['id'], q))
         for upload in adapter.get('uploads', []):
             kind = upload['document']; path = Path(pack['documents'][kind])
             if hashlib.sha256(path.read_bytes()).hexdigest() != pack['document_hashes'][kind]:

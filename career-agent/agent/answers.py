@@ -1,5 +1,9 @@
 """Confirmed screening answers; never infer legally significant answers.
 
+Right to work and sponsorship are the one exception, and only through agent/rights.py: a field
+marked "source": "work_rights" is answered from the applicant's confirmed, document-backed record
+for the job's country. With no valid record the question goes back to the applicant.
+
 Declarations are never filled by the agent. Work rights, sponsorship, visas, clearance and
 vetting, convictions, conflicts of interest, health, disability, equality monitoring and any
 consent or "I confirm" box are answered by the applicant on the form, every time. A
@@ -35,8 +39,22 @@ def answer(key, library):
     return item['value']
 
 
-def resolve(field, pack, library):
+class AskApplicant(LeftForApplicant):
+    """No confirmed answer exists: ask the applicant."""
+
+
+def resolve(field, pack, library, profile=None, country=None):
     key = field['key']
+    if field.get('source') == 'work_rights':
+        from .rights import answer_for
+        try:
+            value = answer_for(key, profile or {}, country)
+        except LookupError as e:
+            raise AskApplicant(str(e))
+        token = str(value).lower()
+        if token not in field.get('value_map', {}):
+            raise ValueError('Reviewed option mapping required: ' + key)
+        return field['value_map'][token]
     if is_declaration(field, library):
         raise LeftForApplicant('Declaration left for the applicant: ' + key)
     if key == 'cover_letter':

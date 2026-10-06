@@ -45,6 +45,8 @@ python3 -m agent.discovery --once --max-matches 10   # read known boards (data/b
 python3 -m agent.cli match --job ID          # LLM requirement extraction (validated; marked unreviewed)
 python3 -m agent.cli gate --job ID           # what still blocks this job
 python3 -m agent.cli prepare --job ID        # sealed pack in data/local/packs/ID (80% or more only)
+python3 -m agent.rights add --country "United Kingdom" --right-to-work yes --sponsorship no --document PATH --confirmed
+python3 -m agent.rights list | missing        # your records; countries the agent will ask you about
 python3 -m agent.review confirm-profile --confirmed
 python3 -m agent.review verify-job --job ID --confirmed      # you checked the live advert (valid 15 minutes)
 python3 -m agent.review approve-pack --job ID --adapter data/local/adapters/ID.json --confirmed
@@ -67,8 +69,19 @@ python3 -m agent.cli export-dashboard        # writes dashboard/data.json for th
   substrings of the advert; weights must total 100. LLM output is marked unreviewed.
 - Packs copy evidence lines exactly, leave out unknown dates, refuse placeholders, and are sealed
   with SHA-256; a changed pack or document is refused before filling.
-- Declarations are never filled (`agent/answers.py`). A library entry such as `uk_right_to_work` is used
-  for the matching gates only.
+- **Right to work and sponsorship, per country, from documents you attach** (`agent/rights.py`).
+  `python3 -m agent.rights add --country "United Kingdom" --right-to-work yes --sponsorship no --document
+  ~/passport.pdf --basis "British passport" [--expires YYYY-MM-DD] --confirmed` copies the document into
+  `data/local/documents/` (git-ignored) and records its SHA-256. A record is used only while it is
+  confirmed, the document is unchanged and it has not expired. It then decides the work-rights gate for
+  jobs in that country, and the worker answers that form's right-to-work and sponsorship questions from
+  it (adapter fields with `"source": "work_rights"`). **Where there is no valid record the agent asks
+  you:** the job waits as needs input, the field is highlighted on the form, and the 09:00 report lists
+  the question. `agent.rights missing` lists the countries of your 80%+ matches without a record. The
+  old document-free `right_to_work` flag no longer counts.
+- Every other declaration (convictions, clearance and vetting, conflicts, health, equality monitoring,
+  consent, "I confirm") is never filled (`agent/answers.py`); you answer it on the form. The extension
+  leaves right to work to you as well; only the worker uses the records.
 - CAPTCHA, login walls, redirects and a changed description stop the worker; it never works around them.
 - `submitted` needs a receipt. A page that leaves before a receipt shows is `uncertain` and is never
   retried automatically; a worker restart turns `submitting` into `uncertain`. One worker at a time.
@@ -80,8 +93,8 @@ python3 -m agent.cli export-dashboard        # writes dashboard/data.json for th
 cd career-agent && .venv/bin/python -m unittest discover -s tests     # or, from the repo root: npm run test:agent
 ```
 
-50 tests, all on fictional data: the control rules, sources against recorded response shapes, LLM
-validation with a fake transport, discovery, deterministic documents, the scheduler across BST and
+57 tests, all on fictional data: the control rules, sources against recorded response shapes, LLM
+validation with a fake transport, discovery, document-backed work rights, deterministic documents, the scheduler across BST and
 GMT, the loopback server, the review commands, and real Chromium runs of the worker, the extension's
 fill code and the dashboard against `fixtures/application.html`. No test touches the network.
 

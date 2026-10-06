@@ -1,8 +1,9 @@
 import unittest
 from datetime import datetime,timezone,timedelta
 from agent.core import score,gates,Store,validate_requirements
+from tests.helpers import uk_rights
 class Controls(unittest.TestCase):
-    def profile(self):return {'confirmed':True,'email':'applicant@example.com','phone':'01234','ge_end_date':'2025-12','right_to_work':True,'evidence':[{'id':'E1','verified':True}]}
+    def profile(self):return {'confirmed':True,'email':'applicant@example.com','phone':'01234','ge_end_date':'2025-12','work_rights':uk_rights(),'evidence':[{'id':'E1','verified':True}]}
     def job(self):return {'id':'j1','country':'United Kingdom','requirements':[{'text':'Delivery','weight':80,'state':'met','evidence_ids':['E1'],'hard':False},{'text':'Licence','weight':20,'state':'unknown','evidence_ids':[],'hard':True}],'live_verified':True,'verified_at':datetime.now(timezone.utc).isoformat(),'preferences_confirmed':True}
     def test_80_does_not_override_essential(self):
         j=self.job();self.assertEqual(score(j['requirements']),80);self.assertTrue(any('Essential' in x for x in gates(j,self.profile())))
@@ -24,7 +25,7 @@ class Controls(unittest.TestCase):
     def test_international_authorisation_separate(self):
         j=self.job();j['country']='France';p=self.profile()
         self.assertTrue(any('France' in x for x in gates(j,p)))
-        p['work_authorisation_by_country']={'France':True};p['relocation']=True
+        p['work_rights'].append(dict(uk_rights()[0],country='France'));p['relocation']=True
         self.assertFalse(any('France' in x for x in gates(j,p)))
     def test_unknown_country_not_assumed_uk(self):
         j=self.job();del j['country'];self.assertTrue(any('Unconfirmed' in x for x in gates(j,self.profile())))

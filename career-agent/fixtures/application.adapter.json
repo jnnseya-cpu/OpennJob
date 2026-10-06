@@ -7,14 +7,42 @@
   "jd_selector": "#jd",
   "form_selector": "#apply",
   "fields": [
-    {"selector": "#name", "key": "name"},
-    {"selector": "#email", "key": "email"},
-    {"selector": "#rtw", "key": "uk_right_to_work", "type": "select", "declaration": true},
-    {"selector": "#declare", "key": "accuracy_declaration", "type": "checkbox", "declaration": true}
+    {
+      "selector": "#name",
+      "key": "name"
+    },
+    {
+      "selector": "#email",
+      "key": "email"
+    },
+    {
+      "selector": "#rtw",
+      "key": "right_to_work",
+      "type": "select",
+      "source": "work_rights",
+      "value_map": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
+      "selector": "#declare",
+      "key": "accuracy_declaration",
+      "type": "checkbox",
+      "declaration": true
+    }
   ],
-  "uploads": [{"selector": "#cv", "document": "cv"}],
+  "uploads": [
+    {
+      "selector": "#cv",
+      "document": "cv"
+    }
+  ],
   "submit_selector": "#send",
   "receipt_selector": "#receipt",
   "receipt_pattern": "FIXTURE-001",
-  "blocking_selectors": ["iframe[src*=\"recaptcha\"]", "iframe[src*=\"hcaptcha\"]"]
+  "blocking_selectors": [
+    "iframe[src*=\"recaptcha\"]",
+    "iframe[src*=\"hcaptcha\"]"
+  ]
 }

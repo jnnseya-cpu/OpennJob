@@ -21,7 +21,28 @@
     },
     {
       "selector": "REPLACE_WITH_RIGHT_TO_WORK_SELECTOR",
-      "key": "uk_right_to_work",
+      "key": "right_to_work",
+      "type": "select",
+      "source": "work_rights",
+      "value_map": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
+      "selector": "REPLACE_WITH_SPONSORSHIP_SELECTOR",
+      "key": "requires_sponsorship",
+      "type": "select",
+      "source": "work_rights",
+      "value_map": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
+      "selector": "REPLACE_WITH_DECLARATION_CHECKBOX",
+      "key": "accuracy_declaration",
+      "type": "checkbox",
       "declaration": true
     }
   ],

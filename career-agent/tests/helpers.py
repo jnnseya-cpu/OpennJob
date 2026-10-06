@@ -4,6 +4,18 @@ from pathlib import Path
 from agent.core import now
 
 ROOT = Path(__file__).resolve().parents[1]
+DOCUMENT = ROOT / 'fixtures' / 'right-to-work.example.txt'
+
+
+def install_documents(directory):
+    (Path(directory) / 'documents').mkdir(parents=True, exist_ok=True)
+    shutil.copy(DOCUMENT, Path(directory) / 'documents' / 'right-to-work-united-kingdom.txt')
+
+
+# No test may read the real data/local/: every test runs against a temporary data directory.
+_BASE = tempfile.mkdtemp(prefix='career-agent-tests-')
+install_documents(_BASE)
+os.environ['CAREER_DATA'] = _BASE
 
 
 def example(name):
@@ -22,15 +34,13 @@ class DataDir:
         (self.path / 'jobs.json').write_text(json.dumps(example('jobs.example.json')), encoding='utf-8')
         (self.path / 'answer_library.json').write_text(json.dumps(example('answer_library.example.json')), encoding='utf-8')
         (self.path / 'search_profiles.json').write_text(json.dumps(example('search_profiles.example.json')), encoding='utf-8')
+        install_documents(self.path)
         self.old = os.environ.get('CAREER_DATA')
         os.environ['CAREER_DATA'] = str(self.path)
         return self
 
     def __exit__(self, *exc):
-        if self.old is None:
-            os.environ.pop('CAREER_DATA', None)
-        else:
-            os.environ['CAREER_DATA'] = self.old
+        os.environ['CAREER_DATA'] = self.old or _BASE
         self.tmp.cleanup()
 
 
@@ -59,3 +69,7 @@ def fixture_job(url='http://127.0.0.1:8766/application.html', **extra):
 def fixture_adapter(base='http://127.0.0.1:8766'):
     text = (ROOT / 'fixtures' / 'application.adapter.json').read_text(encoding='utf-8').replace('{BASE}', base)
     return json.loads(text)
+
+
+def uk_rights():
+    return copy.deepcopy(example('profile.example.json')['work_rights'])

@@ -74,10 +74,10 @@ class WorkerInChromium(unittest.TestCase):
     def test_dry_run_fills_and_uploads_but_leaves_declarations_and_never_submits(self):
         r = self.run_worker(False)
         self.assertEqual(r['status'], 'ready', r)
-        self.assertEqual(r['left_for_applicant'], ['uk_right_to_work', 'accuracy_declaration'])
+        self.assertEqual(r['left_for_applicant'], ['accuracy_declaration'])
         self.assertEqual(self.page.input_value('#name'), 'Alex Example')
         self.assertEqual(self.page.input_value('#email'), 'alex.example@example.org')
-        self.assertEqual(self.page.input_value('#rtw'), '')
+        self.assertEqual(self.page.input_value('#rtw'), 'Yes')  # from the document-backed UK record
         self.assertFalse(self.page.is_checked('#declare'))
         self.assertEqual(self.page.eval_on_selector('#cv', 'el => el.files[0].name'), 'cv.pdf')
         self.assertEqual(self.page.get_attribute('#declare', 'data-career-agent'), 'answer this yourself')
@@ -124,6 +124,20 @@ class WorkerInChromium(unittest.TestCase):
         self.assertEqual(self.page.input_value('#name'), '')
         self.assertIsNone(self.status())
 
+    def test_no_record_for_the_country_means_the_agent_asks(self):
+        # A Dublin job with no Irish record: the gate asks, and nothing is filled.
+        job = dict(self.job, country='Ireland')
+        r = self.run_worker(False, job=job)
+        self.assertEqual(r['status'], 'needs_input'); self.assertIn('No right-to-work record for Ireland', r['reason'])
+        events = [json.loads(e['payload']) for e in self.store.db.execute("SELECT payload FROM events WHERE kind='needs_input'")]
+        self.assertTrue(any('Ireland' in e['reason'] for e in events))
+
+    def test_changed_document_means_the_agent_asks_instead_of_filling(self):
+        (paths.data_dir() / 'documents' / 'right-to-work-united-kingdom.txt').write_text('altered')
+        r = self.run_worker(False)
+        self.assertEqual(r['status'], 'needs_input'); self.assertIn('changed since you confirmed it', r['reason'])
+        self.assertEqual(self.page.input_value('#rtw'), '')
+
     def test_changed_description_stops(self):
         job = dict(self.job, description='Something else entirely.')
         r = self.run_worker(True, job=job)
@@ -152,7 +166,7 @@ class ExtensionFillInChromium(unittest.TestCase):
             from agent.core import now
             pack = {'adapter': adapter, 'verified_at': now(), 'profile': {'name': 'Alex Example', 'email': 'alex.example@example.org'}, 'cover_letter': ''}
             out = page.evaluate('p => window.fillForm(p)', pack)
-            self.assertEqual(out, {'ok': True, 'left': ['uk_right_to_work', 'accuracy_declaration']})
+            self.assertEqual(out, {'ok': True, 'left': ['right_to_work', 'accuracy_declaration']})
             self.assertEqual(page.input_value('#name'), 'Alex Example')
             self.assertFalse(page.is_checked('#declare')); self.assertEqual(page.input_value('#rtw'), '')
             self.assertEqual(page.evaluate('a => window.readReceipt(a)', adapter)['status'], 'uncertain')

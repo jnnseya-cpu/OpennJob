@@ -4,7 +4,6 @@
   "email": "alex.example@example.org",
   "phone": "07700 900123",
   "location": "Birmingham, UK",
-  "right_to_work": true,
   "ge_end_date": "2025-12",
   "confirmed": false,
   "evidence": [
@@ -54,7 +53,20 @@
   "targets": [
    "Construction Manager"
   ],
-  "report_email": "alex.example@example.org"
+  "report_email": "alex.example@example.org",
+  "work_rights": [
+   {
+    "country": "United Kingdom",
+    "right_to_work": true,
+    "requires_sponsorship": false,
+    "basis": "British passport (fictional example)",
+    "document": "right-to-work-united-kingdom.txt",
+    "document_sha256": "afce1ce624a4140bd6e3adaaaa3ffecc7893e53ce4678aff6785ec242e798274",
+    "expires": null,
+    "confirmed": true,
+    "confirmed_at": "2026-10-06"
+   }
+  ]
  },
  "jobs": [
   {

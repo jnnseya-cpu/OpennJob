@@ -4,6 +4,14 @@ from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 from .core import now,score
 ZONE=ZoneInfo('Europe/London')
+def _rights_questions(jobs):
+    from . import paths
+    from .rights import record_for
+    try:profile=paths.read('profile.json')
+    except FileNotFoundError:return ['Profile missing.']
+    countries=sorted({j.get('country','Unconfirmed') for j in jobs.values() if score(j.get('requirements',[]))>=80})
+    out=[q for c in countries for q in [record_for(profile,c)[1]] if q]
+    return out or ['None: every country with a match of 80% or more has a valid record.']
 def report(store,instant=None):
     apps=store.applications();jobs={j['id']:j for j in store.jobs()}
     instant=(instant or datetime.now(ZONE)).astimezone(ZONE); start=instant-timedelta(hours=24)
@@ -20,6 +28,7 @@ def report(store,instant=None):
         lines.append('')
     errors=store.db.execute("SELECT at,payload FROM events WHERE kind='source_failed' ORDER BY id DESC LIMIT 20").fetchall()
     needs=store.db.execute("SELECT at,payload FROM events WHERE kind='needs_input' AND at>=? ORDER BY id DESC LIMIT 30",(start.astimezone(__import__('datetime').timezone.utc).isoformat(),)).fetchall()
+    lines+=['QUESTIONS FOR YOU (right to work and sponsorship)']+_rights_questions(jobs)+['']
     lines+=['NEEDS INPUT IN LAST 24 HOURS']+[r['at']+' '+r['payload'] for r in needs]
     lines+=['RECENT SOURCE FAILURES']+[r['at']+' '+r['payload'] for r in errors]
     return '\n'.join(lines)

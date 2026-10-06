@@ -1,7 +1,9 @@
 # Launch checklist (personal trial)
 
 1. Set up as in `README.md`; run `python3 -m agent.worker --preflight` and fix what it lists.
-2. Put your confirmed details in `data/local/profile.json` and `data/local/answer_library.json`.
+2. Put your confirmed details in `data/local/profile.json` and `data/local/answer_library.json`, and add
+   your right to work and sponsorship status for each country you can work in, each with its supporting
+   document: `python3 -m agent.rights add ... --confirmed`. Countries with no record are asked of you.
    Unknown answers stay unknown (`"confirmed": false`); the worker leaves those fields to you.
 3. Seed or discover jobs. For each job you want: replace any researched summary with the full current
    advert, review every requirement, run `agent.cli prepare`, read the pack.
