@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Add API keys and search settings to OpennJob on the server, then restart the API:
+#
+#   cd /opt/opennjob
+#   bash deploy/set-keys.sh claude     # Anthropic API key (Claude): drafts, criteria, interview feedback
+#   bash deploy/set-keys.sh search     # what to search for: keywords and location
+#   bash deploy/set-keys.sh adzuna     # Adzuna job search API (free developer key)
+#   bash deploy/set-keys.sh reed       # Reed job search API (free developer key)
+#   bash deploy/set-keys.sh boards     # employers' own boards on Greenhouse / Lever / Ashby (no key)
+#
+# Secrets are typed without being shown and stored only in .env.production (root only).
+# The Claude key is checked with a model lookup, which costs nothing. Job sources are not called
+# here: a job source may be used only after someone has read its terms (CLAUDE.md rule 5).
+set -euo pipefail
+cd "${OPENNJOB_DIR:-/opt/opennjob}"
+F=.env.production
+[ -f "$F" ] && [ -x ./oj ] || { echo "Run deploy/install-hostinger.sh first (no $F or ./oj here)." >&2; exit 1; }
+
+current() { grep -E "^$1=" "$F" | head -1 | cut -d= -f2- | sed "s/^'\\(.*\\)'\$/\\1/; s/^\"\\(.*\\)\"\$/\\1/" || true; }
+ask() { local v; read -r -p "$1${2:+ [$2]}: " v </dev/tty; printf '%s' "${v:-${2:-}}"; }
+ask_secret() { local v; read -r -s -p "$1 (not shown): " v </dev/tty; echo >&2; printf '%s' "$v"; }
+confirm_terms() {
+  echo "Before OpennJob may read $1, someone must read its terms of use: $2"
+  echo "(attribution, caching and rate limits, and whether this use is allowed). Record the result in docs/sources.md."
+  local a; read -r -p "Have you read them, and do they allow this use? [y/N]: " a </dev/tty
+  [ "$a" = y ] || [ "$a" = Y ] || { echo "Nothing changed."; exit 1; }
+}
+
+# set_values KEY VALUE [KEY VALUE ...]: replace or add each line, single-quoted (taken literally).
+set_values() {
+  local tmp; tmp="$(mktemp)"; chmod 600 "$tmp"; cp "$F" "$tmp"
+  while [ $# -gt 1 ]; do
+    case "$2" in *"'"*) echo "A value contains a single quote ('), which the settings file cannot hold. Nothing changed." >&2; rm -f "$tmp"; exit 1 ;; esac
+    grep -vE "^$1=" "$tmp" > "$tmp.n" || true; mv "$tmp.n" "$tmp"
+    printf "%s='%s'\n" "$1" "$2" >> "$tmp"
+    shift 2
+  done
+  cat "$tmp" > "$F"; rm -f "$tmp"; chmod 600 "$F"
+}
+
+restart() { echo "== Restarting the API"; ./oj up -d api >/dev/null; for _ in $(seq 1 20); do ./oj exec -T api true >/dev/null 2>&1 && break; sleep 2; done; }
+
+case "${1:-}" in
+  claude)
+    KEY="$(ask_secret 'Anthropic API key (starts with sk-ant-)')"
+    case "$KEY" in sk-ant-*) ;; *) echo "That does not look like an Anthropic API key. Nothing changed." >&2; exit 1 ;; esac
+    MODEL="$(ask 'Model' "$(current OPENNJOB_MODEL | grep . || echo claude-opus-5-5)")"
+    EFFORT="$(ask 'Effort: low, medium, high (more careful costs more)' "$(current OPENNJOB_LLM_EFFORT | grep . || echo medium)")"
+    case "$EFFORT" in low|medium|high|xhigh|max) ;; *) echo "Effort must be low, medium, high, xhigh or max." >&2; exit 1 ;; esac
+    set_values ANTHROPIC_API_KEY "$KEY" OPENNJOB_MODEL "$MODEL" OPENNJOB_LLM_EFFORT "$EFFORT"
+    unset KEY
+    restart
+    echo "== Checking the key and the model (a model lookup: no tokens, no cost)"
+    ./oj exec -T api node -e '
+const Anthropic = require("@anthropic-ai/sdk").default; const c = new Anthropic();
+c.models.retrieve(process.env.OPENNJOB_MODEL).then(
+  (m) => console.log("Claude key OK; model " + m.id + " is available. AI drafting is on."),
+  (e) => { console.log("Claude check FAILED (" + (e.status || e.name) + "): check the key in the Anthropic Console and the model name, then run this again."); process.exit(1); });'
+    ;;
+  search)
+    KW="$(ask 'Job search keywords for Adzuna and Reed, e.g. site manager' "$(current OPENNJOB_SEARCH_KEYWORDS)")"
+    LOC="$(ask 'Location (empty = anywhere), e.g. London' "$(current OPENNJOB_SEARCH_LOCATION)")"
+    set_values OPENNJOB_SEARCH_KEYWORDS "$KW" OPENNJOB_SEARCH_LOCATION "$LOC"
+    restart; echo "Saved. The next discovery run (06:00 London, or Matches > Refresh) uses them."
+    ;;
+  adzuna)
+    confirm_terms "Adzuna" "https://developer.adzuna.com (API terms)"
+    ID="$(ask 'Adzuna App ID' "$(current ADZUNA_APP_ID)")"
+    KEY="$(ask_secret 'Adzuna App Key')"
+    [ -n "$ID" ] && [ -n "$KEY" ] || { echo "Both are needed. Nothing changed." >&2; exit 1; }
+    CC="$(ask 'Countries, two-letter codes, comma separated' "$(current ADZUNA_COUNTRIES | grep . || echo gb)")"
+    set_values ADZUNA_APP_ID "$ID" ADZUNA_APP_KEY "$KEY" ADZUNA_COUNTRIES "$CC"
+    unset KEY; restart; echo "Saved. Record the terms check in docs/sources.md (date and your name)."
+    ;;
+  reed)
+    confirm_terms "Reed" "https://www.reed.co.uk/developers (API terms)"
+    KEY="$(ask_secret 'Reed API key')"
+    [ -n "$KEY" ] || { echo "No key given. Nothing changed." >&2; exit 1; }
+    set_values REED_API_KEY "$KEY"
+    unset KEY; restart; echo "Saved. Record the terms check in docs/sources.md (date and your name)."
+    ;;
+  boards)
+    confirm_terms "employers' public job boards (Greenhouse, Lever, Ashby)" "each provider's job board API terms, and the employer's own"
+    echo "Each entry is the board name from the employer's careers page address, optionally ':Employer Name'."
+    echo "  e.g. boards.greenhouse.io/examplebuild -> examplebuild:Example Build"
+    GH="$(ask 'Greenhouse boards' "$(current OPENNJOB_GREENHOUSE_BOARDS)")"
+    LV="$(ask 'Lever companies' "$(current OPENNJOB_LEVER_COMPANIES)")"
+    AS="$(ask 'Ashby boards' "$(current OPENNJOB_ASHBY_BOARDS)")"
+    set_values OPENNJOB_GREENHOUSE_BOARDS "$GH" OPENNJOB_LEVER_COMPANIES "$LV" OPENNJOB_ASHBY_BOARDS "$AS"
+    restart; echo "Saved. Record the terms check in docs/sources.md."
+    ;;
+  *)
+    sed -n '2,13p' "$0"; exit 1 ;;
+esac
