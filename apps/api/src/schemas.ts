@@ -271,6 +271,8 @@ export const receiptSchema = z
   .strict();
 
 /** "I have submitted it": the person records the confirmation page they saw. */
+export const outcomeSchema = z.object({ outcome: z.enum(['interview', 'rejected', 'no-reply']) }).strict();
+
 export const submittedSchema = z.object({ pageUrl: httpUrl, confirmationText: z.string().trim().min(3).max(2000) }).strict();
 
 export const authorisationSchema = z
@@ -313,6 +315,7 @@ export const applicationSystemSchema = z
 
 export type ReceiptInput = z.infer<typeof receiptSchema>;
 export type SubmittedInput = z.infer<typeof submittedSchema>;
+export type OutcomeInput = z.infer<typeof outcomeSchema>;
 export type AuthorisationInput = z.infer<typeof authorisationSchema>;
 export type PauseInput = z.infer<typeof pauseSchema>;
 export type QueueResultInput = z.infer<typeof queueResultSchema>;

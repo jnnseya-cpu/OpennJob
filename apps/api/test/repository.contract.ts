@@ -411,6 +411,10 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         const sent: Application = { ...full, status: 'submitted', submittedAt: NOW, automatic: true, holdReasons: undefined, receipt: { at: NOW, pageUrl: 'https://jobs.example.org/thanks', confirmationText: 'Application received (fictional)', documentsSha256: { statement: 'a'.repeat(64) }, automatic: true } };
         await repo.updateApplication(sent);
         expect(await repo.getApplication(a, full.id)).toEqual(sent);
+        // The person's record of what came of it, and a skip, survive a round trip.
+        const answered: Application = { ...sent, status: 'interview', outcome: 'interview', outcomeAt: NOW, skippedAt: NOW };
+        await repo.updateApplication(answered);
+        expect(await repo.getApplication(a, full.id)).toEqual(answered);
         expect(await repo.deleteApplication(b, full.id)).toBe(false); // not B's
         expect(await repo.deleteApplication(a, full.id)).toBe(true);
         expect(await repo.getApplication(a, full.id)).toBeUndefined();

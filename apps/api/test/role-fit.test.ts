@@ -89,3 +89,28 @@ describe('the person\'s own minimum match score', () => {
     expect(((await t.api.post('/agent/run').send({}).expect(200)).body as { threshold: number }).threshold).toBe(80);
   });
 });
+
+describe('the daily review and outcomes', () => {
+  it('skip closes an unsent application so it never goes out; an outcome is recorded only once it was sent', async () => {
+    t = await createTestApp({ sources: [], config: testConfig({ employerKey: EMPLOYER_KEY }) });
+    await t.api.put('/profile').send({ ...PROFILE, cvText: CV }).expect(200);
+    const post = (body: object) => t.raw().post('/employer/jobs').set('Authorization', `Bearer ${EMPLOYER_KEY}`).send(body).expect(201);
+    const a = (await post(job('Senior Project Manager', 7))).body as Job;
+    const b = (await post({ ...job('Construction Manager', 8), employer: 'Second Employer (fictional)' })).body as Job;
+    const skipMe = (await t.api.post('/applications').send({ jobId: a.id, mode: 'auto' }).expect(201)).body as Application;
+    const sendMe = (await t.api.post('/applications').send({ jobId: b.id, mode: 'auto' }).expect(201)).body as Application;
+
+    const skipped = (await t.api.post(`/applications/${skipMe.id}/skip`).expect(200)).body as Application;
+    expect(skipped).toMatchObject({ status: 'closed', skippedAt: expect.any(String) });
+    await t.api.post(`/applications/${skipMe.id}/skip`).expect(409);
+    await t.api.post(`/applications/${sendMe.id}/outcome`).send({ outcome: 'interview' }).expect(409); // not sent yet
+
+    await t.api.post(`/applications/${sendMe.id}/submitted`).send({ pageUrl: 'https://example.org/thanks', confirmationText: 'Thank you (fictional)' }).expect(200);
+    await t.api.post(`/applications/${sendMe.id}/skip`).expect(409); // already sent
+    await t.api.post(`/applications/${sendMe.id}/outcome`).send({ outcome: 'maybe' }).expect(400);
+    const interview = (await t.api.post(`/applications/${sendMe.id}/outcome`).send({ outcome: 'interview' }).expect(200)).body as Application;
+    expect(interview).toMatchObject({ status: 'interview', outcome: 'interview' });
+    const rejected = (await t.api.post(`/applications/${sendMe.id}/outcome`).send({ outcome: 'rejected' }).expect(200)).body as Application;
+    expect(rejected).toMatchObject({ status: 'closed', outcome: 'rejected' });
+  });
+});

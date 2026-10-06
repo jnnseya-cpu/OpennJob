@@ -97,6 +97,11 @@ textarea { min-height: 150px; resize: vertical; }
 .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--muted); }
 pre.fb { white-space: pre-wrap; font: 14px/1.5 var(--body); margin: 0; padding: 12px; border-radius: 10px; background: var(--bg); }
 ul.plain { margin: 0; padding-left: 18px; }
+ul.review-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+ul.review-list li { border-top: 1px solid var(--line); padding-top: 8px; }
+table.routes { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.routes th, table.routes td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+table.routes td { font-variant-numeric: tabular-nums; }
 p.reqs { color: var(--ink); line-height: 1.45; }
 p.reqs .missing { color: var(--warn); }
 ul.checklist { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }

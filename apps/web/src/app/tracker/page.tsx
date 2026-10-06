@@ -11,6 +11,15 @@ import type { Application } from '../../lib/types';
 const ORDER: Record<Application['status'], number> = { needs_you: 0, uncertain: 1, draft: 2, confirmed: 3, interview: 4, submitted: 5, closed: 6 };
 const MODE_NAME: Record<Application['mode'], string> = { review: 'review all', hybrid: 'hybrid', auto: 'auto' };
 
+/** Will go out without the person (by e-mail or an enabled form) unless they skip it: the queue's own test. */
+const goesOutAutomatically = (a: Application) =>
+  a.mode === 'auto' && (a.status === 'draft' || a.status === 'confirmed') && !a.holdReasons?.length && !a.traceFailures?.length && a.attemptedAt === undefined;
+
+type Route = 'email' | 'form' | 'you';
+const ROUTE_NAME: Record<Route, string> = { email: 'By e-mail to the recruiter', form: 'On a form, by the agent', you: 'Sent by you' };
+const routeOf = (a: Application): Route => (a.receipt?.pageUrl.startsWith('mailto:') ? 'email' : a.receipt?.automatic || a.automatic ? 'form' : 'you');
+const OUTCOME_NAME: Record<NonNullable<Application['outcome']>, string> = { interview: 'Interview', rejected: 'Rejected', 'no-reply': 'No reply' };
+
 function holdText(reason: string): string {
   if (HOLD_LABEL[reason]) return HOLD_LABEL[reason];
   if (reason.startsWith('question:')) return `A question with no stored answer: “${reason.slice(9)}”. Answer it on the review page.`;
@@ -23,6 +32,22 @@ export default function TrackerPage() {
   const [apps, setApps] = useState<Application[]>();
   const [error, setError] = useState('');
   const [showClosed, setShowClosed] = useState(false);
+  const [busyId, setBusyId] = useState('');
+
+  const replace = (updated: Application) => setApps((list) => list?.map((x) => (x.id === updated.id ? updated : x)));
+  async function act(id: string, path: 'skip' | 'outcome', body?: object) {
+    setBusyId(id);
+    setError('');
+    try {
+      replace(await api<Application>(`/applications/${encodeURIComponent(id)}/${path}`, { method: 'POST', ...(body ? { body } : {}) }));
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusyId('');
+    }
+  }
+  const sent = (apps ?? []).filter((a) => a.submittedAt);
+  const outgoing = (apps ?? []).filter(goesOutAutomatically);
 
   useEffect(() => {
     api<Application[]>('/applications')
@@ -57,6 +82,60 @@ export default function TrackerPage() {
           </section>
         </>
       ) : null}
+      {outgoing.length ? (
+        <section className="card" aria-label="Going out automatically" data-testid="outgoing">
+          <span className="label">Going out automatically · {outgoing.length}</span>
+          <p className="small muted">These go out without you (by e-mail to the recruiter, or on an enabled form) unless you skip them. Skipped ones are closed.</p>
+          <ul className="plain review-list">
+            {outgoing.map((a) => (
+              <li key={a.id} className="row">
+                <span className="grow">
+                  <b>{a.jobTitle}</b> · {a.employer} · {a.score}%
+                </span>
+                <Link className="small" href={`/review/?job=${encodeURIComponent(a.jobId)}`}>
+                  Check
+                </Link>
+                <button type="button" className="btn" disabled={busyId === a.id} onClick={() => act(a.id, 'skip')}>
+                  Skip
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {sent.length ? (
+        <section className="card" aria-label="Replies by route" data-testid="replies-by-route">
+          <span className="label">Replies by route</span>
+          <table className="routes">
+            <thead>
+              <tr>
+                <th scope="col">Route</th>
+                <th scope="col">Sent</th>
+                <th scope="col">Interviews</th>
+                <th scope="col">Rejected</th>
+                <th scope="col">Interview rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(['email', 'form', 'you'] as Route[]).map((route) => {
+                const mine = sent.filter((a) => routeOf(a) === route);
+                if (!mine.length) return null;
+                const interviews = mine.filter((a) => a.outcome === 'interview').length;
+                return (
+                  <tr key={route}>
+                    <th scope="row">{ROUTE_NAME[route]}</th>
+                    <td>{mine.length}</td>
+                    <td>{interviews}</td>
+                    <td>{mine.filter((a) => a.outcome === 'rejected').length}</td>
+                    <td>{Math.round((100 * interviews) / mine.length)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="small muted">Counted from what you record on each sent application below. OpennJob does not read your e-mail.</p>
+        </section>
+      ) : null}
       {apps && !apps.length ? <div className="empty">No applications yet. Open a match, or tap Run agent on the Matches tab.</div> : null}
       <div className="stack list">
         {apps?.filter((a) => showClosed || a.status !== 'closed').map((a) => (
@@ -87,6 +166,16 @@ export default function TrackerPage() {
                 </span>
               </div>
             ) : null}
+            {a.submittedAt ? (
+              <div className="row" role="group" aria-label="What came of it">
+                <span className="small muted">What came of it?</span>
+                {(['interview', 'rejected', 'no-reply'] as const).map((o) => (
+                  <button key={o} type="button" className={`chip ${a.outcome === o ? '' : 'plain'}`} aria-pressed={a.outcome === o} disabled={busyId === a.id} onClick={() => act(a.id, 'outcome', { outcome: o })}>
+                    {OUTCOME_NAME[o]}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {a.status === 'uncertain' ? <p className="small note">The form was sent but no confirmation was seen. Check with the employer before applying again: it is never retried automatically.</p> : null}
             <div className="row">
               {a.sentDocuments ? (
@@ -106,7 +195,7 @@ export default function TrackerPage() {
           {showClosed ? 'Hide closed applications' : `Show closed applications (${apps.filter((a) => a.status === 'closed').length})`}
         </button>
       ) : null}
-      <p className="small muted">Replies from employers are not tracked yet: OpennJob does not read your email.</p>
+      <p className="small muted">OpennJob does not read your e-mail: record interviews and rejections on each sent application.</p>
     </>
   );
 }

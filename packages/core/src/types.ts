@@ -167,6 +167,9 @@ export const EMPTY_PASSPORT: Passport = { rightToWorkConfirmed: false, training:
  * closed     finished (rejected, withdrawn, filled)
  */
 export type ApplicationStatus = 'draft' | 'confirmed' | 'needs_you' | 'submitted' | 'uncertain' | 'interview' | 'closed';
+export type ApplicationOutcome = 'interview' | 'rejected' | 'no-reply';
+export const APPLICATION_OUTCOMES: readonly ApplicationOutcome[] = ['interview', 'rejected', 'no-reply'];
+
 export const APPLICATION_STATUSES: readonly ApplicationStatus[] = ['draft', 'confirmed', 'needs_you', 'submitted', 'uncertain', 'interview', 'closed'];
 
 /** Proof that an application was sent (APP-7). Encrypted at rest. */
@@ -265,6 +268,11 @@ export interface Application {
   automatic?: boolean;
   /** When the queue was given the go to submit it (counts towards the daily limit). */
   attemptedAt?: string;
+  /** What came of it, recorded by the person: measures replies per route (OpennJob does not read e-mail). */
+  outcome?: ApplicationOutcome;
+  outcomeAt?: string;
+  /** The person skipped it in the daily review, so it never went out automatically. */
+  skippedAt?: string;
   /** The tailored CV (TAI-2). Encrypted at rest. */
   tailoredCv?: string;
   /** Sentences of the tailored documents that could not be traced to the source (TAI-3). */

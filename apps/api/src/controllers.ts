@@ -33,8 +33,9 @@ import {
   queueResultSchema,
   screeningSchema,
   submittedSchema,
+  outcomeSchema,
 } from './schemas';
-import type { ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput } from './schemas';
+import type { ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput, OutcomeInput } from './schemas';
 import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
@@ -332,6 +333,20 @@ export class ApplicationsController {
   @HttpCode(200)
   submitted(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(submittedSchema)) body: SubmittedInput) {
     return this.service.markSubmitted(userId, id, body);
+  }
+
+  /** The daily review: "skip" keeps an application from going out automatically (it is closed). */
+  @Post(':id/skip')
+  @HttpCode(200)
+  skip(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.service.skipApplication(userId, id);
+  }
+
+  /** What came of a sent application: an interview, a rejection or no reply. Measures replies per route. */
+  @Post(':id/outcome')
+  @HttpCode(200)
+  outcome(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(outcomeSchema)) body: OutcomeInput) {
+    return this.service.recordOutcome(userId, id, body);
   }
 
   /** SCR-2: answer the question that held this application; the answer is kept for next time. */

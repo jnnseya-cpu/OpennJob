@@ -47,6 +47,7 @@ import type {
   ProfileInput,
   StatementInput,
   SubmittedInput,
+  OutcomeInput,
 } from './schemas';
 
 /** zod leaves `undefined` on absent optional keys; drop them so stored objects are clean. */
@@ -579,6 +580,31 @@ export class OpennJobService {
   }
 
   /** Records that the form was submitted (by the user, or by the agent in auto mode on a form with no sensitive fields). */
+  /**
+   * The daily review: the person skips an application so that it never goes out automatically.
+   * Only before anything was attempted; it is closed and stays in the Tracker under "closed".
+   */
+  async skipApplication(userId: string, id: string): Promise<Application> {
+    const application = await this.mustGetApplication(userId, id);
+    if (!['draft', 'needs_you', 'confirmed'].includes(application.status) || application.attemptedAt !== undefined) {
+      throw new ConflictException('Only an application that has not been sent or attempted can be skipped');
+    }
+    const updated: Application = { ...application, status: 'closed', skippedAt: this.now() };
+    await this.deps.repository.updateApplication(updated);
+    await this.emit(userId, 'application.skipped', { applicationId: id });
+    return updated;
+  }
+
+  /** What came of a sent application, as the person records it: interview, rejected or no reply. */
+  async recordOutcome(userId: string, id: string, input: OutcomeInput): Promise<Application> {
+    const application = await this.mustGetApplication(userId, id);
+    if (!application.submittedAt) throw new ConflictException('Record an outcome only for an application that was sent');
+    const updated: Application = { ...application, outcome: input.outcome, outcomeAt: this.now(), status: input.outcome === 'interview' ? 'interview' : 'closed' };
+    await this.deps.repository.updateApplication(updated);
+    await this.emit(userId, 'application.outcome', { applicationId: id, outcome: input.outcome });
+    return updated;
+  }
+
   async markSubmitted(userId: string, id: string, input: SubmittedInput): Promise<Application> {
     const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
