@@ -1,0 +1,517 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">
+<title>OpennJob</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one phone-width working column, sticky pack and mode bar on top, tab bar fixed at the bottom. */
+:root{
+  --bg:#F2F6F5; --surface:#FFFFFF; --ink:#12211E; --muted:#566964; --line:#D7E1DE;
+  --accent:#1BA996; --accent-ink:#0A6558; --accent-soft:#DCF3EE; --on-accent:#04201B;
+  --warn:#8F4E00; --warn-soft:#FBEBD2; --bad:#A8231B; --bad-soft:#FADDDA;
+  --display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0C1412; --surface:#141F1C; --ink:#E5EEEB; --muted:#93A7A1; --line:#25352F;
+  --accent:#2CC4AE; --accent-ink:#74E2D0; --accent-soft:#132F29; --on-accent:#04201B;
+  --warn:#F2B75E; --warn-soft:#33260E; --bad:#FF9288; --bad-soft:#3A1613; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0C1412; --surface:#141F1C; --ink:#E5EEEB; --muted:#93A7A1; --line:#25352F;
+  --accent:#2CC4AE; --accent-ink:#74E2D0; --accent-soft:#132F29; --on-accent:#04201B;
+  --warn:#F2B75E; --warn-soft:#33260E; --bad:#FF9288; --bad-soft:#3A1613; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:620px;margin-inline:auto;padding-inline:16px;padding-block:0 96px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.15}
+h2{font-size:22px;font-weight:700} h3{font-size:16px;font-weight:700}
+p{margin:0}
+.muted{color:var(--muted)} .small{font-size:13px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row > .grow{flex:1;min-width:0}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand b{font-family:var(--display);font-size:24px;font-weight:700;letter-spacing:-.02em}
+.brand b i{font-style:normal;color:var(--accent-ink)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;color:var(--muted);font:600 13px var(--body);padding:9px 4px;cursor:pointer}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.note{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 12px;font-size:13px}
+.note.ok{background:var(--accent-soft);color:var(--accent-ink)}
+main{padding-block:16px;display:flex;flex-direction:column;gap:16px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.job{cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.job:hover{border-color:var(--accent)}
+.score{font-family:var(--mono);font-size:20px;font-weight:500;min-width:3.2em;text-align:right}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar span{display:block;height:100%;background:var(--accent)}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 10px;font:600 12px var(--body);background:var(--accent-soft);color:var(--accent-ink);border:1px solid transparent}
+.chip.gap{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.plain{background:none;border-color:var(--line);color:var(--muted)}
+button.chip{cursor:pointer;padding:5px 12px}
+.label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+button.btn{font:600 15px var(--body);border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:11px 16px;cursor:pointer}
+button.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button.btn:disabled{opacity:.45;cursor:not-allowed}
+button.link{border:0;background:none;color:var(--accent-ink);font:600 14px var(--body);padding:4px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+textarea,input[type=text],select{width:100%;font:15px/1.5 var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+select.pack{background:var(--surface);font-weight:600}
+textarea{min-height:150px;resize:vertical}
+.crit{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:start;padding-block:8px;border-top:1px solid var(--line)}
+.crit:first-of-type{border-top:0}
+.crit .ev{grid-column:2;color:var(--muted);font-size:13px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:6px 12px;font-size:14px;margin:0}
+.kv dt{color:var(--muted)} .kv dd{margin:0;overflow-wrap:anywhere}
+.field{display:flex;flex-direction:column;gap:4px}
+.confirm{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:10px}
+.confirm input{width:20px;height:20px;margin-top:2px;accent-color:var(--accent);flex:none}
+.confirm.on{border-color:var(--accent);background:var(--accent-soft)}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:20px;text-align:center;color:var(--muted)}
+pre.fb{white-space:pre-wrap;font:14px/1.5 var(--body);margin:0;padding:12px;border-radius:10px;background:var(--bg)}
+
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:6}
+nav.tabs div{max-width:620px;margin-inline:auto;display:grid;grid-template-columns:repeat(4,1fr)}
+nav.tabs button{border:0;background:none;font:600 13px var(--body);color:var(--muted);padding:14px 4px;cursor:pointer;border-top:3px solid transparent}
+nav.tabs button[aria-current="page"]{color:var(--accent-ink);border-top-color:var(--accent)}
+nav.tabs .count{font-family:var(--mono);font-size:11px;background:var(--accent);color:var(--on-accent);border-radius:999px;padding:1px 6px;margin-left:4px}
+@media (prefers-reduced-motion:no-preference){ .bar span{transition:width .3s} }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><b>Openn<i>Job</i></b><span class="muted small">Six industry packs · UK and worldwide</span></div>
+    <select class="pack" id="pack" aria-label="Industry pack"></select>
+    <div class="seg" role="group" aria-label="How much the agent does alone" id="modes">
+      <button type="button" data-mode="review">Review all</button>
+      <button type="button" data-mode="hybrid">Hybrid</button>
+      <button type="button" data-mode="auto">Auto</button>
+    </div>
+    <p class="small muted" id="modeHelp"></p>
+  </header>
+  <main id="view"></main>
+</div>
+<nav class="tabs" aria-label="Sections"><div id="tabs"></div></nav>
+
+<script>
+/* ---------- Packs. Every employer and vacancy below is invented for the demo. ---------- */
+const PACKS = {
+ con:{name:"Construction and infrastructure", profile:"infra"},
+ dc:{name:"Data centres and mission-critical", profile:"infra"},
+ en:{name:"Energy and grid", profile:"infra"},
+ rail:{name:"Rail and transport", profile:"infra"},
+ fr:{name:"Francophone Africa and diaspora", profile:"infra"},
+ hc:{name:"Healthcare", profile:"health"}
+};
+const REGIONS = {uk:"UK", eu:"Europe", africa:"Africa", mena:"Middle East", am:"Americas"};
+const COUNTRY = {Birmingham:"United Kingdom",Manchester:"United Kingdom",London:"United Kingdom",Slough:"United Kingdom",Teesside:"United Kingdom",Glasgow:"United Kingdom",Somerset:"United Kingdom",Derby:"United Kingdom",Solihull:"United Kingdom",Wolverhampton:"United Kingdom",Coventry:"United Kingdom",
+ Dublin:"Ireland",Frankfurt:"Germany",Esbjerg:"Denmark",Lyon:"France",Brussels:"Belgium",Riyadh:"Saudi Arabia",Doha:"Qatar",Dubai:"United Arab Emirates",Lagos:"Nigeria","Northern Cape":"South Africa",Kinshasa:"DR Congo",Kolwezi:"DR Congo",Dakar:"Senegal",Abidjan:"Côte d'Ivoire","Northern Virginia":"United States",Toronto:"Canada"};
+const LANGS = ["English","French","Lingala","Swahili","Arabic","German","Spanish","Portuguese"];
+const LANG_KW = {french:"French","français":"French",german:"German",arabic:"Arabic"};
+function J(id, pack, title, org, where, region, src, decl, criteria, o){
+  return Object.assign({id, pack, title, org, where, country: COUNTRY[where], region, src, decl, criteria: criteria.map(c => ({l:c[0], e:c[1], k:c[2]}))}, o || {});
+}
+const JOBS = [
+ /* Construction and infrastructure */
+ J("c1","con","Senior Construction Manager · Hospital New Build","Halden Build Group","Birmingham","uk","Company careers page",true,[
+  ["Chartered status (MCIOB or MRICS)",1,["mciob","mrics"]],["Multi-contractor site leadership",1,["multi-contractor"]],["CDM 2015 duties",1,["cdm"]],
+  ["NEC4 contract administration",1,["nec4","nec3"]],["SMSTS certificate",0,["smsts"]],["Primavera P6 scheduling",0,["primavera"]]]),
+ J("c2","con","Project Director · Mixed-use Regeneration","Corbel & Wray Developments","Manchester","uk","Recruitment agency",false,[
+  ["Programmes of £100M and above",1,["£100m"]],["Client-side delivery authority",1,["client-side"]],["Procurement and cost control",1,["procurement"]],
+  ["BIM coordination",0,["bim"]],["Residential sector experience",0,["residential"]]]),
+ J("c3","con","Programme Manager · Government Estates","Castlegate Programme Partners","London","uk","Company careers page",true,[
+  ["Security clearance (SC)",1,["sc cleared"]],["Public sector estates experience",1,["public sector","government estates"]],["PRINCE2 or APM qualification",1,["prince2","apmp"]],
+  ["Risk and change management",0,["risk & change","risk and change"]]],{req:"sc"}),
+ J("c4","con","Owner's Representative · Stadium Redevelopment","Liffey Venue Partners","Dublin","eu","Company careers page",true,[
+  ["Client-side construction authority",1,["client-side"]],["QA/QC and compliance",1,["qa/qc"]],["Programme recovery",1,["recovery"]],["Primavera P6 scheduling",0,["primavera"]]]),
+ J("c5","con","Construction Manager · Airport Terminal Expansion","Najd Aviation Projects","Riyadh","mena","Recruitment agency",true,[
+  ["Airport or aviation projects",1,["airport","aviation"]],["Multi-contractor site leadership",1,["multi-contractor"]],["HSE leadership",1,["hse"]],
+  ["FIDIC contracts",0,["fidic"]],["Gulf region experience",0,["gcc","saudi","middle east"]]]),
+ /* Data centres */
+ J("d1","dc","Senior Construction Manager · Hyperscale Data Centre","Northgate Digital Infrastructure","Slough","uk","Company careers page",true,[
+  ["Data centre delivery",1,["data centre"]],["MEP coordination",1,["mep"]],["Commissioning readiness",1,["commissioning"]],["HV power systems",1,["hv"]],
+  ["Integrated systems testing (Level 5)",0,["integrated systems test","level 5"]]]),
+ J("d2","dc","Client-side Construction Lead · 120MW Campus","Rheinwerk Data Parks","Frankfurt","eu","Company careers page",true,[
+  ["Client-side authority",1,["client-side"]],["Data centre delivery",1,["data centre"]],["Managing Tier 1 contractors",1,["tier 1"]],["German language",0,["german"]],["Primavera P6 scheduling",0,["primavera"]]]),
+ J("d3","dc","Construction Director · Colocation Campus","Liffey Compute","Dublin","eu","Recruitment agency",false,[
+  ["Data centre delivery",1,["data centre"]],["Programmes of £100M and above",1,["£100m"]],["Multi-contractor leadership",1,["multi-contractor"]],["Critical cooling systems",0,["cooling","chiller"]]],{direct:true}),
+ J("d4","dc","Site Lead · Edge Data Centre","Lekki Cloud Facilities","Lagos","africa","Company careers page",true,[
+  ["Data centre delivery",1,["data centre"]],["HV/MV power systems",1,["hv/mv"]],["QA/QC and compliance",1,["qa/qc"]],["West Africa experience",0,["nigeria","west africa"]]]),
+ J("d5","dc","Commissioning Manager · AI Compute Campus","Blue Ridge Compute","Northern Virginia","am","Company careers page",true,[
+  ["Commissioning leadership",1,["commissioning"]],["Commissioning authority certification",1,["cxa","commissioning authority"]],["US work authorisation",1,["us work authori"]],["Data centre delivery",0,["data centre"]]]),
+ /* Energy and grid */
+ J("e1","en","Head of Construction · HVDC Converter Station","Tees Grid Connections","Teesside","uk","Company careers page",true,[
+  ["Grid and substation delivery",1,["substation","grid"]],["HV power systems",1,["hv"]],["Subcontract governance",1,["subcontract"]],["Offshore wind integration",0,["offshore wind"]],["CDM 2015 duties",0,["cdm"]]]),
+ J("e2","en","Construction Manager · Offshore Wind Onshore Works","Vesterhav Energi","Esbjerg","eu","Company careers page",true,[
+  ["Offshore wind programmes",1,["offshore wind"]],["Multi-country delivery",1,["multi-country"]],["HSE leadership",1,["hse"]],["GWO training",0,["gwo"]]]),
+ J("e3","en","Senior Project Manager · 400kV Substation","Clydeline Transmission","Glasgow","uk","Recruitment agency",false,[
+  ["Substation delivery",1,["substation"]],["Primavera P6 scheduling",1,["primavera"]],["Risk and change management",1,["risk & change","risk frameworks"]],["Senior Authorised Person",0,["authorised person"]]]),
+ J("e4","en","Site Manager · 200MW Solar and Storage","Karoo Sun Power","Northern Cape","africa","Company careers page",true,[
+  ["Energy programme delivery",1,["energy"]],["Solar or battery storage",1,["solar","bess","battery"]],["Contractor performance management",1,["contractor performance"]],["Southern Africa experience",0,["south africa"]]]),
+ J("e5","en","Construction Lead · Nuclear Enabling Works","Severnside Nuclear Delivery","Somerset","uk","Company careers page",true,[
+  ["Security clearance (SC)",1,["sc cleared"]],["Civil and structural delivery",1,["civil"]],["QA/QC and compliance",1,["qa/qc"]],["Nuclear sector experience",0,["nuclear"]]],{req:"sc"}),
+ /* Rail and transport */
+ J("r1","rail","Senior Project Manager · Main Line Electrification","Trentside Rail Alliance","Derby","uk","Company careers page",true,[
+  ["Rail programme delivery",1,["rail"]],["Earned value management",1,["evm"]],["Schedule and cost control",1,["schedule"]],["Personal Track Safety card",0,["personal track safety","pts card"]]]),
+ J("r2","rail","Programme Delivery Lead · Metro Extension","Midland Metro Partnership","Birmingham","uk","Company careers page",true,[
+  ["Metro or light rail delivery",1,["metro"]],["BIM implementation",1,["bim"]],["Programmes of £1BN and above",1,["£1.3bn","£1bn"]],["Stakeholder management",0,["stakeholder"]]]),
+ J("r3","rail","Construction Manager · Metro Line 4","Gulf Transit Constructors","Doha","mena","Recruitment agency",false,[
+  ["Metro or light rail delivery",1,["metro"]],["Multi-contractor leadership",1,["multi-contractor"]],["FIDIC contracts",0,["fidic"]],["Gulf region experience",0,["gcc","qatar","middle east"]]]),
+ J("r4","rail","Responsable BIM · Ligne à grande vitesse","Rhône Rail Ingénierie","Lyon","eu","Company careers page",true,[
+  ["BIM 4D/5D coordination",1,["bim"]],["Rail programme delivery",1,["rail"]],["French, professional level",1,["french","français"]],["Master's degree",0,["msc","master"]]],{french:true}),
+ J("r5","rail","Project Controls Manager · Light Rail","Lakeshore Transit Builders","Toronto","am","Company careers page",true,[
+  ["Primavera P6 scheduling",1,["primavera"]],["Earned value management",1,["evm"]],["Risk management",1,["risk"]],["Canadian work authorisation",1,["canadian work"]],["P.Eng or PMP",0,["p.eng","pmp certified"]]]),
+ /* Francophone Africa and diaspora */
+ J("f1","fr","Directeur de projet · Infrastructure énergétique","Compagnie Énergie du Fleuve","Kinshasa","africa","Company careers page",true,[
+  ["Major infrastructure programmes",1,["infrastructure"]],["Grid and HV systems",1,["grid","hv"]],["French, fluent",1,["french","français"]],["DRC experience",0,["drc","rdc","congo","kinshasa"]]],{french:true}),
+ J("f2","fr","Construction Manager · Mine de cuivre","Katanga Cuivre Développement","Kolwezi","africa","Recruitment agency",true,[
+  ["Mining sector projects",1,["mining","minier"]],["HSE leadership",1,["hse"]],["Multi-contractor leadership",1,["multi-contractor"]],["French, working level",1,["french","français"]]],{french:true}),
+ J("f3","fr","Infrastructure Programme Officer","Agence Sahel Développement","Dakar","africa","Organisation application form",true,[
+  ["Master's degree",1,["msc","master"]],["Programme delivery and governance",1,["programme delivery"]],["French, fluent",1,["french","français"]],["Donor-funded project experience",0,["donor","development bank","humanitarian"]]],{french:true}),
+ J("f4","fr","Chargé de programme diaspora","Réseau Diaspora Europe-Afrique","Brussels","eu","Organisation application form",false,[
+  ["Project management qualification",1,["prince2","apmp"]],["French, fluent",1,["french","français"]],["Diaspora community work",0,["diaspora","community"]]],{french:true}),
+ J("f5","fr","Country Construction Lead · Data Centre","Lagune Data Afrique","Abidjan","africa","Company careers page",true,[
+  ["Data centre delivery",1,["data centre"]],["Client-side authority",1,["client-side"]],["Commissioning readiness",1,["commissioning"]],["French, working level",0,["french","français"]]]),
+ /* Healthcare */
+ J("h1","hc","Staff Nurse, Band 5 · Acute Medicine","Midshire University Hospitals","Birmingham","uk","Trust application form",true,[
+  ["Current NMC registration",1,["nmc"]],["Experience on an acute or medical ward",1,["acute","medical ward"]],["Safe medication administration",1,["medication","drug round"]],
+  ["Recognising a deteriorating patient (NEWS2)",1,["news2","deteriorat","escalat"]],["IV therapy or cannulation",0,["iv therapy","cannulation"]],["Mentoring students or new starters",0,["mentor","student nurse"]]],{req:"pin"}),
+ J("h2","hc","Community Staff Nurse, Band 5","Severn Vale Community Health","Solihull","uk","Trust application form",true,[
+  ["Current NMC registration",1,["nmc"]],["Community or district nursing experience",1,["community","district nurs"]],["Wound care and dressings",1,["wound"]],["Full UK driving licence",1,["driving licence"]],["Palliative or end-of-life care",0,["palliative","end of life"]]],{req:"pin"}),
+ J("h3","hc","Senior Healthcare Assistant","Oakfield Care Group","Wolverhampton","uk","Company careers page",false,[
+  ["Level 3 in Health and Social Care",1,["level 3","nvq 3"]],["Dementia care experience",1,["dementia"]],["Moving and handling",1,["moving and handling","manual handling"]],["Supporting medication rounds",0,["medication"]],["Leading a shift",0,["supervis","nurse in charge"]]]),
+ J("h4","hc","Healthcare Assistant, Band 3 · Elderly Care","Midshire University Hospitals","Birmingham","uk","Trust application form",true,[
+  ["Care Certificate",1,["care certificate"]],["Personal care experience",1,["personal care"]],["Taking and recording observations",1,["observations","vital signs","news2"]],["Hospital ward experience",0,["ward"]]]),
+ J("h5","hc","Registered Nurse, Nights · Nursing Home","Brightline Healthcare Staffing","Coventry","uk","Agency quick-apply",false,[
+  ["Current NMC registration",1,["nmc"]],["Nursing home or elderly care experience",1,["nursing home","older people"]],["Medication administration",1,["medication"]],["Night shift experience",0,["night"]],["Care planning",0,["care plan"]]],{req:"pin",direct:true}),
+ J("h6","hc","Mental Health Support Worker","Harbour Mind Services","Birmingham","uk","Company careers page",true,[
+  ["Mental health setting experience",1,["mental health"]],["De-escalation training",1,["de-escalation","pmva"]],["Safeguarding adults",1,["safeguarding"]],["Full UK driving licence",0,["driving licence"]]]),
+ J("h7","hc","Staff Nurse · Medical Ward","Liffey General Hospital","Dublin","eu","Hospital application form",true,[
+  ["NMBI registration (Ireland)",1,["nmbi"]],["Acute medical experience",1,["acute"]],["Medication administration",1,["medication"]],["IV therapy",0,["iv therapy"]]],{req:"pin"}),
+ J("h8","hc","Registered Nurse · Private Hospital","Al Noor Medical Centre","Dubai","mena","Recruitment agency",true,[
+  ["Nursing registration in home country",1,["nmc"]],["Two years of acute experience",1,["acute"]],["DHA licence or eligibility letter",1,["dha"]],["French or Arabic language",0,["french","arabic"]]],{req:"pin"})
+];
+const CVS = {
+infra:`Example Candidate, MCIOB (fictional CV)
+Senior Construction Manager. Data centres, energy and grid, rail. SC Cleared. UK and Europe.
+Chartered Construction Manager delivering £100M+ infrastructure programmes including hyperscale data centre, offshore wind, grid and substation projects.
+Client-side construction authority leading multi-contractor, multidisciplinary delivery across civil, structural, MEP and HV/MV power systems.
+Led programme recovery and contractor performance management with Tier 1 contractors.
+Delivered procurement savings, with control of risk, schedule (Primavera P6), QA/QC and HSE compliance.
+Directed subcontract governance across multi-country energy programmes and supported commissioning readiness.
+Controlled a rail upgrade using EVM and led BIM implementation on a £1.3BN metro programme.
+Built a risk & change management system for an energy programme and worked on public sector estates.
+MSc and BSc in construction. PRINCE2 and APMP. CDM 2015 Principal Designer. Strong programme delivery record.`,
+health:`Amina K. (example CV, replace with yours)
+Registered Nurse (Adult), NMC registered since 2022.
+
+Staff Nurse, acute medical ward, 28 beds, 2022 to present.
+I complete medication rounds for up to eight patients per shift, including controlled drugs.
+I use NEWS2 to spot a deteriorating patient and escalate to the outreach team using SBAR.
+I am signed off for IV therapy and cannulation.
+I mentor student nurses on placement and act as nurse in charge on night shifts twice a month.
+I completed Safeguarding Adults Level 2 and raise concerns through the ward process.
+
+Healthcare Assistant, nursing home for older people, 2018 to 2021.
+I gave personal care to residents living with dementia and helped write each care plan.
+I hold the Care Certificate and a Level 3 Diploma in Health and Social Care.
+Moving and handling trained, updated yearly.
+
+Languages: English, French, Lingala. Full UK driving licence.`};
+const PASSPORTS = {
+ infra:{title:"Credential passport", note:"Filled from your CV where it says so. Empty lines are ones your CV does not mention.", items:[
+  {id:"prof", l:"Professional membership", v:"MCIOB (example)"},
+  {id:"sc", l:"Security clearance", v:"SC Cleared (example)"},
+  {id:"cdm", l:"CDM 2015", v:"Principal Designer"},
+  {id:"pm", l:"Project management", v:"PRINCE2, APMP"},
+  {id:"cscs", l:"CSCS card and expiry", v:""},
+  {id:"smsts", l:"SMSTS and expiry", v:""},
+  {id:"pts", l:"Personal Track Safety (rail)", v:""},
+  {id:"lang", l:"Languages", v:""},
+  {id:"rtw", l:"Countries you can work in", v:""}], training:[]},
+ health:{title:"Credential passport · example", note:"Stored once, reused on every form. Expired training is flagged before you apply.", items:[
+  {id:"pin", l:"Professional registration number (NMC PIN)", v:"00A0000E (example)"},
+  {id:"dbs", l:"DBS", v:"Enhanced, on the Update Service"},
+  {id:"rtw", l:"Countries you can work in", v:"UK"}],
+  training:[["Basic life support","2027-03-14"],["Moving and handling","2026-11-02"],["Safeguarding adults L2","2027-06-30"],["Infection prevention","2026-09-20"]]}
+};
+const REQ_LABEL = {pin:"registration number", sc:"security clearance"};
+const DECLS = {
+ health:[{id:"pin", l:"Professional registration number", req:"pin"},{id:"rtw", l:"Right to work or visa status for this country"},{id:"dbs", l:"DBS or police check details"},{id:"conv", l:"Criminal convictions and cautions declaration"},{id:"ftp", l:"Fitness to practise declaration", req:"pin"}],
+ infra:[{id:"rtw", l:"Right to work or visa sponsorship for this country"},{id:"sc", l:"Security clearance and vetting declaration", req:"sc"},{id:"conv", l:"Criminal convictions declaration"},{id:"coi", l:"Conflict of interest declaration"},{id:"ref", l:"Referees' names and contact details"}]
+};
+const QUESTIONS = {
+ con:["Tell me about a programme you recovered. What was wrong and what did you change first?","How do you hold a Tier 1 contractor to account when you are client-side?","Describe a serious HSE incident or near miss on your site and what you did afterwards."],
+ dc:["How do you protect the commissioning window when construction is running late?","Tell me about an interface clash between MEP and HV packages and how you resolved it.","What does handover readiness mean to you on a live, high-availability site?"],
+ en:["Describe how you governed subcontractors across several countries on one programme.","Tell me about a grid connection date at risk. What did you do?","How do you manage outage windows with the network operator?"],
+ rail:["How did you keep a rail upgrade on schedule and cost? Use a real example.","Tell me about introducing BIM to a team that resisted it.","How do you plan work around possessions and a live railway?"],
+ fr:["Parlez-nous d'un programme d'infrastructure que vous avez redressé.","How would you adapt UK delivery standards to a site in the DRC or Senegal?","Comment gérez-vous plusieurs sous-traitants sur un chantier éloigné ?"],
+ hc:["Tell me about a time you recognised that a patient was deteriorating. What did you do?","Describe a medication error or near miss you were involved in and what you learned.","Describe a time you raised a safeguarding concern. What happened next?"]
+};
+const MODES = {
+ review:"You see and confirm every field before anything is filled.",
+ hybrid:"The agent prepares every match of 80% or more. You confirm declarations and tap submit.",
+ auto:"The agent applies to every match of 80% or more. Forms with declarations wait for one tap from you."
+};
+const TODAY = new Date(2026,9,6);
+
+/* ---------- State ---------- */
+const S = { prefs:{langs:[], countries:[], cities:[]}, view:"jobs", pack:"con", mode:"hybrid", region:"all", jobId:null, apps:{},
+ iv:{jobId:"c1", q:0, answer:"", feedback:"", busy:false}, draftBusy:false, aiNote:"", agentMsg:"" };
+let sample = null, ctl = null;
+
+/* ---------- Engine ---------- */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const job = id => JOBS.find(j => j.id === id);
+const prof = j => PACKS[j.pack].profile;
+const pval = (p, id) => { const it = PASSPORTS[p].items.find(x => x.id === id); return it ? it.v.trim() : ""; };
+function evalJob(j){
+  const text = CVS[prof(j)], cv = text.toLowerCase();
+  const sents = text.split(/\n+/).map(x => x.trim()).filter(x => x.length > 12);
+  let got = 0, tot = 0;
+  const rows = j.criteria.map(c => {
+    const w = c.e ? 2 : 1; tot += w;
+    const kw = c.k.find(k => cv.includes(k));
+    const lang = kw ? null : c.k.map(k => LANG_KW[k]).find(l => l && S.prefs.langs.includes(l));
+    if (kw || lang) got += w;
+    return {l:c.l, e:c.e, hit:!!(kw || lang), ev: kw ? (sents.find(s => s.toLowerCase().includes(kw)) || "") : lang ? "I speak " + lang + "." : ""};
+  });
+  return {rows, score: Math.round(100 * got / tot), eligible: !j.req || pval(prof(j), j.req) !== ""};
+}
+/* Nothing selected means no restriction. Cities only narrow the countries they belong to. */
+function inScope(j){
+  const p = S.prefs;
+  if (p.countries.length && !p.countries.includes(j.country)) return false;
+  const here = p.cities.filter(c => COUNTRY[c] === j.country);
+  if (here.length && !here.includes(j.where)) return false;
+  if (j.french && p.langs.length && !p.langs.includes("French")) return false;
+  return true;
+}
+function declsFor(j){ return j.decl ? DECLS[prof(j)].filter(d => !d.req || d.req === j.req) : []; }
+function builtInDraft(j){
+  const ev = evalJob(j), met = ev.rows.filter(r => r.hit && r.ev), gaps = ev.rows.filter(r => !r.hit);
+  const role = j.title.replace(" · ", ", ");
+  let t = j.french ? "Je présente ma candidature au poste de " + role + " chez " + j.org + ". Voici comment mon parcours répond aux critères du poste.\n\n"
+                   : "I am applying for the post of " + role + " at " + j.org + ". Below I set out how I meet the requirements.\n\n";
+  t += met.map(r => r.l + ": " + r.ev).join("\n\n");
+  if (gaps.length) t += "\n\n[Not evidenced in your CV, add or remove before sending: " + gaps.map(g => g.l).join("; ") + "]";
+  return t;
+}
+function ensureApp(j, by){
+  if (!S.apps[j.id]) S.apps[j.id] = {status:"ready", statement:builtInDraft(j), by:by||"you", confirmed:{}, ai:false};
+  return S.apps[j.id];
+}
+function allConfirmed(j){ const a = S.apps[j.id]; return declsFor(j).every(d => a && a.confirmed[d.id]); }
+function runAgent(){
+  let prepared = 0, sent = 0, held = 0;
+  JOBS.filter(j => j.pack === S.pack && inScope(j)).forEach(j => {
+    const ev = evalJob(j);
+    if (!ev.eligible || ev.score < 80 || (S.apps[j.id] && S.apps[j.id].status !== "ready")) return;
+    const a = ensureApp(j, "agent"); a.by = "agent"; prepared++;
+    if (S.mode === "auto") { if (declsFor(j).length === 0) { a.status = "submitted"; sent++; } else held++; }
+  });
+  const n = PACKS[S.pack].name;
+  S.agentMsg = S.mode === "auto" ? n + ": " + sent + " submitted, " + held + " waiting for one tap on declarations. Matches under 80% were left alone."
+    : n + ": " + prepared + " applications prepared and waiting for you. Matches under 80% were left for you to decide.";
+  S.view = "tracker"; render();
+}
+function daysTo(d){ return Math.round((new Date(d) - TODAY) / 864e5); }
+
+/* ---------- AI (asks Claude from the page; falls back to the built-in drafter) ---------- */
+const AI_COPY = {not_granted:"AI drafting was not allowed for this page, so the built-in drafter is used.", rate_limited:"Claude is busy or your usage limit is reached. Try again later.", session_expired:"Sign in to Claude again to use AI drafting.", refused:"Claude declined this text. Edit it and try again.", upstream_error:"The connection dropped. Try again."};
+const AI_OFF = ["not_granted","sampling_disabled","not_declared","capability_disabled"];
+async function aiStatement(j){
+  const a = ensureApp(j), ev = evalJob(j);
+  if (!sample) { a.statement = builtInDraft(j); render(); return; }
+  S.draftBusy = true; S.aiNote = "Thinking…"; render();
+  ctl = new AbortController();
+  const prompt = "Write a supporting statement for a job application.\n" +
+    "Rules: write in " + (j.french ? "French (formal, as a lettre de motivation body)" : "UK English") + ". About 250 words. First person. Address each ESSENTIAL requirement in the order given, then desirable ones, using ONLY evidence that appears in the CV. Never invent experience, employers, dates, languages or qualifications. No headings, no bullet points, no greeting. " +
+    "After the statement add one final line in English starting 'GAPS:' listing requirements the CV does not evidence, or 'GAPS: none'.\n\n" +
+    "Job: " + j.title + " at " + j.org + " (" + j.where + ")\nSector: " + PACKS[j.pack].name + "\n\nRequirements:\n" +
+    ev.rows.map(r => "- " + (r.e ? "ESSENTIAL: " : "Desirable: ") + r.l).join("\n") + "\n\nLanguages the candidate confirms speaking: " + (S.prefs.langs.join(", ") || "not stated") + "\n\nCV:\n" + CVS[prof(j)].slice(0, 6000);
+  try {
+    const r = await sample(prompt, {signal: ctl.signal, cache:false, onText: ({text}) => { a.statement = text; const b = document.getElementById("statement"); if (b) b.value = text; const n = document.getElementById("aiNote"); if (n) n.textContent = "Writing…"; }});
+    a.statement = r.text; a.ai = true; S.aiNote = r.truncated ? "The draft was cut short. Check the ending." : "Drafted by Claude from your CV. Read it before you approve.";
+  } catch (e) {
+    if (e && e.text) a.statement = e.text; else if (e && e.code === "refused") a.statement = builtInDraft(j);
+    S.aiNote = e && e.code === "cancelled" ? "Stopped." : (AI_COPY[e && e.code] || AI_COPY.upstream_error);
+    if (e && AI_OFF.includes(e.code)) sample = null;
+  }
+  S.draftBusy = false; render();
+}
+function heuristicFeedback(ans){
+  const t = ans.toLowerCase(), w = ans.trim().split(/\s+/).filter(Boolean).length, has = re => re.test(t);
+  const parts = [["Situation", has(/\b(when|while|during|last year|on a shift|on site|one night|a patient|the programme|the project)\b/)],["Task", has(/\b(my role|i was responsible|i needed|i had to|my job|i was asked)\b/)],["Action", has(/\bi (checked|called|escalated|spoke|gave|reported|asked|recorded|stayed|explained|used|led|built|agreed|introduced|negotiated|set up|replaced|restructured)\b/)],["Result", has(/\b(result|outcome|as a result|recovered|improved|reduced|saved|on time|learned|learnt|since then)\b/)]];
+  return "Built-in check (no AI)\n" + parts.map(p => (p[1] ? "✓ " : "✗ ") + p[0] + (p[1] ? " is there." : " is missing or unclear.")).join("\n") +
+    "\nLength: " + w + " words. " + (w < 80 ? "Too short for a panel, aim for 150 to 250." : w > 320 ? "Long, cut to the actions you took." : "Good length.");
+}
+async function aiFeedback(){
+  const iv = S.iv, j = job(iv.jobId), qs = QUESTIONS[j.pack], q = qs[iv.q % qs.length];
+  if (iv.answer.trim().length < 20) { iv.feedback = "Write your answer first, a few sentences at least."; render(); return; }
+  if (!sample) { iv.feedback = heuristicFeedback(iv.answer); render(); return; }
+  iv.busy = true; iv.feedback = "Thinking…"; render();
+  ctl = new AbortController();
+  const prompt = "You are an interview coach. Give feedback on this practice answer, in the language the answer is written in.\nFormat, plain text, under 160 words: four lines 'Situation n/5', 'Task n/5', 'Action n/5', 'Result n/5' each with a few words of reason; then 'Do next:' with two specific improvements; then one sentence the candidate could add. Be direct and kind. Do not rewrite the whole answer.\n\nSector: " + PACKS[j.pack].name + "\nRole: " + j.title + " (" + j.where + ")\nQuestion: " + q + "\nAnswer: " + iv.answer.slice(0, 4000);
+  try {
+    const r = await sample(prompt, {signal: ctl.signal, cache:false, modelTier:"quick", onText: ({text}) => { iv.feedback = text; const f = document.getElementById("feedback"); if (f) f.textContent = text; }});
+    iv.feedback = r.text;
+  } catch (e) {
+    iv.feedback = e && e.code === "cancelled" ? (e.text || "Stopped.") : heuristicFeedback(iv.answer) + "\n\n" + (AI_COPY[e && e.code] || AI_COPY.upstream_error);
+    if (e && AI_OFF.includes(e.code)) sample = null;
+  }
+  iv.busy = false; render();
+}
+
+/* ---------- Views ---------- */
+function vJobs(){
+  const all = JOBS.filter(j => j.pack === S.pack), inPack = all.filter(inScope), hidden = all.length - inPack.length;
+  const regs = ["all"].concat(Object.keys(REGIONS).filter(r => inPack.some(j => j.region === r)));
+  if (!regs.includes(S.region)) S.region = "all";
+  const list = inPack.filter(j => S.region === "all" || j.region === S.region).map(j => ({j, ev:evalJob(j)})).sort((a,b) => (b.ev.eligible - a.ev.eligible) || (b.ev.score - a.ev.score));
+  const own = PACKS[S.pack].profile === "infra";
+  return `<div class="note">Demo. Every employer and vacancy is invented. ${own ? "This pack uses an example CV." : "This pack uses an example nurse CV."} Nothing is sent to anyone.</div>
+  <p class="small muted">The agent finds these itself on careers pages, agency sites and job boards. Employers can also post directly, but nothing depends on it.</p>
+  <div class="row"><h2 class="grow">Matches</h2><button class="btn primary" data-act="agent">Run agent</button></div>
+  <div class="row">${regs.map(r => `<button class="chip ${S.region===r?"":"plain"}" data-act="region" data-v="${r}">${r==="all"?"All regions":REGIONS[r]}</button>`).join("")}</div>
+  ${hidden ? `<p class="small muted">${hidden} job${hidden>1?"s":""} hidden by your language, country or city choices. <button class="link" data-act="go" data-v="profile">Change</button></p>` : ""}
+  ${list.length ? "" : `<div class="empty">No jobs in this pack fit your choices.</div>`}
+  <div class="stack">${list.map(({j,ev}) => {
+    const a = S.apps[j.id], gaps = ev.rows.filter(r => r.e && !r.hit).length;
+    return `<button class="card job" data-act="open" data-v="${j.id}">
+      <div class="row"><div class="grow"><h3>${esc(j.title)}</h3><p class="muted small">${esc(j.org)} · ${esc(j.where)}, ${esc(j.country)}</p></div><div class="score">${ev.score}%</div></div>
+      <div class="bar"><span style="width:${ev.score}%"></span></div>
+      <div class="row"><span class="chip plain">${REGIONS[j.region]}</span><span class="chip plain">${j.direct?"Posted by employer":"Found: "+esc(j.src).toLowerCase()}</span>${j.french?`<span class="chip plain">Applies in French</span>`:""}
+        ${!ev.eligible ? `<span class="chip bad">Needs ${REQ_LABEL[j.req]}</span>` : gaps ? `<span class="chip gap">${gaps} essential gap${gaps>1?"s":""}</span>` : `<span class="chip">All essentials met</span>`}
+        ${ev.eligible ? (ev.score>=80 ? `<span class="chip">Agent applies</span>` : `<span class="chip plain">Under 80%, you decide</span>`) : ""}
+        ${a ? `<span class="chip">${a.status==="ready"?"Waiting for you":a.status==="submitted"?"Submitted":"Interview"}</span>` : ""}</div>
+    </button>`; }).join("")}</div>`;
+}
+function vApply(){
+  const j = job(S.jobId), ev = evalJob(j), a = ensureApp(j), ds = declsFor(j), done = a.status !== "ready";
+  const filled = [["Name, contact details","from your profile"],["Employment history","from your CV"],["Qualifications","from your CV"],["Tickets and memberships","from your credential passport"],["Supporting statement","the draft below"]];
+  const needAll = S.mode === "review";
+  const ok = allConfirmed(j) && (!needAll || a.reviewed) && ev.eligible;
+  return `<button class="link" data-act="back">← Back</button>
+  <div><h2>${esc(j.title)}</h2><p class="muted">${esc(j.org)} · ${esc(j.where)} · ${esc(j.src)}</p></div>
+  ${!ev.eligible ? `<div class="note">This post needs your ${REQ_LABEL[j.req]}. Add it in Profile to apply.</div>` : ""}
+  <section class="card"><div class="row"><span class="label grow">Requirements</span><span class="num">${ev.score}% match</span></div>
+    <div>${ev.rows.map(r => `<div class="crit"><span class="chip ${r.hit?"":"gap"}">${r.hit?"Met":"Gap"}</span><span>${esc(r.l)} <span class="muted small">${r.e?"essential":"desirable"}</span></span>${r.ev?`<span class="ev">“${esc(r.ev)}”</span>`:""}</div>`).join("")}</div></section>
+  <section class="card"><div class="row"><span class="label grow">Supporting statement${j.french?" · French":""}</span>
+      ${S.draftBusy ? `<button class="btn" data-act="stop">Stop</button>` : `<button class="btn" data-act="draft" ${done?"disabled":""}>${sample ? (a.ai?"Rewrite with Claude":"Write with Claude") : "Rebuild draft"}</button>`}</div>
+    <textarea id="statement" aria-label="Supporting statement" ${done||S.draftBusy?"readonly":""}>${esc(a.statement)}</textarea>
+    <p class="small muted" id="aiNote">${esc(S.aiNote || (sample ? "This draft was built from your CV without AI. Claude can tailor it to each requirement" + (j.french ? ", in French." : ".") : "Built from your CV. AI drafting is not available in this view."))}</p></section>
+  <section class="card"><span class="label">The agent fills these</span>
+    <dl class="kv">${filled.map(x => `<dt>${x[0]}</dt><dd>${x[1]}</dd>`).join("")}</dl>
+    ${needAll && !done ? `<label class="confirm ${a.reviewed?"on":""}"><input type="checkbox" id="c-reviewed" data-act="reviewed" ${a.reviewed?"checked":""}><span>I have checked every field above.</span></label>` : ""}</section>
+  <section class="card"><span class="label">Only you confirm these</span>
+    ${ds.length ? ds.map(d => `<label class="confirm ${a.confirmed[d.id]?"on":""}"><input type="checkbox" id="c-${d.id}" data-act="confirm" data-v="${d.id}" ${a.confirmed[d.id]?"checked":""} ${done?"disabled":""}><span>${d.l}<br><span class="muted small">The agent never answers this for you.</span></span></label>`).join("")
+      : `<p class="muted small">This form has no declarations. The employer or agency asks for them later.</p>`}</section>
+  ${done ? `<div class="card"><p><b>${a.status==="interview"?"Interview invited.":"Submitted (simulated)."}</b> ${a.by==="agent"?"Prepared by the agent.":""}</p><button class="btn" data-act="go" data-v="tracker">Open tracker</button></div>`
+    : `<button class="btn primary" data-act="submit" ${ok?"":"disabled"}>Approve and submit</button>${ok||!ev.eligible?"":`<p class="small muted">Tick each confirmation to enable submit.</p>`}`}`;
+}
+function vTracker(){
+  const ids = Object.keys(S.apps), lab = {ready:"Waiting for you", submitted:"Submitted", interview:"Interview"};
+  if (!ids.length) return `<h2>Tracker</h2><div class="empty">No applications yet. Open a match, or tap Run agent on the Jobs tab.</div>`;
+  const order = {ready:0, interview:1, submitted:2};
+  return `<h2>Tracker</h2>${S.agentMsg ? `<div class="note ok">${esc(S.agentMsg)}</div>` : ""}<div class="stack">${ids.sort((x,y) => order[S.apps[x].status]-order[S.apps[y].status]).map(id => { const j = job(id), a = S.apps[id];
+    return `<div class="card"><div class="row"><div class="grow"><h3>${esc(j.title)}</h3><p class="muted small">${esc(j.org)} · ${esc(j.where)} · prepared by ${a.by}</p></div><span class="chip ${a.status==="ready"?"gap":""}">${lab[a.status]}</span></div>
+      <div class="row">${a.status==="ready" ? `<button class="btn primary" data-act="open" data-v="${id}">Review and approve</button>` : ""}
+      ${a.status==="submitted" ? `<button class="btn" data-act="reply" data-v="${id}">Simulate an interview invite</button>` : ""}
+      ${a.status==="interview" ? `<button class="btn primary" data-act="practise" data-v="${id}">Practise for this interview</button>` : ""}</div></div>`; }).join("")}</div>`;
+}
+function vInterview(){
+  let iv = S.iv; if (job(iv.jobId).pack !== S.pack) iv = S.iv = {jobId: JOBS.find(j => j.pack === S.pack).id, q:0, answer:"", feedback:"", busy:false};
+  const j = job(iv.jobId), qs = QUESTIONS[j.pack], q = qs[iv.q % qs.length];
+  return `<h2>Interview buddy</h2>
+  <div class="card"><label class="label" for="ivjob">Practising for</label>
+    <select id="ivjob" data-act="ivjob">${JOBS.filter(x => x.pack === S.pack).map(x => `<option value="${x.id}" ${x.id===iv.jobId?"selected":""}>${esc(x.title)}</option>`).join("")}</select></div>
+  <div class="card"><span class="label">Question ${iv.q % qs.length + 1} of ${qs.length}</span><h3>${esc(q)}</h3>
+    <div class="row"><button class="link" data-act="nextq">Next question</button>${"speechSynthesis" in window ? `<button class="link" data-act="speak">Read it aloud</button>` : ""}</div>
+    <textarea id="ivanswer" aria-label="Your answer" placeholder="Type your answer as you would say it. Situation, what you had to do, what you did, how it ended.">${esc(iv.answer)}</textarea>
+    <div class="row">${iv.busy ? `<button class="btn" data-act="stop">Stop</button>` : `<button class="btn primary" data-act="feedback">Get feedback</button>`}</div>
+    ${iv.feedback ? `<pre class="fb" id="feedback">${esc(iv.feedback)}</pre>` : ""}</div>
+  <p class="small muted">Answers are checked against the STAR structure. Voice practice is in the full build, this demo is typed.</p>`;
+}
+function vProfile(){
+  const pk = PACKS[S.pack].profile, p = PASSPORTS[pk], own = pk === "infra";
+  const used = Object.values(PACKS).filter(x => x.profile === pk).map(x => x.name).join(", ");
+  const P = S.prefs, countries = [...new Set(JOBS.map(j => j.country))].sort();
+  const cities = [...new Set(JOBS.filter(j => P.countries.includes(j.country)).map(j => j.where))].sort();
+  const chips = (k, list) => list.map(v => `<button class="chip ${P[k].includes(v)?"":"plain"}" data-act="pref" data-k="${k}" data-v="${esc(v)}" aria-pressed="${P[k].includes(v)}">${esc(v)}</button>`).join("");
+  return `<h2>Profile</h2>
+  <div class="card"><span class="label">Where and how you can work</span>
+    <p class="small muted">Select nothing and everything is open to you. Each selection narrows what the agent finds and applies for.</p>
+    <span class="small"><b>Languages you speak</b> · ${P.langs.length ? esc(P.langs.join(", ")) : "any"}</span><div class="row">${chips("langs", LANGS)}</div>
+    <span class="small"><b>Countries</b> · ${P.countries.length ? P.countries.length + " selected" : "anywhere"}</span><div class="row">${chips("countries", countries)}</div>
+    <span class="small"><b>Cities</b> · ${P.cities.length ? esc(P.cities.join(", ")) : "anywhere in your countries"}</span>
+    ${P.countries.length ? `<div class="row">${chips("cities", cities)}</div>` : `<p class="small muted">Pick a country first to narrow by city.</p>`}
+    <p class="small muted">A language you select counts as evidence for jobs that ask for it. The demo lists only the countries in its sample jobs.</p></div>
+  <div class="card"><label class="label" for="cv">${own ? "Example CV · replace with a real one" : "Example CV · replace with a real one"}</label><textarea id="cv" style="min-height:260px">${esc(CVS[pk])}</textarea>
+    <p class="small muted">Used by: ${esc(used)}. Edit it and the match scores change. ${own ? "Try adding your languages or a ticket and reopen Jobs." : ""}</p></div>
+  <div class="card"><span class="label">${esc(p.title)}</span>
+    ${p.items.map(it => `<div class="field"><label class="small muted" for="pp-${it.id}">${esc(it.l)}</label><input type="text" id="pp-${it.id}" data-pp="${it.id}" value="${esc(it.v)}" placeholder="Not added"></div>`).join("")}
+    ${p.training.length ? `<span class="label">Mandatory training</span><div>${p.training.map(t => { const d = daysTo(t[1]); return `<div class="row" style="padding-block:6px;border-top:1px solid var(--line)"><span class="grow">${t[0]}</span><span class="num small">${t[1]}</span><span class="chip ${d<0?"bad":d<=30?"gap":""}">${d<0?"Expired":d<=30?d+" days left":"In date"}</span></div>`; }).join("")}</div>` : ""}
+    <p class="small muted">${esc(p.note)}</p></div>`;
+}
+
+/* ---------- Render and events ---------- */
+function render(){
+  document.getElementById("view").innerHTML = S.view === "apply" ? vApply() : S.view === "tracker" ? vTracker() : S.view === "interview" ? vInterview() : S.view === "profile" ? vProfile() : vJobs();
+  const sel = document.getElementById("pack");
+  if (!sel.options.length) sel.innerHTML = Object.keys(PACKS).map(k => `<option value="${k}">${PACKS[k].name} · ${JOBS.filter(j => j.pack === k).length} jobs</option>`).join("");
+  sel.value = S.pack;
+  document.querySelectorAll("#modes button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === S.mode));
+  document.getElementById("modeHelp").textContent = MODES[S.mode];
+  const waiting = Object.values(S.apps).filter(a => a.status === "ready").length;
+  const cur = S.view === "apply" ? "jobs" : S.view;
+  document.getElementById("tabs").innerHTML = [["jobs","Jobs"],["tracker","Tracker"],["interview","Interview"],["profile","Profile"]].map(t => `<button type="button" data-act="go" data-v="${t[0]}" ${cur===t[0]?'aria-current="page"':""}>${t[1]}${t[0]==="tracker"&&waiting?`<span class="count">${waiting}</span>`:""}</button>`).join("");
+}
+function go(view){ if (ctl) ctl.abort(); S.view = view; S.aiNote = ""; render(); window.scrollTo(0,0); }
+document.addEventListener("click", e => {
+  const m = e.target.closest("[data-mode]"); if (m) { S.mode = m.dataset.mode; render(); return; }
+  const t = e.target.closest("[data-act]"); if (!t || t.tagName === "INPUT" || t.tagName === "SELECT") return;
+  const act = t.dataset.act, v = t.dataset.v;
+  if (act === "go") go(v);
+  else if (act === "back") go("jobs");
+  else if (act === "region") { S.region = v; render(); }
+  else if (act === "pref") { const a = S.prefs[t.dataset.k], i = a.indexOf(v); if (i < 0) a.push(v); else a.splice(i, 1);
+    if (S.prefs.countries.length) S.prefs.cities = S.prefs.cities.filter(c => S.prefs.countries.includes(COUNTRY[c])); else S.prefs.cities = [];
+    Object.keys(S.apps).forEach(id => { if (S.apps[id].status === "ready" && !S.apps[id].ai) delete S.apps[id]; }); render(); }
+  else if (act === "open") { S.jobId = v; S.pack = job(v).pack; go("apply"); }
+  else if (act === "agent") runAgent();
+  else if (act === "draft") aiStatement(job(S.jobId));
+  else if (act === "stop") { if (ctl) ctl.abort(); }
+  else if (act === "submit") { S.apps[S.jobId].status = "submitted"; S.agentMsg = ""; go("tracker"); }
+  else if (act === "reply") { S.apps[v].status = "interview"; render(); }
+  else if (act === "practise") { S.pack = job(v).pack; S.iv = {jobId:v, q:0, answer:"", feedback:"", busy:false}; go("interview"); }
+  else if (act === "nextq") { S.iv.q++; S.iv.answer = ""; S.iv.feedback = ""; render(); }
+  else if (act === "feedback") aiFeedback();
+  else if (act === "speak") { try { const j = job(S.iv.jobId), qs = QUESTIONS[j.pack]; speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(qs[S.iv.q % qs.length])); } catch (_) {} }
+});
+document.addEventListener("change", e => {
+  const t = e.target, act = t.dataset && t.dataset.act;
+  if (t.id === "pack") { S.pack = t.value; S.region = "all"; go(S.view === "apply" ? "jobs" : S.view); }
+  else if (act === "confirm") { S.apps[S.jobId].confirmed[t.dataset.v] = t.checked; render(); }
+  else if (act === "reviewed") { S.apps[S.jobId].reviewed = t.checked; render(); }
+  else if (act === "ivjob") { S.iv = {jobId:t.value, q:0, answer:"", feedback:"", busy:false}; render(); }
+});
+document.addEventListener("input", e => {
+  const t = e.target, pk = PACKS[S.pack].profile;
+  if (t.id === "cv") CVS[pk] = t.value;
+  else if (t.dataset && t.dataset.pp) PASSPORTS[pk].items.find(x => x.id === t.dataset.pp).v = t.value;
+  else if (t.id === "statement" && S.apps[S.jobId]) S.apps[S.jobId].statement = t.value;
+  else if (t.id === "ivanswer") S.iv.answer = t.value;
+});
+render();
+(async () => { try { sample = window.claude && window.claude.use ? await window.claude.use("sample") : null; } catch (_) { sample = null; } if (!S.draftBusy && !S.iv.busy) { const a = document.activeElement; if (!a || !/TEXTAREA|INPUT/.test(a.tagName)) render(); } })();
+</script>
+
+</body></html>

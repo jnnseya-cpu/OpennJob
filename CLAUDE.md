@@ -149,3 +149,6 @@ as needing explicit sign-off from the owner.
   stay at `activeTab`, `scripting`, `storage`.
 - Plain British English in docs and messages. No marketing language.
 - Commits: one logical change, imperative subject. Do not push unless asked.
+
+## Next task
+The candidate web app. Read `docs/WEB-APP-BRIEF.md` and open `docs/prototype/opennjob-demo.html` first.
