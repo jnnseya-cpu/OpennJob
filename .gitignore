@@ -29,3 +29,8 @@ career-agent/dashboard/data.json
 career-agent/.venv/
 **/__pycache__/
 *.sqlite3
+
+# Written by deploy/install-hostinger.sh on the server
+/oj
+/compose.local.yml
+/.env.production

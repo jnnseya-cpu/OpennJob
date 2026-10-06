@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Install or update OpennJob on a Hostinger VPS (Ubuntu 22.04/24.04), as root:
 #
-#   cd /root
-#   curl -fsSL https://raw.githubusercontent.com/jnnseya-cpu/OpennJob/claude/busy-fermat-9hhn11/deploy/install-hostinger.sh -o install.sh
-#   bash install.sh
+#   cd /root && curl -fsSL https://raw.githubusercontent.com/jnnseya-cpu/OpennJob/claude/busy-fermat-9hhn11/deploy/install-hostinger.sh -o install.sh && bash install.sh
+#
+# Paste it as ONE line: the questions read the keyboard, so further pasted lines become answers.
 #
 # Two ways to run, chosen from what the server already does:
 #
@@ -44,7 +44,13 @@ existing_env() { [ -f "$DIR/$ENV_FILE" ] && grep -E "^$1=" "$DIR/$ENV_FILE" | he
 DOMAIN="${DOMAIN:-$(ask 'Domain for the app (its DNS A record must point here)' "$(existing_env DOMAIN | grep . || echo opennjob.com)")}"
 SUPPORT_EMAIL="${SUPPORT_EMAIL:-$(ask 'Support inbox: certificate notices, operator alerts, sender of e-mails' "$(existing_env ACME_EMAIL | grep . || echo support@opennjob.com)")}"
 ALLOWLIST="${OPENNJOB_REGISTRATION_ALLOWLIST:-$(ask 'Invited e-mail address(es), comma separated: the address(es) you will register with' "$(existing_env OPENNJOB_REGISTRATION_ALLOWLIST)")}"
-case "$ALLOWLIST" in *@*) ;; *) warn "That does not look like an e-mail address: $ALLOWLIST"; exit 1 ;; esac
+is_email() { [[ "$1" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; }
+is_domain() { [[ "$1" =~ ^([a-z0-9-]+\.)+[a-z]{2,}$ ]] && ! [[ "$1" =~ ^[0-9.]+$ ]]; }
+DOMAIN="$(printf '%s' "$DOMAIN" | tr 'A-Z' 'a-z')"
+is_domain "$DOMAIN" || { warn "'$DOMAIN' is not a domain name (an IP address will not get an HTTPS certificate). Run again and press Enter for opennjob.com."; exit 1; }
+is_email "$SUPPORT_EMAIL" || { warn "'$SUPPORT_EMAIL' is not an e-mail address. Run again and press Enter for support@opennjob.com."; exit 1; }
+IFS=',' read -r -a _invited <<<"$ALLOWLIST"
+for a in "${_invited[@]}"; do a="${a// /}"; is_email "$a" || { warn "'$a' is not an e-mail address."; exit 1; }; done
 
 say "== Packages"
 apt-get update -qq && apt-get install -y -qq curl git dnsutils openssl iproute2 >/dev/null
@@ -76,17 +82,30 @@ case " $HOLDERS " in
   *" docker-proxy "*) PROXY_KIND=docker ;;
 esac
 
+# When a web server in Docker holds port 443 (for example a Caddy container serving the other sites),
+# OpennJob joins that container's network and the web server reaches it by name.
+EDGE="$(docker ps --filter publish=443 --format '{{.Names}}' 2>/dev/null | head -1 || true)"
+EDGE_NET=""; EDGE_IMAGE=""; EDGE_CADDYFILE=""
+if [ -n "$EDGE" ] && [ "$EDGE" != "$OURS" ] && [ -z "$OURS" ] || [ -n "$(existing_env EDGE)" ]; then
+  EDGE="$(existing_env EDGE | grep . || echo "$EDGE")"
+  EDGE_NET="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$EDGE" | awk '{print $1}')"
+  EDGE_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$EDGE")"
+  EDGE_CADDYFILE="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' "$EDGE")"
+  if [ -z "$EDGE_CADDYFILE" ]; then
+    EDGE_DIR="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy"}}{{.Source}}{{end}}{{end}}' "$EDGE")"
+    [ -n "$EDGE_DIR" ] && [ -f "$EDGE_DIR/Caddyfile" ] && EDGE_CADDYFILE="$EDGE_DIR/Caddyfile"
+  fi
+  PROXY_KIND=docker
+  say "   Web server in Docker: $EDGE ($EDGE_IMAGE), network $EDGE_NET${EDGE_CADDYFILE:+, Caddyfile $EDGE_CADDYFILE}"
+fi
+
 WEB_PORT="$(existing_env WEB_PORT)"
 WEB_BIND="$(existing_env WEB_BIND)"
 if [ "$MODE" = proxy ] && [ -z "$WEB_PORT" ]; then
   WEB_PORT=8090
   while ss -Htln "( sport = :$WEB_PORT )" | grep -q .; do WEB_PORT=$((WEB_PORT + 1)); done
 fi
-# A web server that itself runs in Docker cannot reach the host's 127.0.0.1: listen on the Docker bridge instead.
-if [ "$MODE" = proxy ] && [ -z "$WEB_BIND" ]; then
-  if [ "$PROXY_KIND" = docker ]; then WEB_BIND="$(ip -4 addr show docker0 2>/dev/null | grep -oE 'inet [0-9.]+' | cut -d' ' -f2 || true)"; fi
-  WEB_BIND="${WEB_BIND:-127.0.0.1}"
-fi
+[ "$MODE" = proxy ] && WEB_BIND="${WEB_BIND:-127.0.0.1}"
 
 # --- Firewall: add rules, never switch it on without asking ------------------------------------
 if command -v ufw >/dev/null; then
@@ -141,12 +160,30 @@ ENV
   warn ""
 fi
 # How this server runs OpennJob (kept for updates).
-sed -i '/^OPENNJOB_MODE=/d;/^WEB_PORT=/d;/^WEB_BIND=/d' "$ENV_FILE"
-{ echo "OPENNJOB_MODE=$MODE"; if [ "$MODE" = proxy ]; then echo "WEB_PORT=$WEB_PORT"; echo "WEB_BIND=$WEB_BIND"; fi; } >> "$ENV_FILE"
+sed -i '/^OPENNJOB_MODE=/d;/^WEB_PORT=/d;/^WEB_BIND=/d;/^EDGE=/d' "$ENV_FILE"
+{ echo "OPENNJOB_MODE=$MODE"; if [ "$MODE" = proxy ]; then echo "WEB_PORT=$WEB_PORT"; echo "WEB_BIND=$WEB_BIND"; fi; [ -n "$EDGE_NET" ] && echo "EDGE=$EDGE"; } >> "$ENV_FILE"
+rm -f compose.local.yml
+if [ -n "$EDGE_NET" ]; then
+  # Join the web server's network, reachable there as "opennjob-web". Only the web container joins:
+  # the API and the database stay on OpennJob's own network.
+  cat > compose.local.yml <<YML
+services:
+  web:
+    networks:
+      default: {}
+      edge:
+        aliases: [opennjob-web]
+networks:
+  edge:
+    external: true
+    name: $EDGE_NET
+YML
+fi
 
 # A short command for later: ./oj ps | ./oj logs api | ./oj up -d --build
 FILES="-f docker-compose.prod.yml"
 [ "$MODE" = proxy ] && FILES="$FILES -f deploy/docker-compose.behind-proxy.yml"
+[ -f compose.local.yml ] && FILES="$FILES -f compose.local.yml"
 cat > oj <<OJ
 #!/bin/sh
 cd "$DIR" && exec docker compose $FILES --env-file $ENV_FILE "\$@"
@@ -216,6 +253,37 @@ if [ "$MODE" = proxy ]; then
     caddy)
       say "Your server runs Caddy. Add this to its Caddyfile (usually /etc/caddy/Caddyfile), then: systemctl reload caddy"
       say "$CADDY_SITE" ;;
+    docker)
+      BLOCK="$DOMAIN {
+	request_body {
+		max_size 6MB
+	}
+	reverse_proxy opennjob-web:8080
+}"
+      if [ -n "$EDGE_CADDYFILE" ] && [[ "$EDGE_IMAGE" == *caddy* ]]; then
+        if grep -qE "^[[:space:]]*(https?://)?$DOMAIN([[:space:],:{]|$)" "$EDGE_CADDYFILE"; then
+          say "   $EDGE_CADDYFILE already has a site for $DOMAIN; not changing it. It must forward to opennjob-web:8080."
+        elif yes_no "Add $DOMAIN to $EDGE_CADDYFILE (backed up first) and reload $EDGE? Other sites are not touched."; then
+          BACKUP="$EDGE_CADDYFILE.before-opennjob.$(date +%Y%m%d%H%M%S)"
+          cp -p "$EDGE_CADDYFILE" "$BACKUP"
+          printf '\n# OpennJob (added by deploy/install-hostinger.sh; backup: %s)\n%s\n' "$BACKUP" "$BLOCK" >> "$EDGE_CADDYFILE"
+          if docker exec "$EDGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
+             && docker exec "$EDGE" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+            say "   $EDGE reloaded. It gets the certificate for $DOMAIN itself."
+          else
+            warn "Caddy rejected the change; restoring $EDGE_CADDYFILE from the backup. Your other sites are as they were."
+            cat "$BACKUP" > "$EDGE_CADDYFILE"   # same file, so the container's bind mount still sees it
+            docker exec "$EDGE" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || true
+            exit 1
+          fi
+        else
+          say "Add this to $EDGE_CADDYFILE, then: docker exec $EDGE caddy reload --config /etc/caddy/Caddyfile"
+          say "$BLOCK"
+        fi
+      else
+        say "Ports 80/443 are held by the container $EDGE ($EDGE_IMAGE). OpennJob has joined its network $EDGE_NET as opennjob-web."
+        say "Add a site for $DOMAIN in it that forwards to http://opennjob-web:8080, with HTTPS and uploads up to 6 MB."
+      fi ;;
     *)
       say "Ports 80/443 are held by: ${HOLDERS:-unknown}. Add a site (proxy host) for $DOMAIN that forwards to $UPSTREAM"
       say "in that web server or panel, with HTTPS (Let's Encrypt) and uploads up to 6 MB allowed." ;;
