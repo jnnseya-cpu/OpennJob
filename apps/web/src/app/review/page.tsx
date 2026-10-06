@@ -266,6 +266,24 @@ function Review() {
             </p>
           </section>
 
+          {app.tailoredCv ? (
+            <section className="card" aria-label="What will be sent" data-testid="documents">
+              <span className="label">What will be sent</span>
+              <details>
+                <summary>
+                  CV for this job ·{' '}
+                  {app.tailoredCvSource === 'llm' ? 'rewritten by AI for this advert, every fact checked against your CV' : 'your own CV, the lines this advert asks for first'}
+                </summary>
+                <pre className="fb" data-testid="tailored-cv">{app.tailoredCv}</pre>
+              </details>
+              <details>
+                <summary>Cover letter · your supporting statement as a letter, attached when a form or the recruiter asks for one</summary>
+                <pre className="fb">{`Dear Hiring Manager,\n\n${statement.trim()}\n\nYours sincerely,`}</pre>
+              </details>
+              <p className="small muted">Both go as PDFs. On a form they are attached only to a field that asks for a CV or a cover letter; by e-mail both are attached.</p>
+            </section>
+          ) : null}
+
           <section className="card">
             <span className="label">The extension fills these</span>
             <dl className="kv">

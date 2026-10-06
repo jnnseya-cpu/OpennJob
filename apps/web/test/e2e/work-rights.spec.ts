@@ -80,6 +80,9 @@ test('Review: right to work is shown as filled from the record, and is no longer
   await expect(page.getByText('filled from your record: United Kingdom (British or Irish passport)')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Only you confirm these' })).not.toContainText('Right to work');
   await expect(page.getByTestId('auto-checklist')).toContainText('Right to work and sponsorship are answered from your record');
+  // What will be sent: the CV for this job and the cover letter.
+  await expect(page.getByTestId('documents')).toContainText('CV for this job');
+  await expect(page.getByTestId('documents')).toContainText('Cover letter');
   // Other declarations are still the person's.
   await expect(page.getByRole('region', { name: 'Only you confirm these' })).toContainText('Criminal convictions');
 });

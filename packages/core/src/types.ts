@@ -275,6 +275,8 @@ export interface Application {
   skippedAt?: string;
   /** The tailored CV (TAI-2). Encrypted at rest. */
   tailoredCv?: string;
+  /** 'llm': rewritten for the advert and traced to the CV at fact level; 'reorder': the CV's own lines, most relevant first. */
+  tailoredCvSource?: 'llm' | 'reorder';
   /** Sentences of the tailored documents that could not be traced to the source (TAI-3). */
   traceFailures?: string[];
   sentDocuments?: SentDocuments;

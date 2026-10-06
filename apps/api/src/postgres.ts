@@ -243,6 +243,7 @@ export class PostgresRepository implements Repository {
   private privateDataOf(a: Application): string | null {
     const p: Partial<Application> = {};
     if (a.tailoredCv !== undefined) p.tailoredCv = a.tailoredCv;
+    if (a.tailoredCvSource !== undefined) p.tailoredCvSource = a.tailoredCvSource;
     if (a.traceFailures !== undefined) p.traceFailures = a.traceFailures;
     if (a.sentDocuments !== undefined) p.sentDocuments = a.sentDocuments;
     if (a.receipt !== undefined) p.receipt = a.receipt;

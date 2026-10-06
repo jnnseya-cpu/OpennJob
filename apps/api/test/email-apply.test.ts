@@ -63,6 +63,7 @@ describe('applications by e-mail', () => {
     expect(m.fromName).toBe(`${PROFILE.firstName} ${PROFILE.lastName}`);
     expect(m.replyTo).toBe(PROFILE.email);
     expect(m.attachments?.[0]).toMatchObject({ filename: `${PROFILE.firstName}_${PROFILE.lastName}_CV.pdf`, contentType: 'application/pdf' });
+    expect(m.attachments?.[1]).toMatchObject({ filename: `${PROFILE.firstName}_${PROFILE.lastName}_Cover_Letter.pdf`, contentType: 'application/pdf' });
     expect(Buffer.from(m.attachments?.[0]?.content ?? []).toString('latin1').startsWith('%PDF-1.4')).toBe(true);
 
     const apps = (await t.api.get('/applications').expect(200)).body as Application[];

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createGreenhouseSource, createLeverSource, createSampleSource } from '@opennjob/core';
+import { createGreenhouseSource, createLeverSource, createSampleSource, CV_TAILOR_SYSTEM_PROMPT } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
 import { CV_TEXT, NOW, PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
@@ -270,13 +270,14 @@ describe('applications', () => {
       ]),
     );
     // The statement prompt went to the LLM with the essential criteria and the CV.
-    expect(llm.calls).toHaveLength(1);
+    expect(llm.calls.filter((c) => c.system !== CV_TAILOR_SYSTEM_PROMPT)).toHaveLength(1); // one call drafts the statement, one rewrites the CV for the advert
+    expect(llm.calls.filter((c) => c.system === CV_TAILOR_SYSTEM_PROMPT)).toHaveLength(1);
     expect(llm.calls[0]?.prompt).toContain('Medication administration');
     expect(llm.calls[0]?.prompt).toContain(CV_TEXT);
     const usage = (await t.api.get('/usage').expect(200)).body;
-    expect(usage.totals.calls).toBe(1);
+    expect(usage.totals.calls).toBe(2);
     expect(usage.totals.acu).toBeGreaterThan(0);
-    expect(usage.records[0]).toMatchObject({ userId: 'dev-user', purpose: 'supporting-statement', at: NOW });
+    expect(usage.records.map((r: { purpose: string }) => r.purpose).sort()).toEqual(['cv-tailoring', 'supporting-statement']);
   });
 
   it('drafts from CV sentences only when no LLM is configured, and lists gaps separately', async () => {

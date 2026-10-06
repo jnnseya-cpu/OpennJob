@@ -59,14 +59,19 @@ export function applicationEmail(job: Pick<Job, 'title' | 'employer' | 'descript
 }
 
 // ---------------------------------------------------------------------------------------
-// A plain, text-only PDF of the tailored CV. No library: one font (Helvetica), A4, wrapped lines.
+// PDFs of the tailored CV and the cover letter. No library: Helvetica and Helvetica-Bold, A4.
+// The CV's first line (the name) is large and bold, section headings bold, "- " bullets as "•".
 // ---------------------------------------------------------------------------------------
 
 /** WinAnsi text for a PDF string: accents kept where Latin-1 has them, anything else replaced. */
 function pdfText(s: string): string {
-  const swaps: Record<string, string> = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '•': '-', '…': '...', ' ': ' ' };
+  const swaps: Record<string, string> = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...', ' ': ' ' };
   let out = '';
   for (const ch of s) {
+    if (ch === '•') {
+      out += '\\225'; // WinAnsi bullet
+      continue;
+    }
     for (const d of swaps[ch] ?? ch) {
       const code = d.charCodeAt(0);
       if (d === '(' || d === ')' || d === '\\') out += `\\${d}`;
@@ -92,21 +97,83 @@ function wrap(line: string, width: number): string[] {
   return out;
 }
 
-/** The CV as PDF bytes (PDF 1.4, A4, Helvetica 9.5pt). */
-export function cvPdf(cvText: string): Uint8Array {
-  const lines = cvText.replace(/\r/g, '').split('\n').flatMap((l) => wrap(l.replace(/\t/g, '    '), 100));
-  const perPage = 62;
-  const pages: string[][] = [];
-  for (let i = 0; i < Math.max(1, lines.length); i += perPage) pages.push(lines.slice(i, i + perPage));
+interface StyledLine {
+  text: string;
+  bold: boolean;
+  size: number;
+  /** Space before the line, in points. */
+  before: number;
+}
 
-  // Object numbers are index + 1: 1 catalog, 2 pages, 3 font, then a content and a page object per page.
-  const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'];
+/** A section heading: a short line in capitals, or a usual CV heading ("Professional Experience"). */
+const HEADING = /^(?=.*\p{L})[\p{Lu}\p{N}\s&/,'-]{3,48}$|^(profile|summary|experience|education|skills|qualifications|certifications|languages|interests|references|key achievements|professional experience|work experience|employment history|core capabilities|key skills)$/u;
+
+function layoutCv(cvText: string): StyledLine[] {
+  const raw = cvText.replace(/\r/g, '').split('\n').map((l) => l.replace(/\t/g, '    ').trimEnd());
+  const out: StyledLine[] = [];
+  let first = true;
+  for (const line of raw) {
+    const t = line.trim();
+    if (!t) {
+      if (out.length) out.push({ text: '', bold: false, size: 6, before: 0 });
+      continue;
+    }
+    if (first) {
+      out.push({ text: t, bold: true, size: 16, before: 0 });
+      first = false;
+      continue;
+    }
+    if (HEADING.test(t.replace(/:$/, ''))) {
+      out.push({ text: t.replace(/:$/, '').toUpperCase(), bold: true, size: 10.5, before: 8 });
+      continue;
+    }
+    const bullet = /^[-*•]\s+/.test(t);
+    const body = bullet ? `•  ${t.replace(/^[-*•]\s+/, '')}` : t;
+    wrap(body, 98).forEach((part, i) => out.push({ text: i > 0 && bullet ? `    ${part}` : part, bold: false, size: 9.5, before: 0 }));
+  }
+  return out;
+}
+
+function layoutLetter(text: string): StyledLine[] {
+  const out: StyledLine[] = [];
+  for (const line of text.replace(/\r/g, '').split('\n')) {
+    if (!line.trim()) {
+      out.push({ text: '', bold: false, size: 6, before: 0 });
+      continue;
+    }
+    wrap(line.trim(), 92).forEach((part) => out.push({ text: part, bold: false, size: 10.5, before: 0 }));
+  }
+  return out;
+}
+
+function renderPdf(lines: StyledLine[]): Uint8Array {
+  const top = 800;
+  const bottom = 50;
+  const pages: string[][] = [[]];
+  let y = top;
+  for (const l of lines.length ? lines : [{ text: '', bold: false, size: 9.5, before: 0 }]) {
+    const step = l.before + l.size * 1.32;
+    if (y - step < bottom) {
+      pages.push([]);
+      y = top;
+    }
+    y -= step;
+    (pages[pages.length - 1] as string[]).push(`BT /${l.bold ? 'F2' : 'F1'} ${l.size} Tf 50 ${y.toFixed(1)} Td (${pdfText(l.text)}) Tj ET`);
+  }
+
+  // Object numbers are index + 1: 1 catalog, 2 pages, 3 and 4 fonts, then a content and a page object per page.
+  const objects: string[] = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
+  ];
   const kids: number[] = [];
   for (const page of pages) {
-    const content = ['BT', '/F1 9.5 Tf', '12.5 TL', '50 800 Td', ...page.map((l) => `(${pdfText(l)}) '`), 'ET'].join('\n');
+    const content = page.join('\n');
     objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
     const contentNo = objects.length;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentNo} 0 R >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentNo} 0 R >>`);
     kids.push(objects.length);
   }
   objects[1] = `<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`;
@@ -124,4 +191,39 @@ export function cvPdf(cvText: string): Uint8Array {
   const bytes = new Uint8Array(pdf.length);
   for (let i = 0; i < pdf.length; i += 1) bytes[i] = pdf.charCodeAt(i) & 0x7f;
   return bytes;
+}
+
+/** The CV as PDF bytes: the name large, headings bold, bullets. */
+export function cvPdf(cvText: string): Uint8Array {
+  return renderPdf(layoutCv(cvText));
+}
+
+/** The cover letter: the supporting statement as a dated letter, signed with the person's name. */
+export function coverLetterText(statement: string, profile: Pick<Profile, 'firstName' | 'lastName' | 'email' | 'phone'>, job: Pick<Job, 'title' | 'employer'>, date: Date): string {
+  const name = `${profile.firstName} ${profile.lastName}`.trim();
+  const body = statement.trim();
+  const opens = /^(dear|to whom)/i.test(body);
+  const closes = /(yours (sincerely|faithfully)|kind regards|best regards)[\s\S]{0,80}$/i.test(body);
+  return [
+    name,
+    [profile.phone, profile.email].filter(Boolean).join(' | '),
+    '',
+    date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' }),
+    '',
+    `Re: ${job.title}${job.employer ? `, ${job.employer}` : ''}`,
+    '',
+    ...(opens ? [] : ['Dear Hiring Manager,', '']),
+    body,
+    ...(closes ? [] : ['', 'Yours sincerely,', '', name]),
+  ].join('\n');
+}
+
+export function coverLetterPdf(letter: string): Uint8Array {
+  return renderPdf(layoutLetter(letter));
+}
+
+/** "Sam_Example_Cover_Letter.pdf" */
+export function coverLetterFileName(profile: Pick<Profile, 'firstName' | 'lastName'>): string {
+  const safe = `${profile.firstName} ${profile.lastName}`.trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'Cover';
+  return `${safe}_Cover_Letter.pdf`;
 }

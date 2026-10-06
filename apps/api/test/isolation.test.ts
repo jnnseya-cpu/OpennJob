@@ -238,14 +238,14 @@ for (const backend of BACKENDS) {
     });
 
     it('GET /usage, POST /interview/feedback: usage is metered and shown per user', async () => {
-      expect((await t.api.get('/usage').expect(200)).body.totals.calls).toBe(1); // A's statement draft
+      expect((await t.api.get('/usage').expect(200)).body.totals.calls).toBe(2); // A's statement draft and CV rewrite
       expect((await b.get('/usage').expect(200)).body).toEqual({ totals: { calls: 0, inputTokens: 0, outputTokens: 0, acu: 0 }, records: [] });
       await b.post('/interview/feedback').send({ question: 'Tell me about a time you worked in a team.', answer: 'On my ward we were short staffed, so I organised the handover.' }).expect(200);
       const usageB = (await b.get('/usage').expect(200)).body;
       expect(usageB.totals.calls).toBe(1);
       expect(usageB.records.every((r: { userId: string }) => r.userId === B_ID)).toBe(true);
       const usageA = (await t.api.get('/usage').expect(200)).body;
-      expect(usageA.totals.calls).toBe(1);
+      expect(usageA.totals.calls).toBe(2); // unchanged by B's call
       expect(usageA.records.every((r: { userId: string }) => r.userId === USER_ID)).toBe(true);
     });
 

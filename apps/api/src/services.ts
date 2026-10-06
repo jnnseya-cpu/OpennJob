@@ -28,6 +28,8 @@ import {
   scoreAnswer,
   interviewFromDocuments,
   tailorCv,
+  tailorCvForJob,
+  traceRewrittenCv,
   traceCheck,
   trainingWarnings,
   zonedDayStart,
@@ -355,10 +357,9 @@ export class OpennJobService {
 
   /** TAI-3: runs the trace check and returns the failures as the person will read them. */
   private static traceOf(statement: string, tailoredCv: string, job: Pick<Job, 'title' | 'employer' | 'location'>, profile: Profile, passport: Passport): string[] {
-    const failures = traceCheck(
-      { statement, tailoredCv },
-      { cvText: profile.cvText, passport, languages: preferencesOf(profile).languages, job, personName: `${profile.firstName} ${profile.lastName}` },
-    );
+    const sources = { cvText: profile.cvText, passport, languages: preferencesOf(profile).languages, job, personName: `${profile.firstName} ${profile.lastName}` };
+    // The statement and the CV at fact level: a CV rewritten for the advert may reword, never add a fact.
+    const failures = [...traceCheck({ statement }, sources), ...traceRewrittenCv(tailoredCv, sources)];
     return failures.map(describeTraceFailure);
   }
 
@@ -371,7 +372,10 @@ export class OpennJobService {
     const ceiling = await this.llmCeilingReached(userId);
     const input = { job, cvText: profile.cvText, match };
     const draft = ceiling ? draftStatementFallback(input) : await draftStatement(input, this.llmFor(userId, 'supporting-statement'));
-    const tailoredCv = tailorCv(profile.cvText, match);
+    // The CV rewritten for this advert, traced to the CV at fact level; the reordered CV if it does not trace.
+    const sources = { cvText: profile.cvText, passport, languages: preferencesOf(profile).languages, personName: `${profile.firstName} ${profile.lastName}` };
+    const tailored = await tailorCvForJob({ cvText: profile.cvText, job, match }, ceiling ? undefined : this.llmFor(userId, 'cv-tailoring'), sources);
+    const tailoredCv = tailored.text;
     const traceFailures = OpennJobService.traceOf(draft.statement, tailoredCv, job, profile, passport);
     const holds: string[] = [];
     if (ceiling) holds.push('llm-ceiling');
@@ -394,11 +398,12 @@ export class OpennJobService {
       createdAt: this.now(),
       dedupeKey: dedupeKey(job),
       tailoredCv,
+      tailoredCvSource: tailored.source,
       ...(traceFailures.length > 0 ? { traceFailures } : {}),
     };
     const application = withHolds(base, holds);
     await this.deps.repository.createApplication(application);
-    await this.emit(userId, 'application.drafted', { applicationId: application.id, jobId: job.id, mode: application.mode, statementSource: draft.source, score: match.score, gaps: draft.gaps.length, traceFailures: traceFailures.length, held: holds.length > 0 });
+    await this.emit(userId, 'application.drafted', { applicationId: application.id, jobId: job.id, mode: application.mode, statementSource: draft.source, cvSource: tailored.source, score: match.score, gaps: draft.gaps.length, traceFailures: traceFailures.length, held: holds.length > 0 });
     if (ceiling) await this.emit(userId, 'agent.llm_ceiling', { applicationId: application.id });
     return application;
   }

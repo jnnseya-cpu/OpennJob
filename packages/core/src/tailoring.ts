@@ -1,3 +1,4 @@
+import type { LlmPort } from './llm';
 import type { MatchResult } from './matching';
 import { FRENCH_FALLBACK_OPENING } from './statement';
 import type { Job, Passport } from './types';
@@ -6,11 +7,14 @@ import { escapeRegExp, splitSentences } from './text';
 /**
  * Truthful tailoring (TAI-2) and the trace check (TAI-3).
  *
- * The tailored CV is the person's own CV with its lines reordered: lines that evidence
- * the job's criteria come first (essential before desirable, in the order of the
- * person specification), then every other line in its original order. No line is
- * added, changed or dropped, so it cannot contain an employer, date, qualification,
- * figure or skill that the CV does not.
+ * The tailored CV is the person's CV rewritten for the advert by the LLM (tailorCvForJob):
+ * reworded, reordered and focused on what the advert asks for, but checked at fact level
+ * (traceRewrittenCv): every figure and name in it must be in the CV, the passport, the
+ * selected languages or the person's name. If the rewrite fails that check, or there is no
+ * LLM, it is the person's own CV with its lines reordered (tailorCv): lines that evidence
+ * the job's criteria come first, then every other line in its original order, with no line
+ * added, changed or dropped. Either way it cannot contain an employer, date,
+ * qualification, figure or skill that the CV does not.
  *
  * The trace check runs on every document before it may be sent. A document fails when a
  * sentence cannot be traced to the source: the CV, the credential passport, the languages
@@ -37,6 +41,81 @@ export function tailorCv(cvText: string, match: Pick<MatchResult, 'hits'>): stri
   }
   const rest = lines.map((_, n) => n).filter((n) => !first.includes(n));
   return [...first, ...rest].map((n) => lines[n] as string).join('\n');
+}
+
+/** The usual CV section headings, in any case. Only these are exempt from the fact check. */
+const CV_HEADINGS =
+  /^(professional |personal |career )?(profile|summary|statement)$|^(key |core )?(skills|capabilities|competencies|strengths)( and (capabilities|competencies|qualifications))?$|^(professional |work |employment |relevant |career )?(experience|history)$|^(education|qualifications|education and (training|qualifications)|training|certifications?|accreditations?|professional (memberships?|development|qualifications)|memberships?|languages|interests|references|achievements|key achievements|selected projects|projects|contact( details)?)$/i;
+
+export const CV_TAILOR_SYSTEM_PROMPT =
+  'You rewrite a candidate\'s CV for one job advert. You use ONLY facts already in the CV: never add an employer, job title, ' +
+  'date, number, qualification, certificate, membership, skill, tool or achievement that the CV does not state. You may: ' +
+  'rewrite the profile summary towards this role; reorder sections, roles and bullets so the most relevant come first; ' +
+  'reword bullets using the advert\'s terms where the CV shows the same thing; shorten or drop lines that do not help. ' +
+  'Keep every employer name, job title and date exactly as written. Plain text only: the candidate\'s name on the first ' +
+  'line, contact line second, section headings in CAPITALS on their own line, bullets starting with "- ". Reply with the CV ' +
+  'only, no commentary.';
+
+export interface TailoredCv {
+  text: string;
+  /** 'llm': rewritten for the advert and traced to the CV. 'reorder': the CV's own lines, most relevant first. */
+  source: 'llm' | 'reorder';
+}
+
+/**
+ * The CV rewritten for one advert by the LLM, then traced to the source (TAI-3). If the rewrite
+ * states anything the CV, passport or selected languages do not (a new figure, employer,
+ * qualification...), or the call fails, the person's own lines reordered are used instead
+ * (tailorCv), so nothing untrue is ever sent and the application is not held for it.
+ */
+export async function tailorCvForJob(
+  input: { cvText: string; job: Pick<Job, 'title' | 'employer' | 'location' | 'description'>; match: Pick<MatchResult, 'hits'> },
+  llm: LlmPort | undefined,
+  sources: TraceSources,
+): Promise<TailoredCv> {
+  const reorder: TailoredCv = { text: tailorCv(input.cvText, input.match), source: 'reorder' };
+  if (!llm) return reorder;
+  const met = input.match.hits.filter((h) => h.matched).map((h) => h.criterion.label);
+  const prompt = [
+    `JOB: ${input.job.title} at ${input.job.employer} (${input.job.location})`,
+    met.length ? `REQUIREMENTS THE CV MEETS (lead with these): ${met.join('; ')}` : '',
+    'ADVERT:',
+    input.job.description.slice(0, 6000),
+    '',
+    'CV:',
+    input.cvText.slice(0, 12000),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  try {
+    const text = (await llm.complete({ system: CV_TAILOR_SYSTEM_PROMPT, prompt, maxTokens: 2500 })).text.trim();
+    if (text.length < 200) return reorder;
+    return traceRewrittenCv(text, sources).length === 0 ? { text, source: 'llm' } : reorder;
+  } catch {
+    return reorder;
+  }
+}
+
+/**
+ * The trace check for a CV rewritten for an advert: the same standard as a statement. Wording may
+ * change; facts may not. Every figure (dates, years, amounts, percentages, counts) and every name
+ * (employers, qualifications, places, tools, memberships) in each line must appear in the CV, the
+ * passport, the selected languages or the person's own name. Unlike a statement, the advert's
+ * employer and title are NOT accepted: a CV must not appear to claim work there.
+ */
+export function traceRewrittenCv(text: string, sources: TraceSources): TraceFailure[] {
+  const factCorpus = `${sources.cvText}\n${passportText(sources.passport)}`;
+  const nameCorpus = [factCorpus, ...(sources.languages ?? []), sources.personName ?? ''].join('\n');
+  const failures: TraceFailure[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    // A section heading ("KEY SKILLS", "Professional Experience") states no fact.
+    if (CV_HEADINGS.test(line.trim().replace(/[:\s]+$/, ''))) continue;
+    const { figures, names } = factsIn(line);
+    const unsupported = [...figures.filter((f) => !contains(factCorpus, f)), ...names.filter((n) => !contains(nameCorpus, n))];
+    if (unsupported.length > 0) failures.push({ document: 'tailoredCv', text: line.trim(), unsupported });
+  }
+  return failures;
 }
 
 export interface TraceSources {

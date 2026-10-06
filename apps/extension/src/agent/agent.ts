@@ -1,7 +1,7 @@
 import { decide, fieldsAllowedToFill, maySubmit, screeningKey, workRightsAnswer } from '@opennjob/core/browser';
 import type { FillValue, FillValues, PolicyField, WorkRightsContext } from '@opennjob/core/browser';
 import { blockerMessage, detectBlockers } from './blockers';
-import { attachCv, countFileInputs } from './files';
+import { attachCoverLetter, attachCv, countFileInputs } from './files';
 import { fillField } from './fill';
 import { hasValue, scanFields } from './scan';
 import type { DetectedField, FieldReport, FieldState, RunReport, RunRequest, SubmitReport } from './types';
@@ -113,6 +113,7 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
 
   // The CV, as a PDF, into a field that asks for a CV and nothing else (files.ts). Not on a preview.
   const cvAttached = !dryRun && request.cv ? attachCv(doc, request.cv) : 0;
+  const coverLetterAttached = !dryRun && request.coverLetter ? attachCoverLetter(doc, request.coverLetter) : 0;
 
   // Decide on the state of the page AFTER filling.
   const decision = decide({ mode: request.mode, fields: toPolicy(), confirmedFieldIds });
@@ -152,7 +153,7 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
         : 'Filled. Check every field, then press submit on the page yourself. OpennJob never presses submit in this mode.';
   }
 
-  return { ...base, status: 'ok', blockers: [], decision, submitted, fields: reports, message, fileInputs, ...(cvAttached ? { cvAttached } : {}), ...(readyToSubmit !== undefined ? { readyToSubmit } : {}) };
+  return { ...base, status: 'ok', blockers: [], decision, submitted, fields: reports, message, fileInputs, ...(cvAttached ? { cvAttached } : {}), ...(coverLetterAttached ? { coverLetterAttached } : {}), ...(readyToSubmit !== undefined ? { readyToSubmit } : {}) };
 }
 
 

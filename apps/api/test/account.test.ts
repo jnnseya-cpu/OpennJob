@@ -42,8 +42,8 @@ for (const backend of BACKENDS) {
       expect([...body.applications].sort((x: Application, y: Application) => x.id.localeCompare(y.id))).toEqual([...applications].sort((x, y) => x.id.localeCompare(y.id)));
       expect(body.applications.find((a: Application) => a.status === 'confirmed')).toMatchObject({ confirmedFields: ['nmcPin'], statement: expect.stringContaining('registered nurse') });
       expect(body.events.map((e: { type: string }) => e.type)).toEqual(['profile.updated', 'passport.updated', 'jobs.refreshed', 'application.drafted', 'application.confirmed', 'application.drafted']);
-      expect(body.usage).toHaveLength(2);
-      expect(body.usage.every((u: { userId: string; purpose: string }) => u.userId === USER_ID && u.purpose === 'supporting-statement')).toBe(true);
+      expect(body.usage).toHaveLength(4); // one call drafts the statement, one rewrites the CV for the advert, for each of the two applications
+      expect(body.usage.every((u: { userId: string; purpose: string }) => u.userId === USER_ID && ['supporting-statement', 'cv-tailoring'].includes(u.purpose))).toBe(true);
       expect(JSON.stringify(body)).not.toMatch(/passwordHash|password_hash|\$2b\$/);
     });
 
@@ -104,7 +104,7 @@ for (const backend of BACKENDS) {
       const count = async (table: string, column: string): Promise<number> => Number((await pool.query(`SELECT count(*) AS n FROM ${table} WHERE ${column} = $1`, [USER_ID])).rows[0]?.n);
       const tables: [string, string][] = [['users', 'id'], ['profiles', 'user_id'], ['passports', 'user_id'], ['applications', 'user_id'], ['events', 'user_id'], ['usage_records', 'user_id']];
       const before = Object.fromEntries(await Promise.all(tables.map(async ([table, column]) => [table, await count(table, column)])));
-      expect(before).toEqual({ users: 1, profiles: 1, passports: 1, applications: 2, events: 6, usage_records: 2 });
+      expect(before).toEqual({ users: 1, profiles: 1, passports: 1, applications: 2, events: 6, usage_records: 4 }); // a statement and a CV rewrite per application
       await t.api.delete('/account').send({ password: USER_PASSWORD }).expect(200);
       for (const [table, column] of tables) expect(await count(table, column), table).toBe(0);
       // Nothing anywhere in the database still mentions the id (jobs and the system event included).

@@ -412,7 +412,7 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         await repo.updateApplication(sent);
         expect(await repo.getApplication(a, full.id)).toEqual(sent);
         // The person's record of what came of it, and a skip, survive a round trip.
-        const answered: Application = { ...sent, status: 'interview', outcome: 'interview', outcomeAt: NOW, skippedAt: NOW };
+        const answered: Application = { ...sent, status: 'interview', outcome: 'interview', outcomeAt: NOW, skippedAt: NOW, tailoredCvSource: 'llm' };
         await repo.updateApplication(answered);
         expect(await repo.getApplication(a, full.id)).toEqual(answered);
         expect(await repo.deleteApplication(b, full.id)).toBe(false); // not B's

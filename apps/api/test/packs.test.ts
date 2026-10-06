@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createSampleSource } from '@opennjob/core';
+import { createSampleSource, CV_TAILOR_SYSTEM_PROMPT } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
 import { buildSearchSources, DEFAULT_APPLY_THRESHOLD, applyThresholdOf, buildSources, loadConfig } from '../src/deps';
 import type { OpennJobDeps } from '../src/deps';
@@ -417,7 +417,7 @@ describe('POST /agent/run: the 80% rule', () => {
     await t.api.post('/jobs/refresh').expect(200);
     res = await t.api.post('/agent/run').send({}).expect(200);
     expect(res.body.prepared).toHaveLength(1);
-    expect(llm.calls).toHaveLength(1);
+    expect(llm.calls.filter((c) => c.system !== CV_TAILOR_SYSTEM_PROMPT)).toHaveLength(1); // one call drafts the statement, one rewrites the CV for the advert
     expect(llm.calls[0]?.system).toMatch(/formal French/);
     expect(llm.calls[0]?.system).toMatch(/Use only evidence that is present in the CV/);
     expect(llm.calls[0]?.prompt).toMatch(/NOT IN THE CV\. The applicant states in their profile that they speak French/);

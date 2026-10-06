@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advertReference, applicationEmail, cvPdf, recruiterEmailIn } from '../src';
+import { advertReference, applicationEmail, coverLetterFileName, coverLetterPdf, coverLetterText, cvPdf, recruiterEmailIn } from '../src';
 
 /** Applications by e-mail. Fictional people, recruiters and employers only. */
 describe('the recruiter address in an advert', () => {
@@ -49,8 +49,45 @@ describe('the CV as a PDF', () => {
     expect(pdf.slice(xrefAt, xrefAt + 4)).toBe('xref');
     const offsets = [...pdf.slice(xrefAt).matchAll(/^(\d{10}) 00000 n $/gm)].map((m) => Number(m[1]));
     offsets.forEach((o, i) => expect(pdf.slice(o, o + `${i + 1} 0 obj`.length)).toBe(`${i + 1} 0 obj`));
-    expect(pdf).toContain('(Sam Example \\(fictional\\)) \'');
+    expect(pdf).toContain('/F2 16 Tf 50 '); // the name, large and bold
+    expect(pdf).toContain('(Sam Example \\(fictional\\)) Tj');
     expect(pdf).toContain('G\\351rant'); // é in WinAnsi
     expect([...bytes].every((b) => b < 128)).toBe(true);
+  });
+});
+
+describe('headings, bullets and the cover letter', () => {
+  it('sets headings in bold and turns "- " into a bullet', () => {
+    const pdf = Buffer.from(cvPdf('Sam Example (fictional)\nPROFESSIONAL EXPERIENCE\n- Led a hospital new build')).toString('latin1');
+    expect(pdf).toContain('/F2 10.5 Tf 50');
+    expect(pdf).toContain('(PROFESSIONAL EXPERIENCE) Tj');
+    expect(pdf).toContain('(\\225  Led a hospital new build) Tj');
+  });
+
+  it('the cover letter is the statement as a dated, signed letter, adding nothing else', () => {
+    const profile = { firstName: 'Sam', lastName: 'Example', email: 'sam.example@example.org', phone: '07700 900222' };
+    const letter = coverLetterText('I led multidisciplinary teams on a hospital new build.', profile, { title: 'Senior Project Manager', employer: 'Example Build (fictional)' }, new Date('2026-10-06T09:00:00Z'));
+    expect(letter.split('\n')).toEqual([
+      'Sam Example',
+      '07700 900222 | sam.example@example.org',
+      '',
+      '6 October 2026',
+      '',
+      'Re: Senior Project Manager, Example Build (fictional)',
+      '',
+      'Dear Hiring Manager,',
+      '',
+      'I led multidisciplinary teams on a hospital new build.',
+      '',
+      'Yours sincerely,',
+      '',
+      'Sam Example',
+    ]);
+    // A statement that already opens and signs off is not wrapped twice.
+    const own = coverLetterText('Dear Ms Example,\nI led teams.\nKind regards,\nSam', profile, { title: 'PM', employer: '' }, new Date('2026-10-06T09:00:00Z'));
+    expect(own.match(/Dear/g)).toHaveLength(1);
+    expect(own).not.toContain('Yours sincerely');
+    expect(Buffer.from(coverLetterPdf(letter)).toString('latin1').startsWith('%PDF-1.4')).toBe(true);
+    expect(coverLetterFileName(profile)).toBe('Sam_Example_Cover_Letter.pdf');
   });
 });

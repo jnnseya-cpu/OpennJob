@@ -9,5 +9,5 @@ export * from './policy';
 export * from './fields';
 export { screeningKey } from './screening';
 export * from './work-rights';
-export { cvPdf } from './email-apply';
+export { cvPdf, coverLetterPdf, coverLetterText, coverLetterFileName } from './email-apply';
 export type { WorkRightsRecord } from './types';

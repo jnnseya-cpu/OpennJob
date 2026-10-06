@@ -9,10 +9,12 @@ import { VALUES, openFixture } from './helpers';
  */
 const CV = { fileName: 'Amara_Okafor_CV.pdf', text: 'Amara Okafor (fictional)\nRegistered nurse with five years of experience on acute medical wards.' };
 
-const run = (page: import('@playwright/test').Page, withCv: boolean) =>
+const LETTER = { fileName: 'Amara_Okafor_Cover_Letter.pdf', text: 'Amara Okafor\n\nDear Hiring Manager,\n\nI am a registered nurse (fictional).\n\nYours sincerely,\n\nAmara Okafor' };
+
+const run = (page: import('@playwright/test').Page, withCv: boolean, withLetter = false) =>
   page.evaluate(
     (request) => (window as unknown as { __opennjob: { run: (r: unknown) => RunReport } }).__opennjob.run(request),
-    { mode: 'auto', values: VALUES, confirmedFieldIds: [], holdSubmit: true, ...(withCv ? { cv: CV } : {}) },
+    { mode: 'auto', values: VALUES, confirmedFieldIds: [], holdSubmit: true, ...(withCv ? { cv: CV } : {}), ...(withLetter ? { coverLetter: LETTER } : {}) },
   );
 const submit = (page: import('@playwright/test').Page) => page.evaluate(() => (window as unknown as { __opennjob: { submit: () => SubmitReport } }).__opennjob.submit());
 const file = (page: import('@playwright/test').Page, id: string) =>
@@ -51,6 +53,14 @@ test('a required cover-letter file is never filled with the CV, and keeps the fo
   expect(report.fileInputs).toEqual({ required: 1, total: 2 });
   expect(report.readyToSubmit).toBe(false);
   expect((await submit(page)).submitted).toBe(false);
+});
+
+test('a required cover-letter field gets the cover letter, never the CV, and then the form is ready', async ({ page }) => {
+  await openFixture(page, 'queue-cv-cover.html');
+  const report = await run(page, true, true);
+  expect(report).toMatchObject({ cvAttached: 1, coverLetterAttached: 1, fileInputs: { required: 0, total: 2 }, readyToSubmit: true });
+  expect(await file(page, 'q-cv')).toMatchObject({ name: 'Amara_Okafor_CV.pdf' });
+  expect(await file(page, 'q-cover')).toEqual({ name: 'Amara_Okafor_Cover_Letter.pdf', type: 'application/pdf', head: '%PDF-1.4' });
 });
 
 test('a preview attaches nothing', async ({ page }) => {

@@ -68,6 +68,8 @@ export interface RunRequest {
   workRights?: WorkRightsContext;
   /** The tailored CV, attached as a PDF to a field that asks for a CV (files.ts). */
   cv?: { fileName: string; text: string };
+  /** The cover letter, attached as a PDF to a field that asks for a cover letter (files.ts). */
+  coverLetter?: { fileName: string; text: string };
 }
 
 export interface RunReport {
@@ -83,6 +85,8 @@ export interface RunReport {
   fileInputs?: { required: number; total: number };
   /** How many CV fields got the CV attached. */
   cvAttached?: number;
+  /** How many cover-letter fields got the cover letter attached. */
+  coverLetterAttached?: number;
   fields: FieldReport[];
   message: string;
 }

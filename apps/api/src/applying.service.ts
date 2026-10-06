@@ -8,6 +8,9 @@ import {
   applicationEmail,
   applicationSystemFor,
   buildFillValues,
+  coverLetterFileName,
+  coverLetterPdf,
+  coverLetterText,
   cvPdf,
   escapeHtml,
   recruiterEmailIn,
@@ -234,7 +237,10 @@ export class ApplyingService {
         html: `<pre style="font-family:inherit;white-space:pre-wrap">${escapeHtml(message.text)}</pre>`,
         fromName: `${profile.firstName} ${profile.lastName}`.trim(),
         replyTo: profile.email,
-        attachments: [{ filename: message.cvFileName, content: cvPdf(application.tailoredCv || profile.cvText), contentType: 'application/pdf' }],
+        attachments: [
+          { filename: message.cvFileName, content: cvPdf(application.tailoredCv || profile.cvText), contentType: 'application/pdf' },
+          { filename: coverLetterFileName(profile), content: coverLetterPdf(coverLetterText(application.statement, profile, job, this.deps.clock())), contentType: 'application/pdf' },
+        ],
       });
       if (outcome === 'sent') {
         await this.service.recordSubmission(
@@ -273,6 +279,8 @@ export class ApplyingService {
       ...(workRights ? { workRights } : {}),
       // The tailored CV, attached as a PDF to a field that asks for a CV (the extension's files.ts).
       cv: { fileName: applicationEmail(job ?? { title: application.jobTitle, employer: application.employer, description: '' }, profile, '').cvFileName, text: application.tailoredCv || profile.cvText },
+      // The cover letter (the statement as a letter), attached to a field that asks for one.
+      coverLetter: { fileName: coverLetterFileName(profile), text: coverLetterText(application.statement, profile, { title: application.jobTitle, employer: application.employer }, this.deps.clock()) },
     };
   }
 

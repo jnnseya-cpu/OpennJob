@@ -2,7 +2,7 @@
  * Popup UI. Everything the agent does starts from a button press here.
  * Page-derived text (field labels) is only ever written with textContent.
  */
-import { buildFillValues } from '@opennjob/core/browser';
+import { buildFillValues, coverLetterFileName, coverLetterText } from '@opennjob/core/browser';
 import type { Application, FillValues, Mode, Passport, Profile } from '@opennjob/core/browser';
 import type { Confirmation } from '../agent/confirmation';
 import type { FieldReport, RunReport, RunRequest } from '../agent/types';
@@ -382,7 +382,16 @@ async function run(dryRun: boolean): Promise<void> {
     const mode = modeSelect.value as Mode;
     const cvText = selectedApplication()?.tailoredCv || profile?.cvText || '';
     const cvName = `${`${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim().replace(/[^A-Za-z0-9]+/g, '_') || 'CV'}_CV.pdf`;
-    const report = await sendToPage({ mode, values: fillValues(), confirmedFieldIds: [...confirmed], dryRun, ...(cvText ? { cv: { fileName: cvName, text: cvText } } : {}) });
+    const selected = selectedApplication();
+    const letter = selected && profile ? coverLetterText(selected.statement, profile, { title: selected.jobTitle, employer: selected.employer }, new Date()) : '';
+    const report = await sendToPage({
+      mode,
+      values: fillValues(),
+      confirmedFieldIds: [...confirmed],
+      dryRun,
+      ...(cvText ? { cv: { fileName: cvName, text: cvText } } : {}),
+      ...(letter && profile ? { coverLetter: { fileName: coverLetterFileName(profile), text: letter } } : {}),
+    });
     render(report);
     if (!dryRun) await recordOutcome(report);
   } catch (err) {

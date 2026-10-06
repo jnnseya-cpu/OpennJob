@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FakeLlm, createSampleSource } from '@opennjob/core';
+import { FakeLlm, createSampleSource, CV_TAILOR_SYSTEM_PROMPT } from '@opennjob/core';
 import type { Application, Job, JobSourceAdapter } from '@opennjob/core';
 import { signAccessToken } from '../src/auth';
 import type { OpennJobDeps } from '../src/deps';
@@ -262,6 +262,6 @@ describe('spec T-21: reaching the LLM spending ceiling holds new drafts and reco
     const app = (await t.api.post('/applications').send({ jobId: NURSE_JOB, mode: 'hybrid' }).expect(201)).body as Application;
     expect(app).toMatchObject({ status: 'draft', statementSource: 'llm' });
     expect(app.holdReasons).toBeUndefined();
-    expect(llm.calls).toHaveLength(1);
+    expect(llm.calls.filter((c) => c.system !== CV_TAILOR_SYSTEM_PROMPT)).toHaveLength(1); // one call drafts the statement, one rewrites the CV for the advert
   });
 });

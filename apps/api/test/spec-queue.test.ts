@@ -298,6 +298,9 @@ describe('OD-5: right to work and sponsorship from the person\'s own record', ()
     // The tailored CV goes with it, to be attached to a field that asks for a CV.
     expect(next.cv.fileName).toBe(`${PROFILE.firstName}_${PROFILE.lastName}_CV.pdf`);
     expect(next.cv.text.length).toBeGreaterThan(0);
+    // And the cover letter: the statement as a letter, for a field that asks for one.
+    expect(next.coverLetter.fileName).toBe(`${PROFILE.firstName}_${PROFILE.lastName}_Cover_Letter.pdf`);
+    expect(next.coverLetter.text).toContain('Dear Hiring Manager,');
   });
 
   it('without a record the queue says so, and sponsorship has no value', async () => {
