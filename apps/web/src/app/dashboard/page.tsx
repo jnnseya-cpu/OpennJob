@@ -79,45 +79,47 @@ export default function DashboardPage() {
           { label: 'Unread notifications', value: inbox.unread, testId: 'stat-unread' },
         ]}
       />
-      <section className="card">
-        <Histogram title="How your matches score" bins={scoreBins(matches.map((m) => m.score))} threshold={threshold} thresholdLabel={`Agent prepares at ${threshold}%`} />
-      </section>
-      <section className="card">
-        <StageBar
-          title="Application pipeline"
-          stages={[
-            { label: 'Waiting for you', count: waiting },
-            { label: 'Approved, not sent', count: apps.filter((a) => a.status === 'confirmed').length },
-            { label: 'Submitted', count: submitted },
-          ]}
-        />
-      </section>
-      <section className="card">
-        <BarList title="Matches by industry pack" rows={byPack} valueHead="Jobs" empty="No matches yet. Open Matches and look for jobs." />
-      </section>
-      <section className="card">
-        <BarList title="Training: days until expiry" rows={training} unit=" d" valueHead="Days left" empty="No training with an expiry date in your passport." />
-      </section>
-      <section className="card">
-        <div className="row">
-          <h3 className="grow">Latest notifications</h3>
-          <Link href="/notifications/" className="small">
-            All notifications
-          </Link>
-        </div>
-        {inbox.items.length ? (
-          <ul className="plain small">
-            {inbox.items.slice(0, 5).map((n) => (
-              <li key={n.id}>
-                {n.readAt ? '' : '● '}
-                {n.subject}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="small muted">Nothing yet.</p>
-        )}
-      </section>
+      <div className="cols">
+        <section className="card">
+          <Histogram title="How your matches score" bins={scoreBins(matches.map((m) => m.score))} threshold={threshold} thresholdLabel={`Agent prepares at ${threshold}%`} />
+        </section>
+        <section className="card">
+          <StageBar
+            title="Application pipeline"
+            stages={[
+              { label: 'Waiting for you', count: waiting },
+              { label: 'Approved, not sent', count: apps.filter((a) => a.status === 'confirmed').length },
+              { label: 'Submitted', count: submitted },
+            ]}
+          />
+        </section>
+        <section className="card">
+          <BarList title="Matches by industry pack" rows={byPack} valueHead="Jobs" empty="No matches yet. Open Matches and look for jobs." />
+        </section>
+        <section className="card">
+          <BarList title="Training: days until expiry" rows={training} unit=" d" valueHead="Days left" empty="No training with an expiry date in your passport." />
+        </section>
+        <section className="card span">
+          <div className="row">
+            <h3 className="grow">Latest notifications</h3>
+            <Link href="/notifications/" className="small">
+              All notifications
+            </Link>
+          </div>
+          {inbox.items.length ? (
+            <ul className="plain small">
+              {inbox.items.slice(0, 5).map((n) => (
+                <li key={n.id}>
+                  {n.readAt ? '' : '● '}
+                  {n.subject}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="small muted">Nothing yet.</p>
+          )}
+        </section>
+      </div>
     </>
   );
 }

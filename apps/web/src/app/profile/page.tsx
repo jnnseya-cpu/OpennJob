@@ -244,218 +244,220 @@ export default function ProfilePage() {
   return (
     <>
       <h2>Profile</h2>
-      <form className="stack" onSubmit={saveProfile} aria-label="Profile">
-        <section className="card">
-          <span className="label">Your details</span>
-          <div className="grid2">
-            <label className="field"><span>First name</span><input type="text" autoComplete="given-name" value={details.firstName} onChange={set('firstName')} /></label>
-            <label className="field"><span>Last name</span><input type="text" autoComplete="family-name" value={details.lastName} onChange={set('lastName')} /></label>
-            <label className="field"><span>Email for applications</span><input type="email" autoComplete="email" value={details.email} onChange={set('email')} /></label>
-            <label className="field"><span>Phone</span><input type="tel" autoComplete="tel" value={details.phone} onChange={set('phone')} /></label>
-            <label className="field"><span>Address line 1</span><input type="text" autoComplete="address-line1" value={details.addressLine1} onChange={set('addressLine1')} /></label>
-            <label className="field"><span>Address line 2 (optional)</span><input type="text" autoComplete="address-line2" value={details.addressLine2} onChange={set('addressLine2')} /></label>
-            <label className="field"><span>Town or city</span><input type="text" autoComplete="address-level2" value={details.city} onChange={set('city')} /></label>
-            <label className="field"><span>Postcode</span><input type="text" autoComplete="postal-code" value={details.postcode} onChange={set('postcode')} /></label>
-          </div>
-        </section>
+      <div className="cols">
+        <form className="stack" onSubmit={saveProfile} aria-label="Profile">
+          <section className="card">
+            <span className="label">Your details</span>
+            <div className="grid2">
+              <label className="field"><span>First name</span><input type="text" autoComplete="given-name" value={details.firstName} onChange={set('firstName')} /></label>
+              <label className="field"><span>Last name</span><input type="text" autoComplete="family-name" value={details.lastName} onChange={set('lastName')} /></label>
+              <label className="field"><span>Email for applications</span><input type="email" autoComplete="email" value={details.email} onChange={set('email')} /></label>
+              <label className="field"><span>Phone</span><input type="tel" autoComplete="tel" value={details.phone} onChange={set('phone')} /></label>
+              <label className="field"><span>Address line 1</span><input type="text" autoComplete="address-line1" value={details.addressLine1} onChange={set('addressLine1')} /></label>
+              <label className="field"><span>Address line 2 (optional)</span><input type="text" autoComplete="address-line2" value={details.addressLine2} onChange={set('addressLine2')} /></label>
+              <label className="field"><span>Town or city</span><input type="text" autoComplete="address-level2" value={details.city} onChange={set('city')} /></label>
+              <label className="field"><span>Postcode</span><input type="text" autoComplete="postal-code" value={details.postcode} onChange={set('postcode')} /></label>
+            </div>
+          </section>
 
-        <section className="card">
-          <label className="label" htmlFor="cv">CV</label>
-          <textarea id="cv" style={{ minHeight: 260 }} value={details.cvText} onChange={set('cvText')} placeholder="Paste your CV as plain text. One achievement per line works best." />
-          <div className="row">
-            <label className="btn" htmlFor="cv-file">
-              {reading ? 'Reading…' : 'Upload PDF or Word'}
-            </label>
-            <input id="cv-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} onChange={(e) => void readCv(e.target.files?.[0])} />
-            <p className="small muted grow" id="upload-note">
-              PDF or Word (.docx), up to 5 MB. The file is read and not kept. Match scores and drafts are built from the text in this box.
-            </p>
-          </div>
-          {cvError ? <div className="note bad" role="alert">{cvError}</div> : null}
-          {cv ? (
-            <div className="stack" data-testid="cv-preview">
-              <span className="label">Text read from your {cv.format === 'pdf' ? `PDF${cv.pages ? ` (${cv.pages} page${cv.pages === 1 ? '' : 's'})` : ''}` : 'Word file'}</span>
-              {cv.warnings.map((w) => (
-                <div key={w} className="note">{w}</div>
-              ))}
-              <pre className="small" style={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto', background: 'var(--bg)', padding: 8, borderRadius: 8 }}>{cv.text}</pre>
-              {Object.values(cv.suggestions).some(Boolean) ? (
-                <p className="small">
-                  Found, for empty details only: {Object.entries(cv.suggestions).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(' · ')}
-                </p>
-              ) : null}
-              <div className="row">
-                <button type="button" className="btn primary" onClick={applyCv}>
-                  Use this text
-                </button>
-                <button type="button" className="link" onClick={() => setCv(undefined)}>
-                  Discard
-                </button>
+          <section className="card">
+            <label className="label" htmlFor="cv">CV</label>
+            <textarea id="cv" style={{ minHeight: 260 }} value={details.cvText} onChange={set('cvText')} placeholder="Paste your CV as plain text. One achievement per line works best." />
+            <div className="row">
+              <label className="btn" htmlFor="cv-file">
+                {reading ? 'Reading…' : 'Upload PDF or Word'}
+              </label>
+              <input id="cv-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} onChange={(e) => void readCv(e.target.files?.[0])} />
+              <p className="small muted grow" id="upload-note">
+                PDF or Word (.docx), up to 5 MB. The file is read and not kept. Match scores and drafts are built from the text in this box.
+              </p>
+            </div>
+            {cvError ? <div className="note bad" role="alert">{cvError}</div> : null}
+            {cv ? (
+              <div className="stack" data-testid="cv-preview">
+                <span className="label">Text read from your {cv.format === 'pdf' ? `PDF${cv.pages ? ` (${cv.pages} page${cv.pages === 1 ? '' : 's'})` : ''}` : 'Word file'}</span>
+                {cv.warnings.map((w) => (
+                  <div key={w} className="note">{w}</div>
+                ))}
+                <pre className="small" style={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto', background: 'var(--bg)', padding: 8, borderRadius: 8 }}>{cv.text}</pre>
+                {Object.values(cv.suggestions).some(Boolean) ? (
+                  <p className="small">
+                    Found, for empty details only: {Object.entries(cv.suggestions).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(' · ')}
+                  </p>
+                ) : null}
+                <div className="row">
+                  <button type="button" className="btn primary" onClick={applyCv}>
+                    Use this text
+                  </button>
+                  <button type="button" className="link" onClick={() => setCv(undefined)}>
+                    Discard
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : null}
-        </section>
+            ) : null}
+          </section>
 
-        <section className="card">
-          <span className="label">Where and how you can work</span>
-          <p className="small muted">Select nothing and everything is open to you. Each selection narrows what the agent finds and prepares.</p>
-          <span className="small">
-            <b>Languages you speak</b> · {prefs.languages.length ? prefs.languages.join(', ') : 'any'}
-          </span>
-          <div className="row" role="group" aria-label="Languages you speak">
-            {LANGUAGES.map((l) => (
-              <button key={l} type="button" className={`chip ${prefs.languages.includes(l) ? '' : 'plain'}`} aria-pressed={prefs.languages.includes(l)} onClick={() => setPrefs((p) => ({ ...p, languages: toggle(p.languages, l) }))}>
-                {l}
-              </button>
-            ))}
-          </div>
-          <span className="small">
-            <b>Countries</b> · {prefs.countries.length ? `${prefs.countries.length} selected` : 'anywhere'}
-          </span>
-          <select
-            aria-label="Add a country"
-            value=""
-            onChange={(e) => {
-              const code = e.target.value;
-              if (code) setPrefs((p) => (p.countries.includes(code) ? p : { ...p, countries: [...p.countries, code] }));
-            }}
-          >
-            <option value="">Add a country…</option>
-            {countryOptions.map((c) => (
-              <option key={c.code} value={c.code} disabled={prefs.countries.includes(c.code)}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {prefs.countries.length ? (
-            <div className="row" role="group" aria-label="Selected countries">
-              {prefs.countries.map((code) => (
-                <button key={code} type="button" className="chip" aria-label={`Remove ${countryName(code) ?? code}`} onClick={() => removeCountry(code)}>
-                  {countryName(code) ?? code} ×
+          <section className="card">
+            <span className="label">Where and how you can work</span>
+            <p className="small muted">Select nothing and everything is open to you. Each selection narrows what the agent finds and prepares.</p>
+            <span className="small">
+              <b>Languages you speak</b> · {prefs.languages.length ? prefs.languages.join(', ') : 'any'}
+            </span>
+            <div className="row" role="group" aria-label="Languages you speak">
+              {LANGUAGES.map((l) => (
+                <button key={l} type="button" className={`chip ${prefs.languages.includes(l) ? '' : 'plain'}`} aria-pressed={prefs.languages.includes(l)} onClick={() => setPrefs((p) => ({ ...p, languages: toggle(p.languages, l) }))}>
+                  {l}
                 </button>
               ))}
             </div>
-          ) : null}
-          <span className="small">
-            <b>Cities</b> · {prefs.cities.length ? prefs.cities.join(', ') : 'anywhere in your countries'}
-          </span>
-          {prefs.countries.length ? (
-            <>
-              <div className="row" role="group" aria-label="Cities">
-                {[...new Set([...knownCities, ...prefs.cities])].map((c) => (
-                  <button key={c} type="button" className={`chip ${prefs.cities.includes(c) ? '' : 'plain'}`} aria-pressed={prefs.cities.includes(c)} onClick={() => setPrefs((p) => ({ ...p, cities: toggle(p.cities, c) }))}>
-                    {c}
+            <span className="small">
+              <b>Countries</b> · {prefs.countries.length ? `${prefs.countries.length} selected` : 'anywhere'}
+            </span>
+            <select
+              aria-label="Add a country"
+              value=""
+              onChange={(e) => {
+                const code = e.target.value;
+                if (code) setPrefs((p) => (p.countries.includes(code) ? p : { ...p, countries: [...p.countries, code] }));
+              }}
+            >
+              <option value="">Add a country…</option>
+              {countryOptions.map((c) => (
+                <option key={c.code} value={c.code} disabled={prefs.countries.includes(c.code)}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {prefs.countries.length ? (
+              <div className="row" role="group" aria-label="Selected countries">
+                {prefs.countries.map((code) => (
+                  <button key={code} type="button" className="chip" aria-label={`Remove ${countryName(code) ?? code}`} onClick={() => removeCountry(code)}>
+                    {countryName(code) ?? code} ×
                   </button>
                 ))}
               </div>
-              <div className="row">
-                <input type="text" className="grow" aria-label="Another city" placeholder="Another city, for example Lille, FR" value={cityInput} onChange={(e) => setCityInput(e.target.value)} style={{ flex: 1 }} />
-                <button type="button" className="btn" onClick={addCity}>
-                  Add city
-                </button>
-              </div>
-              {cityError ? <p className="small note">{cityError}</p> : null}
-            </>
-          ) : (
-            <p className="small muted">Pick a country first to narrow by city.</p>
-          )}
-          <p className="small muted">A language you select counts as evidence for jobs that ask for it.</p>
-        </section>
+            ) : null}
+            <span className="small">
+              <b>Cities</b> · {prefs.cities.length ? prefs.cities.join(', ') : 'anywhere in your countries'}
+            </span>
+            {prefs.countries.length ? (
+              <>
+                <div className="row" role="group" aria-label="Cities">
+                  {[...new Set([...knownCities, ...prefs.cities])].map((c) => (
+                    <button key={c} type="button" className={`chip ${prefs.cities.includes(c) ? '' : 'plain'}`} aria-pressed={prefs.cities.includes(c)} onClick={() => setPrefs((p) => ({ ...p, cities: toggle(p.cities, c) }))}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <div className="row">
+                  <input type="text" className="grow" aria-label="Another city" placeholder="Another city, for example Lille, FR" value={cityInput} onChange={(e) => setCityInput(e.target.value)} style={{ flex: 1 }} />
+                  <button type="button" className="btn" onClick={addCity}>
+                    Add city
+                  </button>
+                </div>
+                {cityError ? <p className="small note">{cityError}</p> : null}
+              </>
+            ) : (
+              <p className="small muted">Pick a country first to narrow by city.</p>
+            )}
+            <p className="small muted">A language you select counts as evidence for jobs that ask for it.</p>
+          </section>
 
-        {profileMsg ? <div className={`note ${profileMsg.ok ? 'ok' : 'bad'}`} role={profileMsg.ok ? 'status' : 'alert'}>{profileMsg.text}</div> : null}
-        <button className="btn primary" type="submit" disabled={savingProfile}>
-          {savingProfile ? 'Saving…' : 'Save profile'}
-        </button>
-      </form>
+          {profileMsg ? <div className={`note ${profileMsg.ok ? 'ok' : 'bad'}`} role={profileMsg.ok ? 'status' : 'alert'}>{profileMsg.text}</div> : null}
+          <button className="btn primary" type="submit" disabled={savingProfile}>
+            {savingProfile ? 'Saving…' : 'Save profile'}
+          </button>
+        </form>
 
-      <form className="card" onSubmit={savePassport} aria-label="Credential passport">
-        <span className="label">Credential passport{packName ? ` · ${packName}` : ''}</span>
-        <p className="small muted">
-          Stored once, reused on every form. Everything here is treated as sensitive: the extension never fills any of it until you confirm
-          it on the form. OpennJob does not verify what you enter.
-        </p>
-        {fields.map((f) => (
-          <label key={f.id} className="field">
-            <span>{f.label}</span>
-            <input type="text" value={credentials[f.id] ?? ''} placeholder="Not added" onChange={(e) => setCredentials((c) => ({ ...c, [f.id]: e.target.value }))} />
+        <form className="card" onSubmit={savePassport} aria-label="Credential passport">
+          <span className="label">Credential passport{packName ? ` · ${packName}` : ''}</span>
+          <p className="small muted">
+            Stored once, reused on every form. Everything here is treated as sensitive: the extension never fills any of it until you confirm
+            it on the form. OpennJob does not verify what you enter.
+          </p>
+          {fields.map((f) => (
+            <label key={f.id} className="field">
+              <span>{f.label}</span>
+              <input type="text" value={credentials[f.id] ?? ''} placeholder="Not added" onChange={(e) => setCredentials((c) => ({ ...c, [f.id]: e.target.value }))} />
+            </label>
+          ))}
+          {pack !== 'all' ? <p className="small muted">Lines for other industry packs are kept as they are. Choose “All industry packs” at the top to see every line.</p> : null}
+
+          <span className="label">DBS</span>
+          <div className="grid2">
+            <label className="field"><span>Certificate number (12 digits)</span><input type="text" inputMode="numeric" value={dbs.certificateNumber} onChange={(e) => setDbs((d) => ({ ...d, certificateNumber: e.target.value }))} /></label>
+            <label className="field"><span>Issue date</span><input type="date" value={dbs.issueDate} onChange={(e) => setDbs((d) => ({ ...d, issueDate: e.target.value }))} /></label>
+          </div>
+          <label className={`confirm ${dbs.onUpdateService ? 'on' : ''}`}>
+            <input type="checkbox" checked={dbs.onUpdateService} onChange={(e) => setDbs((d) => ({ ...d, onUpdateService: e.target.checked }))} />
+            <span>On the DBS Update Service</span>
           </label>
-        ))}
-        {pack !== 'all' ? <p className="small muted">Lines for other industry packs are kept as they are. Choose “All industry packs” at the top to see every line.</p> : null}
 
-        <span className="label">DBS</span>
-        <div className="grid2">
-          <label className="field"><span>Certificate number (12 digits)</span><input type="text" inputMode="numeric" value={dbs.certificateNumber} onChange={(e) => setDbs((d) => ({ ...d, certificateNumber: e.target.value }))} /></label>
-          <label className="field"><span>Issue date</span><input type="date" value={dbs.issueDate} onChange={(e) => setDbs((d) => ({ ...d, issueDate: e.target.value }))} /></label>
-        </div>
-        <label className={`confirm ${dbs.onUpdateService ? 'on' : ''}`}>
-          <input type="checkbox" checked={dbs.onUpdateService} onChange={(e) => setDbs((d) => ({ ...d, onUpdateService: e.target.checked }))} />
-          <span>On the DBS Update Service</span>
-        </label>
+          <span className="label">Right to work</span>
+          <label className={`confirm ${rightToWork ? 'on' : ''}`}>
+            <input type="checkbox" checked={rightToWork} onChange={(e) => setRightToWork(e.target.checked)} />
+            <span>
+              I have the right to work in the UK.
+              <br />
+              <span className="muted small">Your own statement; not checked by OpennJob. Visa and sponsorship questions on a form are always yours to answer.</span>
+            </span>
+          </label>
 
-        <span className="label">Right to work</span>
-        <label className={`confirm ${rightToWork ? 'on' : ''}`}>
-          <input type="checkbox" checked={rightToWork} onChange={(e) => setRightToWork(e.target.checked)} />
-          <span>
-            I have the right to work in the UK.
-            <br />
-            <span className="muted small">Your own statement; not checked by OpennJob. Visa and sponsorship questions on a form are always yours to answer.</span>
-          </span>
-        </label>
+          <span className="label">Mandatory training</span>
+          {training.map((t, i) => {
+            const status = trainingStatus.find((s) => s.name === t.name);
+            return (
+              <div key={i} className="stack" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+                <div className="grid2">
+                  <label className="field"><span>Training</span><input type="text" value={t.name} onChange={(e) => setTraining((rows) => rows.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))} /></label>
+                  <label className="field"><span>Expires on</span><input type="date" value={t.expiresOn} onChange={(e) => setTraining((rows) => rows.map((r, j) => (j === i ? { ...r, expiresOn: e.target.value } : r)))} /></label>
+                </div>
+                <div className="row">
+                  {status ? <span className={`chip ${status.status === 'expired' ? 'bad' : status.status === 'expiring' ? 'gap' : ''}`}>{STATUS_TEXT[status.status]}{status.status === 'expiring' && status.daysRemaining !== undefined ? `, ${status.daysRemaining} days left` : ''}</span> : null}
+                  <button type="button" className="link" onClick={() => setTraining((rows) => rows.filter((_, j) => j !== i))}>Remove</button>
+                </div>
+              </div>
+            );
+          })}
+          {trainingStatus.some((t) => t.daysRemaining !== undefined) ? (
+            <BarList
+              title="Days until each training expires"
+              rows={trainingStatus.filter((t) => t.daysRemaining !== undefined).map((t) => ({ label: t.name, value: Math.max(0, t.daysRemaining ?? 0), detail: (t.daysRemaining ?? 0) < 0 ? `${t.name}: expired` : `${t.name}: ${t.daysRemaining} days left` }))}
+              unit=" d"
+              valueHead="Days left"
+            />
+          ) : null}
+          <button type="button" className="btn" onClick={() => setTraining((rows) => [...rows, { name: '', completedOn: '', expiresOn: '' }])}>
+            Add training
+          </button>
 
-        <span className="label">Mandatory training</span>
-        {training.map((t, i) => {
-          const status = trainingStatus.find((s) => s.name === t.name);
-          return (
+          <span className="label">Referees (up to 3)</span>
+          <p className="small muted">These are other people’s details. Tell them before you add them.</p>
+          {referees.map((r, i) => (
             <div key={i} className="stack" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
               <div className="grid2">
-                <label className="field"><span>Training</span><input type="text" value={t.name} onChange={(e) => setTraining((rows) => rows.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))} /></label>
-                <label className="field"><span>Expires on</span><input type="date" value={t.expiresOn} onChange={(e) => setTraining((rows) => rows.map((r, j) => (j === i ? { ...r, expiresOn: e.target.value } : r)))} /></label>
+                {(['name', 'relationship', 'organisation', 'email', 'phone'] as (keyof RefereeRow)[]).map((k) => (
+                  <label key={k} className="field">
+                    <span>Referee {i + 1}: {k}</span>
+                    <input type={k === 'email' ? 'email' : k === 'phone' ? 'tel' : 'text'} value={r[k]} onChange={(e) => setReferees((rows) => rows.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))} />
+                  </label>
+                ))}
               </div>
-              <div className="row">
-                {status ? <span className={`chip ${status.status === 'expired' ? 'bad' : status.status === 'expiring' ? 'gap' : ''}`}>{STATUS_TEXT[status.status]}{status.status === 'expiring' && status.daysRemaining !== undefined ? `, ${status.daysRemaining} days left` : ''}</span> : null}
-                <button type="button" className="link" onClick={() => setTraining((rows) => rows.filter((_, j) => j !== i))}>Remove</button>
-              </div>
+              <button type="button" className="link" onClick={() => setReferees((rows) => rows.filter((_, j) => j !== i))}>Remove referee</button>
             </div>
-          );
-        })}
-        {trainingStatus.some((t) => t.daysRemaining !== undefined) ? (
-          <BarList
-            title="Days until each training expires"
-            rows={trainingStatus.filter((t) => t.daysRemaining !== undefined).map((t) => ({ label: t.name, value: Math.max(0, t.daysRemaining ?? 0), detail: (t.daysRemaining ?? 0) < 0 ? `${t.name}: expired` : `${t.name}: ${t.daysRemaining} days left` }))}
-            unit=" d"
-            valueHead="Days left"
-          />
-        ) : null}
-        <button type="button" className="btn" onClick={() => setTraining((rows) => [...rows, { name: '', completedOn: '', expiresOn: '' }])}>
-          Add training
-        </button>
+          ))}
+          {referees.length < 3 ? (
+            <button type="button" className="btn" onClick={() => setReferees((rows) => [...rows, { ...EMPTY_REFEREE }])}>
+              Add referee
+            </button>
+          ) : null}
 
-        <span className="label">Referees (up to 3)</span>
-        <p className="small muted">These are other people’s details. Tell them before you add them.</p>
-        {referees.map((r, i) => (
-          <div key={i} className="stack" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-            <div className="grid2">
-              {(['name', 'relationship', 'organisation', 'email', 'phone'] as (keyof RefereeRow)[]).map((k) => (
-                <label key={k} className="field">
-                  <span>Referee {i + 1}: {k}</span>
-                  <input type={k === 'email' ? 'email' : k === 'phone' ? 'tel' : 'text'} value={r[k]} onChange={(e) => setReferees((rows) => rows.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))} />
-                </label>
-              ))}
-            </div>
-            <button type="button" className="link" onClick={() => setReferees((rows) => rows.filter((_, j) => j !== i))}>Remove referee</button>
-          </div>
-        ))}
-        {referees.length < 3 ? (
-          <button type="button" className="btn" onClick={() => setReferees((rows) => [...rows, { ...EMPTY_REFEREE }])}>
-            Add referee
+          {passportMsg ? <div className={`note ${passportMsg.ok ? 'ok' : 'bad'}`} role={passportMsg.ok ? 'status' : 'alert'}>{passportMsg.text}</div> : null}
+          <button className="btn primary" type="submit" disabled={savingPassport}>
+            {savingPassport ? 'Saving…' : 'Save passport'}
           </button>
-        ) : null}
-
-        {passportMsg ? <div className={`note ${passportMsg.ok ? 'ok' : 'bad'}`} role={passportMsg.ok ? 'status' : 'alert'}>{passportMsg.text}</div> : null}
-        <button className="btn primary" type="submit" disabled={savingPassport}>
-          {savingPassport ? 'Saving…' : 'Save passport'}
-        </button>
-      </form>
+        </form>
+      </div>
 
       <ScreeningForm />
     </>

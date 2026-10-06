@@ -129,120 +129,122 @@ export default function AccountPage() {
     <>
       <h2>Account</h2>
       {error ? <div className="note bad" role="alert">{error}</div> : null}
-      {me ? (
-        <section className="card">
-          <span className="label">Signed in as</span>
-          <p>{me.email}</p>
-          <p className="small" data-testid="email-state">
-            {me.emailVerified ? `E-mail address confirmed${me.emailVerifiedAt ? ` on ${new Date(me.emailVerifiedAt).toLocaleDateString('en-GB')}` : ''}.` : 'E-mail address not confirmed yet: nothing is sent to an employer for you until it is.'}
-          </p>
-          <p className="small muted">
-            Created {new Date(me.createdAt).toLocaleDateString('en-GB')}. Terms accepted: version {me.consent.acceptedTermsVersion}. Privacy notice:
-            version {me.consent.acceptedPrivacyVersion}.
-          </p>
-          <button type="button" className="btn" onClick={signOut}>
-            Sign out on this device
-          </button>
-          <p className="small muted">Signing out removes the token from this browser. There is no server-side sign-out yet, so a copied token works until it expires.</p>
-        </section>
-      ) : null}
+      <div className="cols flow">
+        {me ? (
+          <section className="card">
+            <span className="label">Signed in as</span>
+            <p>{me.email}</p>
+            <p className="small" data-testid="email-state">
+              {me.emailVerified ? `E-mail address confirmed${me.emailVerifiedAt ? ` on ${new Date(me.emailVerifiedAt).toLocaleDateString('en-GB')}` : ''}.` : 'E-mail address not confirmed yet: nothing is sent to an employer for you until it is.'}
+            </p>
+            <p className="small muted">
+              Created {new Date(me.createdAt).toLocaleDateString('en-GB')}. Terms accepted: version {me.consent.acceptedTermsVersion}. Privacy notice:
+              version {me.consent.acceptedPrivacyVersion}.
+            </p>
+            <button type="button" className="btn" onClick={signOut}>
+              Sign out on this device
+            </button>
+            <p className="small muted">Signing out removes the token from this browser. There is no server-side sign-out yet, so a copied token works until it expires.</p>
+          </section>
+        ) : null}
 
-      {auth ? (
-        <section className="card" aria-label="Automatic applications" data-testid="authorisation">
-          <span className="label">Automatic applications</span>
-          <p className="small">
-            {auth.enabled
-              ? `On since ${auth.consentAt ? new Date(auth.consentAt).toLocaleString('en-GB') : 'an unknown time'}${auth.paused ? ', and paused by you' : ''}.`
-              : auth.revokedAt
-                ? `Off. You turned it off on ${new Date(auth.revokedAt).toLocaleString('en-GB')}.`
-                : 'Off. Nothing is sent without you.'}
-          </p>
-          <blockquote className="small" data-testid="scope-text">
-            {auth.scope.text}
-          </blockquote>
-          <p className="small muted">Wording version {auth.scope.version}. A form with any declaration or other sensitive question always waits for you, whatever you choose here.</p>
-          {auth.enabled ? (
-            <div className="row">
-              <button type="button" className="btn danger" onClick={() => setAuthorisation(false)}>
-                Turn off automatic applications
-              </button>
-              <button type="button" className="btn" onClick={() => setPaused(!auth.paused)}>
-                {auth.paused ? 'Resume' : 'Pause'}
-              </button>
-            </div>
-          ) : (
-            <>
-              <label className={`confirm ${agree ? 'on' : ''}`}>
-                <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-                <span>I have read this wording and I agree to it.</span>
-              </label>
-              <button type="button" className="btn primary" disabled={!agree} onClick={() => setAuthorisation(true)}>
-                Turn on automatic applications
-              </button>
-            </>
-          )}
-          {authMsg ? <p className="small note ok" role="status">{authMsg}</p> : null}
-          {status ? (
-            <div className="small" data-testid="queue-status">
-              <p>
-                Ready to send: {status.queue.ready} · Waiting for a site to be enabled: {status.queue.waitingForSystem} · Needs you: {status.queue.needsYou} · Sent today: {status.dailyLimit.used} of {status.dailyLimit.limit}
-              </p>
-              {status.message ? <p className="muted">{status.message}</p> : null}
-              {status.systems.filter((x) => !x.enabled).length ? (
-                <p className="muted">
-                  Not yet enabled by the operator (terms check and a supervised submission needed): {status.systems.filter((x) => !x.enabled).map((x) => x.label).join(', ')}.
+        {auth ? (
+          <section className="card" aria-label="Automatic applications" data-testid="authorisation">
+            <span className="label">Automatic applications</span>
+            <p className="small">
+              {auth.enabled
+                ? `On since ${auth.consentAt ? new Date(auth.consentAt).toLocaleString('en-GB') : 'an unknown time'}${auth.paused ? ', and paused by you' : ''}.`
+                : auth.revokedAt
+                  ? `Off. You turned it off on ${new Date(auth.revokedAt).toLocaleString('en-GB')}.`
+                  : 'Off. Nothing is sent without you.'}
+            </p>
+            <blockquote className="small" data-testid="scope-text">
+              {auth.scope.text}
+            </blockquote>
+            <p className="small muted">Wording version {auth.scope.version}. A form with any declaration or other sensitive question always waits for you, whatever you choose here.</p>
+            {auth.enabled ? (
+              <div className="row">
+                <button type="button" className="btn danger" onClick={() => setAuthorisation(false)}>
+                  Turn off automatic applications
+                </button>
+                <button type="button" className="btn" onClick={() => setPaused(!auth.paused)}>
+                  {auth.paused ? 'Resume' : 'Pause'}
+                </button>
+              </div>
+            ) : (
+              <>
+                <label className={`confirm ${agree ? 'on' : ''}`}>
+                  <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+                  <span>I have read this wording and I agree to it.</span>
+                </label>
+                <button type="button" className="btn primary" disabled={!agree} onClick={() => setAuthorisation(true)}>
+                  Turn on automatic applications
+                </button>
+              </>
+            )}
+            {authMsg ? <p className="small note ok" role="status">{authMsg}</p> : null}
+            {status ? (
+              <div className="small" data-testid="queue-status">
+                <p>
+                  Ready to send: {status.queue.ready} · Waiting for a site to be enabled: {status.queue.waitingForSystem} · Needs you: {status.queue.needsYou} · Sent today: {status.dailyLimit.used} of {status.dailyLimit.limit}
                 </p>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+                {status.message ? <p className="muted">{status.message}</p> : null}
+                {status.systems.filter((x) => !x.enabled).length ? (
+                  <p className="muted">
+                    Not yet enabled by the operator (terms check and a supervised submission needed): {status.systems.filter((x) => !x.enabled).map((x) => x.label).join(', ')}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
-      {prefs ? (
-        <section className="card" aria-label="Daily report">
-          <span className="label">Daily report</span>
-          <p className="small">At 09:00 London time: what was sent with the site's confirmation, what is held for you and why, new matches and any problems. It names jobs and employers only, never your CV or answers.</p>
-          <label className={`confirm ${prefs.muted.includes(REPORT_KEY) ? '' : 'on'}`}>
-            <input type="checkbox" checked={!prefs.muted.includes(REPORT_KEY)} onChange={(e) => setReport(e.target.checked)} />
-            <span>Send me the daily report by e-mail</span>
+        {prefs ? (
+          <section className="card" aria-label="Daily report">
+            <span className="label">Daily report</span>
+            <p className="small">At 09:00 London time: what was sent with the site's confirmation, what is held for you and why, new matches and any problems. It names jobs and employers only, never your CV or answers.</p>
+            <label className={`confirm ${prefs.muted.includes(REPORT_KEY) ? '' : 'on'}`}>
+              <input type="checkbox" checked={!prefs.muted.includes(REPORT_KEY)} onChange={(e) => setReport(e.target.checked)} />
+              <span>Send me the daily report by e-mail</span>
+            </label>
+            {reportMsg ? <p className="small note ok" role="status">{reportMsg}</p> : null}
+          </section>
+        ) : null}
+
+        <section className="card">
+          <span className="label">Your data</span>
+          <p className="small">Download everything OpennJob holds about you: account, profile, CV, passport, applications, activity and usage.</p>
+          <button type="button" className="btn" onClick={exportData}>
+            Download my data
+          </button>
+          {exportMsg ? <p className="small note ok" role="status">{exportMsg}</p> : null}
+        </section>
+
+        <form className="card" onSubmit={deleteAccount} aria-label="Delete account">
+          <span className="label">Delete account</span>
+          <p className="small">This deletes your account and everything stored for it, at once. It cannot be undone.</p>
+          <label className="field">
+            <span>Your password</span>
+            <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
-          {reportMsg ? <p className="small note ok" role="status">{reportMsg}</p> : null}
+          <label className={`confirm ${sure ? 'on' : ''}`}>
+            <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} />
+            <span>I understand that my data cannot be recovered.</span>
+          </label>
+          {deleteError ? <div className="note bad" role="alert">{deleteError}</div> : null}
+          <button type="submit" className="btn danger" disabled={busy || !sure || !password}>
+            {busy ? 'Deleting…' : 'Delete my account'}
+          </button>
+        </form>
+
+        <section className="card">
+          <span className="label">Not available yet</span>
+          <ul className="plain small">
+            <li>Changing your password while signed in (use Forgot your password on the sign-in page) or your email address.</li>
+            <li>Plans and billing. Nothing is charged.</li>
+          </ul>
         </section>
-      ) : null}
-
-      <section className="card">
-        <span className="label">Your data</span>
-        <p className="small">Download everything OpennJob holds about you: account, profile, CV, passport, applications, activity and usage.</p>
-        <button type="button" className="btn" onClick={exportData}>
-          Download my data
-        </button>
-        {exportMsg ? <p className="small note ok" role="status">{exportMsg}</p> : null}
-      </section>
-
-      <form className="card" onSubmit={deleteAccount} aria-label="Delete account">
-        <span className="label">Delete account</span>
-        <p className="small">This deletes your account and everything stored for it, at once. It cannot be undone.</p>
-        <label className="field">
-          <span>Your password</span>
-          <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        <label className={`confirm ${sure ? 'on' : ''}`}>
-          <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} />
-          <span>I understand that my data cannot be recovered.</span>
-        </label>
-        {deleteError ? <div className="note bad" role="alert">{deleteError}</div> : null}
-        <button type="submit" className="btn danger" disabled={busy || !sure || !password}>
-          {busy ? 'Deleting…' : 'Delete my account'}
-        </button>
-      </form>
-
-      <section className="card">
-        <span className="label">Not available yet</span>
-        <ul className="plain small">
-          <li>Changing your password while signed in (use Forgot your password on the sign-in page) or your email address.</li>
-          <li>Plans and billing. Nothing is charged.</li>
-        </ul>
-      </section>
+      </div>
     </>
   );
 }

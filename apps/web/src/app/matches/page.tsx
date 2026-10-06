@@ -166,7 +166,7 @@ export default function MatchesPage() {
           </button>
         </div>
       ) : null}
-      <div className="stack">
+      <div className="stack list">
         {shown.map((m) => {
           const app = latestApp(m.job.id);
           const gaps = m.unmetEssential.length;

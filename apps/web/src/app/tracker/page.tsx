@@ -57,7 +57,7 @@ export default function TrackerPage() {
         </>
       ) : null}
       {apps && !apps.length ? <div className="empty">No applications yet. Open a match, or tap Run agent on the Matches tab.</div> : null}
-      <div className="stack">
+      <div className="stack list">
         {apps?.map((a) => (
           <div key={a.id} className="card" data-testid="application">
             <div className="row">

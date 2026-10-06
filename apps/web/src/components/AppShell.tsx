@@ -161,8 +161,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={state}>
-      <div className="wrap">
-        <header className="top">
+      <header className="top">
+        <div className="top-in">
           <div className="brand">
             {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
             <img className="logo" src="/brand/opennjob-logo-192.png" alt="" width={52} height={52} />
@@ -184,27 +184,47 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {signedIn && !isPublic && !isLink ? (
             <>
-              <select className="pack" aria-label="Industry pack" value={pack} onChange={(e) => state.setPack(e.target.value as PackChoice)}>
-                <option value="all">All industry packs</option>
-                {PACKS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <div className="seg" role="group" aria-label="How much the agent does alone">
-                {(['review', 'hybrid', 'auto'] as Mode[]).map((m) => (
-                  <button key={m} type="button" aria-pressed={mode === m} onClick={() => state.setMode(m)}>
-                    {MODE_LABEL[m]}
-                  </button>
-                ))}
+              <div className="controls">
+                <select className="pack" aria-label="Industry pack" value={pack} onChange={(e) => state.setPack(e.target.value as PackChoice)}>
+                  <option value="all">All industry packs</option>
+                  {PACKS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="seg" role="group" aria-label="How much the agent does alone">
+                  {(['review', 'hybrid', 'auto'] as Mode[]).map((m) => (
+                    <button key={m} type="button" aria-pressed={mode === m} onClick={() => state.setMode(m)}>
+                      {MODE_LABEL[m]}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <p className="small muted" data-testid="mode-help">
+              <p className="small muted mode-help" data-testid="mode-help">
                 {MODE_HELP[mode]}
               </p>
             </>
           ) : null}
-        </header>
+          {signedIn && !isPublic ? (
+            <nav className="tabs" aria-label="Sections">
+              <div>
+                {TABS.map(([href, label]) => (
+                  <Link key={href} href={`${href}/`} aria-current={current === href ? 'page' : undefined}>
+                    {label}
+                    {href === '/tracker' && waiting > 0 ? (
+                      <span className="count" aria-label={`${waiting} waiting`}>
+                        {waiting}
+                      </span>
+                    ) : null}
+                  </Link>
+                ))}
+              </div>
+            </nav>
+          ) : null}
+        </div>
+      </header>
+      <div className="wrap">
         {signedIn && !isPublic && !isLink && unverified ? (
           <div className="note" role="region" aria-label="E-mail verification" data-testid="verify-banner">
             Confirm your e-mail address: nothing is sent to an employer for you until you do. Use the link or code we e-mailed you.{' '}
@@ -215,24 +235,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             {verifyMsg ? <span className="small"> {verifyMsg}</span> : null}
           </div>
         ) : null}
-        <main>{showPage ? children : <p className="muted small">Loading…</p>}</main>
+        <main className={isPublic || isLink ? 'narrow' : undefined}>{showPage ? children : <p className="muted small">Loading…</p>}</main>
       </div>
-      {signedIn && !isPublic ? (
-        <nav className="tabs" aria-label="Sections">
-          <div>
-            {TABS.map(([href, label]) => (
-              <Link key={href} href={`${href}/`} aria-current={current === href ? 'page' : undefined}>
-                {label}
-                {href === '/tracker' && waiting > 0 ? (
-                  <span className="count" aria-label={`${waiting} waiting`}>
-                    {waiting}
-                  </span>
-                ) : null}
-              </Link>
-            ))}
-          </div>
-        </nav>
-      ) : null}
     </AppContext.Provider>
   );
 }
