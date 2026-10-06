@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { useEffect, useRef } from 'react';
 import './landing.css';
 
@@ -40,6 +41,7 @@ export default function Landing() {
           <span className="sp" />
           <a className="quiet hide-sm" href="#how">How it works</a>
           <a className="quiet hide-sm" href="#limits">What it will not do</a>
+          <ThemeToggle className="lp-theme" />
           <Link className="quiet" href="/signin/">Sign in</Link>
         </nav>
 

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import type { ReactNode } from 'react';
 import { AppShell } from '../components/AppShell';
 import './globals.css';
@@ -14,7 +15,10 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, them
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-GB">
+    <html lang="en-GB" suppressHydrationWarning>
+      <head>
+        <Script src="/theme.js" strategy="beforeInteractive" />
+      </head>
       <body>
         <AppShell>{children}</AppShell>
       </body>

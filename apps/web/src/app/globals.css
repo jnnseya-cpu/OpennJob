@@ -4,8 +4,9 @@
 :root {
   /* Brand: OpennJob blue #1A3C8A and black #000000, from the logo (public/brand/opennjob-logo.png). */
   --brand-blue: #1a3c8a; --brand-black: #000000;
-  --bg: #f4f6fb; --surface: #ffffff; --ink: #000000; --muted: #4a5468; --line: #d6dcea;
-  --accent: #1a3c8a; --accent-ink: #1a3c8a; --accent-soft: #e4eaf7; --on-accent: #ffffff;
+  --bg: #e9eef8; --surface: #ffffff; --ink: #000000; --muted: #3f4a61; --line: #cbd5ea;
+  --accent: #1a3c8a; --accent-ink: #1a3c8a; --accent-soft: #dce5f7; --on-accent: #ffffff;
+  --header-bg: #1a3c8a; --header-ink: #ffffff; --header-dim: rgba(255, 255, 255, 0.82);
   --warn: #8f4e00; --warn-soft: #fbebd2; --bad: #a8231b; --bad-soft: #faddda;
   --display: "Trebuchet MS", system-ui, sans-serif;
   --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -13,14 +14,16 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0a0f1d; --surface: #121a2e; --ink: #e9edf6; --muted: #9ba7c0; --line: #26314d;
-    --accent: #7e9de6; --accent-ink: #a9bff2; --accent-soft: #1a2a52; --on-accent: #0a1430;
+    --bg: #071029; --surface: #0f1d45; --ink: #eef2fb; --muted: #a8b5d6; --line: #22336a;
+    --accent: #6f92f0; --accent-ink: #a9c0ff; --accent-soft: #16285e; --on-accent: #06102a;
+    --header-bg: #0b1738; --header-ink: #ffffff; --header-dim: rgba(255, 255, 255, 0.78);
     --warn: #f2b75e; --warn-soft: #33260e; --bad: #ff9288; --bad-soft: #3a1613; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0a0f1d; --surface: #121a2e; --ink: #e9edf6; --muted: #9ba7c0; --line: #26314d;
-  --accent: #7e9de6; --accent-ink: #a9bff2; --accent-soft: #1a2a52; --on-accent: #0a1430;
+  --bg: #071029; --surface: #0f1d45; --ink: #eef2fb; --muted: #a8b5d6; --line: #22336a;
+  --accent: #6f92f0; --accent-ink: #a9c0ff; --accent-soft: #16285e; --on-accent: #06102a;
+  --header-bg: #0b1738; --header-ink: #ffffff; --header-dim: rgba(255, 255, 255, 0.78);
   --warn: #f2b75e; --warn-soft: #33260e; --bad: #ff9288; --bad-soft: #3a1613; color-scheme: dark;
 }
 
@@ -148,10 +151,27 @@ nav.tabs .count { font-family: var(--mono); font-size: 11px; background: var(--a
 .viz-rule em { position: absolute; top: -2px; right: 6px; white-space: nowrap; font: normal 11px var(--body); color: var(--viz-muted); }
 .viz-axis { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; font-size: 11px; color: var(--viz-muted); text-align: center; font-variant-numeric: tabular-nums; }
 
-/* The logo, unchanged. Its lettering is black, so on a dark background it sits on a white tile. */
-.logo { display: block; height: auto; }
+/* The logo, unchanged, on a white tile: its lettering is black and the header is blue (light) or navy (dark). */
+.logo { display: block; height: auto; background: #ffffff; border-radius: 12px; }
 .brand .logo { width: 52px; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .logo { background: #ffffff; border-radius: 10px; } }
-:root[data-theme="dark"] .logo { background: #ffffff; border-radius: 10px; }
 .brand { align-items: center; }
-.brand b { color: var(--ink); }
+
+/* The header is a solid brand bar across the whole width. */
+.top { background: var(--header-bg); color: var(--header-ink); border-bottom: 0; padding-inline: 2px;
+  box-shadow: 0 0 0 100vmax var(--header-bg); clip-path: inset(0 -100vmax); }
+.top .brand b { color: var(--header-ink); }
+.top .muted, .top [data-testid="mode-help"] { color: var(--header-dim); }
+.top .iconlink { color: var(--header-ink); }
+.top .iconlink[aria-current="page"] { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.28); }
+.top .iconlink:hover { background: rgba(255, 255, 255, 0.10); }
+.top .iconlink .count { background: #ffffff; color: #1a3c8a; }
+.top select.pack { border-color: transparent; }
+.top .seg { border-color: transparent; }
+.top :focus-visible { outline-color: #ffffff; }
+button.iconlink { background: none; cursor: pointer; }
+
+/* Cards stand out a little more on the stronger background. */
+.card, .stat { box-shadow: 0 1px 2px rgba(10, 25, 70, 0.06); }
+nav.tabs { box-shadow: 0 -1px 3px rgba(10, 25, 70, 0.08); }
+
+@media (max-width: 480px) { .top .tagline { display: none; } }

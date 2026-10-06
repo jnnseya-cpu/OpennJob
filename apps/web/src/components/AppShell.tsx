@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { api, errorText, isSignedIn, onSessionChange, takeNextPath } from '../lib/api';
 import { PACKS } from '../lib/core';
+import { ThemeToggle } from './ThemeToggle';
 import type { Application, Mode, PackId, PublicUser } from '../lib/types';
 
 /** The threshold the API applies unless OPENNJOB_APPLY_THRESHOLD says otherwise. An agent run reports the real one. */
@@ -166,9 +167,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
             <img className="logo" src="/brand/opennjob-logo-192.png" alt="" width={52} height={52} />
             <b>OpennJob</b>
-            <span className="muted small grow">Six industry packs · UK and worldwide</span>
+            <span className="muted small grow"><span className="tagline">Six industry packs · UK and worldwide</span></span>
+            {!signedIn || isPublic ? <ThemeToggle /> : null}
             {signedIn && !isPublic ? (
               <span className="row" style={{ gap: 4 }}>
+                <ThemeToggle />
                 <Link href="/notifications/" className="iconlink" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'} aria-current={pathname === '/notifications' ? 'page' : undefined}>
                   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.3 15.4A1 1 0 0 0 5.2 17h13.6a1 1 0 0 0 .9-1.6L18 12.6V9a6 6 0 0 0-6-6zm0 19a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 22z" fill="currentColor" /></svg>
                   {unread > 0 ? <span className="count">{unread}</span> : null}
