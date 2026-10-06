@@ -19,17 +19,33 @@ DIR="${OPENNJOB_DIR:-/opt/opennjob}"
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root (sudo bash install.sh)."; exit 1; }
 
-# ask "question" [default]: Enter keeps the default.
+# ask "question" [default]: Enter keeps the default; an empty answer with no default asks again.
+# Messages go to stderr: stdout is the answer.
 ask() {
-  local prompt="$1" def="${2:-}" var
-  if [ -n "$def" ]; then read -r -p "$prompt [$def]: " var; var="${var:-$def}"; else read -r -p "$prompt: " var; fi
-  [ -n "$var" ] || { echo "A value is needed."; exit 1; }
+  local prompt="$1" def="${2:-}" var=""
+  while [ -z "$var" ]; do
+    if [ -n "$def" ]; then read -r -p "$prompt [$def]: " var </dev/tty; var="${var:-$def}"; else read -r -p "$prompt: " var </dev/tty; fi
+    [ -n "$var" ] || echo "  A value is needed." >&2
+  done
   printf '%s' "$var"
 }
 DOMAIN="${DOMAIN:-$(ask 'Domain for the app (its DNS A record must point here)' 'opennjob.com')}"
 SUPPORT_EMAIL="${SUPPORT_EMAIL:-$(ask 'Support inbox: certificate notices, operator alerts, sender of e-mails' 'support@opennjob.com')}"
 ACME_EMAIL="${ACME_EMAIL:-$SUPPORT_EMAIL}"
-ALLOWLIST="${OPENNJOB_REGISTRATION_ALLOWLIST:-$(ask 'Invited e-mail address(es), comma separated (only they can register)')}"
+ALLOWLIST="${OPENNJOB_REGISTRATION_ALLOWLIST:-$(ask 'Invited e-mail address(es), comma separated: the address(es) you will register with')}"
+case "$ALLOWLIST" in *@*) ;; *) echo "That does not look like an e-mail address: $ALLOWLIST" >&2; exit 1 ;; esac
+
+# This server may already run other sites. Nothing below may break them.
+echo "== Checking what already runs on this server"
+BUSY="$(ss -Htlnp '( sport = :80 or sport = :443 )' 2>/dev/null || true)"
+if [ -n "$BUSY" ] && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^opennjob-web'; then
+  echo "STOP: ports 80/443 are already in use on this server:" >&2
+  echo "$BUSY" >&2
+  echo "OpennJob's web server needs them, and taking them would take down whatever serves them now." >&2
+  echo "Nothing was changed. Send this output to whoever set up OpennJob: it must be put behind the existing web server instead." >&2
+  exit 1
+fi
+if ufw status 2>/dev/null | grep -q "Status: active"; then UFW_ACTIVE=1; else UFW_ACTIVE=0; fi
 
 echo "== Checking DNS for $DOMAIN"
 apt-get update -qq && apt-get install -y -qq curl git ufw dnsutils openssl unattended-upgrades >/dev/null
@@ -38,12 +54,20 @@ DNS_IP="$(dig +short A "$DOMAIN" | tail -1)"
 if [ -z "$DNS_IP" ] || [ "$DNS_IP" != "$SERVER_IP" ]; then
   echo "WARNING: $DOMAIN resolves to '${DNS_IP:-nothing}', this server is '${SERVER_IP:-unknown}'."
   echo "HTTPS certificates will fail until the A record points here. Continue anyway? [y/N]"
-  read -r ok; [ "$ok" = "y" ] || exit 1
+  read -r ok </dev/tty; [ "$ok" = "y" ] || exit 1
 fi
 
-echo "== Firewall: SSH, HTTP, HTTPS only"
+echo "== Firewall"
 ufw allow OpenSSH >/dev/null && ufw allow 80/tcp >/dev/null && ufw allow 443/tcp >/dev/null && ufw allow 443/udp >/dev/null
-ufw --force enable >/dev/null
+if [ "$UFW_ACTIVE" = 1 ]; then
+  echo "   ufw was already on: HTTP and HTTPS added, existing rules kept."
+else
+  echo "   ufw is off. Turning it on would block every port except SSH, HTTP and HTTPS. Listening now:"
+  ss -Htlnp | awk '{print "     " $4 "  " $6}'
+  echo "   Turn the firewall on? Other services on other ports would become unreachable from outside. [y/N]"
+  read -r fw </dev/tty
+  if [ "$fw" = "y" ]; then ufw --force enable >/dev/null; echo "   ufw on."; else echo "   Left off (rules added for later)."; fi
+fi
 
 if ! command -v docker >/dev/null; then
   echo "== Installing Docker"
