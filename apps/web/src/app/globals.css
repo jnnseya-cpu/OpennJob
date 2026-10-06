@@ -97,6 +97,9 @@ textarea { min-height: 150px; resize: vertical; }
 .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--muted); }
 pre.fb { white-space: pre-wrap; font: 14px/1.5 var(--body); margin: 0; padding: 12px; border-radius: 10px; background: var(--bg); }
 ul.plain { margin: 0; padding-left: 18px; }
+ul.checklist { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+ul.checklist li.ok span { color: var(--accent-ink); }
+ul.checklist li.no span { color: var(--bad); font-weight: 700; }
 
 nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 6; }
 nav.tabs div { max-width: 620px; margin-inline: auto; display: grid; grid-template-columns: repeat(5, 1fr); }

@@ -248,7 +248,10 @@ test('agent run in auto mode prepares drafts only: nothing is approved or submit
 
   // An auto-mode application still waits for every declaration, and says so.
   await page.getByTestId('application').filter({ hasText: 'Healthcare Assistant - Elderly Care' }).getByRole('link', { name: 'Review and approve' }).click();
-  await expect(page.getByText('Auto mode never submits a form that has a declaration or other sensitive field.')).toBeVisible();
+  const checklist = page.getByTestId('auto-checklist');
+  await expect(checklist).toContainText('A form with any of them waits for you.');
+  await expect(checklist).toContainText('Automatic applications are off.');
+  await expect(checklist).toContainText('No employer application system is enabled yet');
   const boxes = page.getByRole('region', { name: 'Only you confirm these' }).getByRole('checkbox');
   expect(await boxes.count()).toBeGreaterThan(0);
   for (const box of await boxes.all()) await expect(box).not.toBeChecked();
@@ -294,7 +297,7 @@ test('review: requirements with evidence, editable statement, every declaration 
   await expect(approve).toBeEnabled();
   await approve.click();
 
-  await expect(page.getByText('Approved. Nothing has been sent to the employer.')).toBeVisible();
+  await expect(page.getByText('Approved, not sent yet.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open the employer’s form' })).toHaveAttribute('href', 'https://example.org/jobs/hca-elderly-care');
   await expect(statement).toHaveAttribute('readonly', '');
   const confirmed = await call<{ status: string; confirmedFields: string[] }>('GET', `/applications/${draft?.id}`);
@@ -336,7 +339,7 @@ test('review all mode also needs "I have checked every field"; a credential-depe
   await page.getByLabel(/^Supporting statement/).fill('I am working towards registration with the NMBI. (fictional)');
   await expect(approve).toBeEnabled();
   await approve.click();
-  await expect(page.getByText('Approved. Nothing has been sent to the employer.')).toBeVisible();
+  await expect(page.getByText('Approved, not sent yet.')).toBeVisible();
   const app = (await call<{ jobId: string; mode: string; confirmedFields: string[] }[]>('GET', '/applications')).find((a) => a.jobId === 'sample:h7');
   expect(app?.mode).toBe('review');
   expect(app?.confirmedFields).toEqual(expect.arrayContaining(['review:all-fields-checked', 'declaration:ftp', 'declaration:pin']));

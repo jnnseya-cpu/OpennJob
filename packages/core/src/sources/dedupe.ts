@@ -9,9 +9,16 @@ const norm = (s: string) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-/** Same normalised title + employer + location = the same vacancy. */
+const firstWord = (s: string) => norm(s).replace(/^the /, '').split(' ')[0] ?? '';
+
+/**
+ * Same normalised title + employer + place = the same vacancy. The employer and the place are
+ * compared on their first word, because sources spell them differently: "Clarion" and "Clarion
+ * Housing", "Ernest Gordon Recruitment" and "... Limited", "Hays Specialist Recruitment" and
+ * "Hays Construction and Property", "Birmingham" and "Birmingham, West Midlands".
+ */
 export function dedupeKey(job: Pick<Job, 'title' | 'employer' | 'location'>): string {
-  return `${norm(job.title)}|${norm(job.employer)}|${norm(job.location)}`;
+  return `${norm(job.title)}|${firstWord(job.employer)}|${firstWord(job.location)}`;
 }
 
 /** Keeps the first occurrence of each vacancy (so list your preferred sources first). */

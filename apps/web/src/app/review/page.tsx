@@ -7,13 +7,14 @@ import { useApp } from '../../components/AppShell';
 import { api, errorText } from '../../lib/api';
 import { ALL_FIELDS_CHECKED, STATEMENT_FIELD, declarationField, declarationsFor } from '../../lib/declarations';
 import { HOLD_LABEL, STATUS_LABEL, needsLabel, placeOf } from '../../lib/labels';
-import type { Application, MatchView } from '../../lib/types';
+import type { AgentStatus, Application, MatchView, PublicUser } from '../../lib/types';
 
 const FILLED: [string, string][] = [
   ['Name, contact details', 'from your profile'],
   ['Employment history', 'from your CV'],
   ['Qualifications', 'from your CV'],
   ['Tickets and memberships', 'from your credential passport, after you confirm each one on the form'],
+  ['Referees', 'from your credential passport (Profile), after you confirm each one on the form'],
   ['Supporting statement', 'the text below, as saved'],
 ];
 
@@ -32,6 +33,12 @@ function Review() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [agent, setAgent] = useState<AgentStatus>();
+  const [verified, setVerified] = useState<boolean>();
+  useEffect(() => {
+    api<AgentStatus>('/agent/status').then(setAgent).catch(() => undefined);
+    api<PublicUser>('/account').then((u) => setVerified(u.emailVerified)).catch(() => undefined);
+  }, []);
 
   const showApp = useCallback((a: Application | undefined) => {
     setApp(a);
@@ -93,7 +100,8 @@ function Review() {
     }
   }
 
-  const declarations = declarationsFor(match?.job);
+  // Referees are filled from the passport after the person confirms them on the form, so they are listed above, not here.
+  const declarations = declarationsFor(match?.job).filter((d) => d.id !== 'ref');
 
   async function approve() {
     if (!app) return;
@@ -278,10 +286,9 @@ function Review() {
                 </label>
               );
             })}
-            {appMode === 'auto' ? (
-              <p className="note small">Auto mode never submits a form that has a declaration or other sensitive field. This form waits for you.</p>
-            ) : null}
           </section>
+
+          {appMode === 'auto' && status !== 'submitted' ? <AutoChecklist agent={agent} verified={verified} declarations={declarations.map((d) => d.label)} /> : null}
 
           {error ? <div className="note bad" role="alert">{error}</div> : null}
           {notice ? <div className="note ok" role="status">{notice}</div> : null}
@@ -303,12 +310,12 @@ function Review() {
           {status === 'confirmed' ? (
             <section className="card" aria-label="Next steps">
               <p>
-                <b>Approved. Nothing has been sent to the employer.</b>
+                <b>Approved, not sent yet.</b> The checklist above says what is stopping OpennJob from sending it for you. To send it now:
               </p>
               <ol className="small">
                 <li>Open the employer’s form.</li>
-                <li>Use the OpennJob extension to fill it. It asks you again before it writes any sensitive field.</li>
-                <li>Answer the declarations yourself and submit the form, then record it here.</li>
+                <li>Press Fill in the OpennJob extension: your details, CV and statement go in; it asks before any sensitive field.</li>
+                <li>Answer the declarations, press submit, then paste the confirmation here.</li>
               </ol>
               <div className="row">
                 <a className="btn" href={app.applyUrl} target="_blank" rel="noopener noreferrer">
@@ -351,5 +358,52 @@ export default function ReviewPage() {
     <Suspense fallback={null}>
       <Review />
     </Suspense>
+  );
+}
+
+/**
+ * What stands between this application and OpennJob sending it without the person: each line is
+ * met or not, read from the account and the agent status. Declarations on the form always stop it.
+ */
+function AutoChecklist({ agent, verified, declarations }: { agent?: AgentStatus; verified?: boolean; declarations: string[] }) {
+  const enabledSystems = (agent?.systems ?? []).filter((s) => s.enabled).map((s) => s.label);
+  const on = agent ? agent.authorisation.enabled && !agent.authorisation.paused : undefined;
+  const rows: { ok: boolean | undefined; text: string; fix?: { href: string; label: string } }[] = [
+    { ok: verified, text: verified ? 'Your e-mail address is confirmed.' : 'Your e-mail address is not confirmed.', ...(verified === false ? { fix: { href: '/verify-email/', label: 'Confirm it' } } : {}) },
+    {
+      ok: on,
+      text: on ? 'Automatic applications are on.' : agent?.authorisation.paused ? 'Automatic applications are paused.' : 'Automatic applications are off.',
+      ...(on === false ? { fix: { href: '/account/', label: 'Turn them on in Account' } } : {}),
+    },
+    {
+      ok: enabledSystems.length > 0 ? undefined : agent ? false : undefined,
+      text:
+        enabledSystems.length > 0
+          ? `OpennJob can send only on: ${enabledSystems.join(', ')}. Another site waits for you.`
+          : 'No employer application system is enabled yet: each needs one supervised test submission first.',
+    },
+    {
+      ok: declarations.length === 0,
+      text: declarations.length ? `This job’s form asks for things only you answer (${declarations.join('; ')}). A form with any of them waits for you.` : 'No declaration expected.',
+    },
+  ];
+  if (agent && agent.dailyLimit.remaining === 0) rows.push({ ok: false, text: `Today’s limit of ${agent.dailyLimit.limit} automatic applications is reached.` });
+  return (
+    <section className="card" aria-label="What stops automatic sending" data-testid="auto-checklist">
+      <span className="label">Can OpennJob send this for you?</span>
+      <ul className="plain checklist">
+        {rows.map((row) => (
+          <li key={row.text} className={row.ok === true ? 'ok' : row.ok === false ? 'no' : 'unknown'}>
+            <span aria-hidden="true">{row.ok === true ? '✓' : row.ok === false ? '✗' : '•'}</span> {row.text}
+            {row.fix ? (
+              <>
+                {' '}
+                <Link href={row.fix.href}>{row.fix.label}</Link>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -251,6 +251,10 @@ describe('de-duplication across sources', () => {
   it('treats the same normalised title + employer + location as one vacancy', () => {
     expect(dedupeKey(job('1', 'Healthcare Assistant', 'Example Care', 'Leeds, UK'))).toBe(dedupeKey(job('2', '  healthcare   assistant ', 'EXAMPLE CARE', 'Leeds UK')));
     expect(dedupeKey(job('1', 'Nurse', 'Smith & Sons', 'York'))).toBe(dedupeKey(job('2', 'Nurse', 'Smith and Sons', 'York')));
+    // Sources spell the same employer and place differently (fictional employers).
+    expect(dedupeKey(job('1', 'Senior Construction Delivery Manager', 'Clarion (example)', 'Birmingham'))).toBe(dedupeKey(job('2', 'Senior Construction Delivery Manager', 'Clarion Housing (example)', 'Birmingham, West Midlands')));
+    expect(dedupeKey(job('1', 'Quantity Surveyor', 'Example Gordon Recruitment', 'Leeds'))).toBe(dedupeKey(job('2', 'Quantity Surveyor', 'Example Gordon Recruitment Limited', 'Leeds')));
+    expect(dedupeKey(job('1', 'Quantity Surveyor', 'Example Build', 'Leeds'))).not.toBe(dedupeKey(job('2', 'Quantity Surveyor', 'Sample Build', 'Leeds')));
   });
 
   it('keeps jobs that differ in title, employer or location', () => {

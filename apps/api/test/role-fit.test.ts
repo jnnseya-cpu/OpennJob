@@ -49,4 +49,22 @@ describe('role fit through the API', () => {
     expect(run.closedOtherField).toBe(1);
     expect(((await t.api.get(`/applications/${early.id}`).expect(200)).body as Application).status).toBe('closed');
   });
+
+  it('the same vacancy from two sources is listed once, and has one application', async () => {
+    t = await createTestApp({ sources: [], config: testConfig({ employerKey: EMPLOYER_KEY }) });
+    await t.api.put('/profile').send({ ...PROFILE, cvText: CV }).expect(200);
+    const post = (body: object) => t.raw().post('/employer/jobs').set('Authorization', `Bearer ${EMPLOYER_KEY}`).send(body).expect(201);
+    const a = (await post({ ...job('Senior Project Manager', 3), employer: 'Clarion (fictional)' })).body as Job;
+    const b = (await post({ ...job('Senior Project Manager', 4), employer: 'Clarion Housing (fictional)' })).body as Job;
+    const listed = ((await t.api.get('/jobs/matches?min=0').expect(200)).body as { job: Job }[]).map((m) => m.job.id);
+    expect(listed.filter((id) => id === a.id || id === b.id)).toHaveLength(1);
+
+    const first = (await t.api.post('/applications').send({ jobId: a.id, mode: 'auto' }).expect(201)).body as Application;
+    // A direct request for the other copy returns the existing application: one vacancy, one application.
+    expect(((await t.api.post('/applications').send({ jobId: b.id, mode: 'auto' }).expect(201)).body as Application).id).toBe(first.id);
+    const run = (await t.api.post('/agent/run').send({}).expect(200)).body as { prepared: Application[]; closedDuplicates: number };
+    expect(run.prepared).toEqual([]);
+    expect(run.closedDuplicates).toBe(0);
+    expect(((await t.api.get(`/applications/${first.id}`).expect(200)).body as Application).status).not.toBe('closed');
+  });
 });

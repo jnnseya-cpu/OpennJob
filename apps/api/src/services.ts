@@ -273,7 +273,14 @@ export class OpennJobService {
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences)))
       .filter((m) => m.score >= min)
-      .sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score || a.job.id.localeCompare(b.job.id));
+      .sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score || a.job.id.localeCompare(b.job.id))
+      // The same vacancy from two sources is listed once (the first, best-scored copy).
+      .filter(
+        (
+          (seen) => (m: { job: Pick<Job, 'title' | 'employer' | 'location'> }) =>
+            !seen.has(dedupeKey(m.job)) && Boolean(seen.add(dedupeKey(m.job)))
+        )(new Set<string>()),
+      );
   }
 
   // ----- employer postings (optional) -----------------------------------------------
@@ -386,12 +393,20 @@ export class OpennJobService {
    * APP-6: an existing application for this job, or for the same employer, title and
    * location within the duplicate period. Every status counts, closed included.
    */
-  private duplicateOf(existing: readonly Application[], job: Job): Application | undefined {
+  /**
+   * APP-6. An application's own key is compared, and also the key of its job as it is now, so
+   * applications made before the key changed are still recognised (`jobs`, when given).
+   */
+  private duplicateOf(existing: readonly Application[], job: Job, jobs?: ReadonlyMap<string, Job>): Application | undefined {
     const key = dedupeKey(job);
     const since = this.deps.clock().getTime() - limitsOf(this.deps.config).duplicateDays * DAY_MS;
+    const keyOf = (a: Application) => {
+      const own = jobs?.get(a.jobId);
+      return own ? dedupeKey(own) : a.dedupeKey ?? '';
+    };
     return (
       existing.find((a) => a.jobId === job.id) ??
-      existing.find((a) => (a.dedupeKey ?? '') === key && Date.parse(a.createdAt) >= since)
+      existing.find((a) => (a.dedupeKey === key || keyOf(a) === key) && Date.parse(a.createdAt) >= since)
     );
   }
 
@@ -442,6 +457,7 @@ export class OpennJobService {
     const existing = await this.deps.repository.listApplications(userId);
     const jobs = await this.deps.repository.listJobs();
 
+    const jobsById = new Map(jobs.map((j) => [j.id, j]));
     // Unsent drafts for posts the CV does not show (scored before the title was checked) are closed.
     let closedOtherField = 0;
     for (const a of existing) {
@@ -454,6 +470,26 @@ export class OpennJobService {
       closedOtherField += 1;
     }
 
+    // The same vacancy prepared twice from two sources (before duplicates were matched on the
+    // employer's first word): the unsent copy made later is closed; the first one stays.
+    let closedDuplicates = 0;
+    const firstByKey = new Map<string, Application>();
+    for (const a of [...existing].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id))) {
+      const job = jobsById.get(a.jobId);
+      if (!job || a.status === 'closed') continue;
+      const key = dedupeKey(job);
+      const first = firstByKey.get(key);
+      if (!first) {
+        firstByKey.set(key, a);
+        continue;
+      }
+      if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined) continue;
+      const closed: Application = { ...a, status: 'closed' };
+      await this.deps.repository.updateApplication(closed);
+      existing.splice(existing.indexOf(a), 1, closed);
+      closedDuplicates += 1;
+    }
+
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
@@ -464,7 +500,7 @@ export class OpennJobService {
       const match = matchJob(job, profile.cvText, passport, preferences);
       if (match.score < threshold) skipped.belowThreshold += 1;
       else if (!match.eligible) skipped.ineligible += 1;
-      else if (this.duplicateOf(existing, job)) skipped.alreadyPrepared += 1;
+      else if (this.duplicateOf(existing, job, jobsById)) skipped.alreadyPrepared += 1;
       else candidates.push({ job, match });
     }
     candidates.sort((a, b) => b.match.score - a.match.score || a.job.id.localeCompare(b.job.id));
@@ -472,15 +508,15 @@ export class OpennJobService {
     const prepared: Application[] = [];
     for (const { job, match } of candidates) {
       // The same vacancy can arrive twice in one run (two sources): the second is a duplicate.
-      if (this.duplicateOf([...existing, ...prepared], job)) {
+      if (this.duplicateOf([...existing, ...prepared], job, jobsById)) {
         skipped.alreadyPrepared += 1;
         continue;
       }
       prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
     }
 
-    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField });
-    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField };
+    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates });
+    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates };
   }
 
   private async mustGetApplication(userId: string, id: string): Promise<Application> {
