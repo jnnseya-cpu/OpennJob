@@ -39,13 +39,16 @@ export function applicationSystemFor(url: string): ApplicationSystem | undefined
   return APPLICATION_SYSTEMS.find((s) => s.hosts.some((h) => (h.startsWith('.') ? host.endsWith(h) : host === h)));
 }
 
-/** The wording a person agrees to when they turn on standing authorisation (APP-2, scope per OD-1). */
-export const STANDING_SCOPE_VERSION = 'od1-2026-10-06';
+/**
+ * The wording a person agrees to when they turn on standing authorisation (APP-2, scope per OD-1,
+ * right to work per OD-5). A new version means consent to the old one no longer counts.
+ */
+export const STANDING_SCOPE_VERSION = 'od5-2026-10-06';
 export const STANDING_SCOPE_TEXT = [
   'OpennJob may send applications for me, without asking each time, when all of these are true:',
   'the job is inside my preferences and scores at least 80% against my CV;',
   'every sentence of the documents traces to my CV;',
-  'the form has no declaration and no other sensitive question;',
+  'the form has no declaration and no other sensitive question, except "Do you have the right to work in this country?" and "Will you need visa sponsorship?", which OpennJob answers from the right-to-work record I keep in my Profile for that country;',
   'every required question has an answer I stored myself;',
   "the site's application system has been enabled by the operator after a supervised test;",
   "today's limit has not been reached.",

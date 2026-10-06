@@ -12,8 +12,9 @@ import type { RunReport } from '../agent/types';
 export function holdReasonsOf(report: RunReport): string[] {
   if (report.status === 'blocked') return [...report.blockers];
   const reasons: string[] = [];
-  for (const f of report.fields) if (f.sensitive) reasons.push(`sensitive:${f.category ?? 'sensitive'}`);
-  for (const f of report.fields) if (!f.sensitive && f.required && (f.state === 'no-data' || f.state === 'skipped')) reasons.push(`question:${f.label.slice(0, 280)}`);
+  // Right to work answered from the person's record (OD-5) is not a reason to hold; anything else sensitive is.
+  for (const f of report.fields) if (f.sensitive && f.fromRecord !== true) reasons.push(`sensitive:${f.category ?? 'sensitive'}`);
+  for (const f of report.fields) if ((!f.sensitive || f.fromRecord === true) && f.required && (f.state === 'no-data' || f.state === 'skipped')) reasons.push(`question:${f.label.slice(0, 280)}`);
   if ((report.fileInputs?.required ?? 0) > 0) reasons.push('file-upload');
   if (reasons.length === 0 && report.fields.length === 0) reasons.push('no-form');
   if (reasons.length === 0 && report.readyToSubmit !== true) reasons.push('no-submit-button');

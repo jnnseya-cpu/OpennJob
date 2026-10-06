@@ -6,7 +6,7 @@ import { useApp } from '../../components/AppShell';
 import { BarList } from '../../components/Charts';
 import { ScreeningForm } from '../../components/ScreeningForm';
 import { ApiError, api, errorText, upload } from '../../lib/api';
-import { COUNTRIES, KNOWN_CITIES, LANGUAGES, PACKS, cityCountry, countryName, getPack } from '../../lib/core';
+import { COUNTRIES, KNOWN_CITIES, LANGUAGES, PACKS, WORK_RIGHTS_BASES, cityCountry, countryName, getPack } from '../../lib/core';
 import type { PackCredentialField } from '../../lib/core';
 import type { CvExtraction, Passport, PassportView, Profile, PublicUser } from '../../lib/types';
 
@@ -32,6 +32,20 @@ interface RefereeRow {
   phone: string;
 }
 const EMPTY_REFEREE: RefereeRow = { name: '', relationship: '', organisation: '', email: '', phone: '' };
+
+/** OD-5: one country's right to work and sponsorship, resting on a document the person holds. */
+interface WorkRightsRow {
+  country: string;
+  rightToWork: '' | 'yes' | 'no';
+  requiresSponsorship: '' | 'yes' | 'no';
+  basis: string;
+  documentExpires: string;
+  /** Never pre-ticked: the person confirms the answers are true and they hold the document. */
+  confirmed: boolean;
+  /** When the person last confirmed this record (from the API). */
+  confirmedAt?: string;
+}
+const EMPTY_WORK_RIGHTS: WorkRightsRow = { country: 'GB', rightToWork: '', requiresSponsorship: '', basis: '', documentExpires: '', confirmed: false };
 
 const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
@@ -66,6 +80,7 @@ export default function ProfilePage() {
   const [training, setTraining] = useState<TrainingRow[]>([]);
   const [trainingStatus, setTrainingStatus] = useState<PassportView['training']>([]);
   const [referees, setReferees] = useState<RefereeRow[]>([]);
+  const [workRights, setWorkRights] = useState<WorkRightsRow[]>([]);
   const [passportMsg, setPassportMsg] = useState<{ ok: boolean; text: string }>();
   const [savingPassport, setSavingPassport] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -111,6 +126,17 @@ export default function ProfilePage() {
     setRightToWork(p.rightToWorkConfirmed);
     setTraining(p.training.map((t) => ({ name: t.name, completedOn: t.completedOn ?? '', expiresOn: t.expiresOn ?? '' })));
     setReferees(p.referees.map((r) => ({ ...r })));
+    setWorkRights(
+      (p.workRights ?? []).map((r) => ({
+        country: r.country,
+        rightToWork: r.rightToWork ? 'yes' : 'no',
+        requiresSponsorship: r.requiresSponsorship ? 'yes' : 'no',
+        basis: r.basis,
+        documentExpires: r.documentExpires ?? '',
+        confirmed: true,
+        confirmedAt: r.confirmedAt,
+      })),
+    );
     setTrainingStatus(view.training);
   }
 
@@ -215,8 +241,27 @@ export default function ProfilePage() {
       ...(dbs.issueDate ? { issueDate: dbs.issueDate } : {}),
       ...(dbs.onUpdateService ? { onUpdateService: true } : {}),
     };
-    const body: Passport = {
+    const rows = workRights.filter((r) => r.rightToWork || r.requiresSponsorship || r.basis || r.documentExpires);
+    const incomplete = rows.find((r) => !r.rightToWork || !r.requiresSponsorship || !r.basis || !r.confirmed);
+    if (incomplete) {
+      setSavingPassport(false);
+      setPassportMsg({ ok: false, text: `Right to work for ${countryName(incomplete.country) ?? incomplete.country}: answer both questions, choose the document you hold, and tick to confirm. Or remove that country.` });
+      return;
+    }
+    const body: Omit<Passport, 'workRights'> & { workRights?: { country: string; rightToWork: boolean; requiresSponsorship: boolean; basis: string; documentExpires?: string; confirmed: true }[] } = {
       rightToWorkConfirmed: rightToWork,
+      ...(rows.length
+        ? {
+            workRights: rows.map((r) => ({
+              country: r.country,
+              rightToWork: r.rightToWork === 'yes',
+              requiresSponsorship: r.requiresSponsorship === 'yes',
+              basis: r.basis,
+              ...(r.documentExpires ? { documentExpires: r.documentExpires } : {}),
+              confirmed: true as const,
+            })),
+          }
+        : {}),
       ...(Object.keys(creds).length ? { credentials: creds } : {}),
       ...(Object.keys(dbsBody).length ? { dbs: dbsBody } : {}),
       training: training
@@ -399,9 +444,83 @@ export default function ProfilePage() {
             <span>
               I have the right to work in the UK.
               <br />
-              <span className="muted small">Your own statement; not checked by OpennJob. Visa and sponsorship questions on a form are always yours to answer.</span>
+              <span className="muted small">Your own statement; not checked by OpennJob. On its own, the extension asks you to confirm it on each form.</span>
             </span>
           </label>
+
+          <section className="stack" aria-label="Right to work by country" data-testid="work-rights">
+            <span className="label">Right to work and sponsorship, answered for you</span>
+            <p className="small muted">
+              For each country, answer once and name the document you hold. OpennJob then answers “Do you have the right to work in …?” and “Will you need
+              visa sponsorship?” on forms for jobs in that country, without asking each time, until the document’s expiry date. OpennJob does not see or
+              check the document. Every other declaration (convictions, “I confirm”, equality questions) is still yours on each form.
+            </p>
+            {workRights.map((r, i) => {
+              const set = (patch: Partial<WorkRightsRow>) => setWorkRights((rows) => rows.map((x, j) => (j === i ? { ...x, ...patch, confirmed: 'confirmed' in patch ? Boolean(patch.confirmed) : false } : x)));
+              return (
+                <div key={i} className="card" data-testid="work-rights-row">
+                  <div className="grid2">
+                    <label className="field">
+                      <span>Country</span>
+                      <select value={r.country} onChange={(e) => set({ country: e.target.value })}>
+                        {COUNTRIES.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>The document you hold</span>
+                      <select value={r.basis} onChange={(e) => set({ basis: e.target.value })}>
+                        <option value="">Choose…</option>
+                        {WORK_RIGHTS_BASES.map((b) => (
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Do you have the right to work there?</span>
+                      <select value={r.rightToWork} onChange={(e) => set({ rightToWork: e.target.value as WorkRightsRow['rightToWork'] })}>
+                        <option value="">Choose…</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Will you need visa sponsorship there?</span>
+                      <select value={r.requiresSponsorship} onChange={(e) => set({ requiresSponsorship: e.target.value as WorkRightsRow['requiresSponsorship'] })}>
+                        <option value="">Choose…</option>
+                        <option value="no">No</option>
+                        <option value="yes">Yes</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Document expiry date (leave empty if none)</span>
+                      <input type="date" value={r.documentExpires} onChange={(e) => set({ documentExpires: e.target.value })} />
+                    </label>
+                  </div>
+                  <label className={`confirm ${r.confirmed ? 'on' : ''}`}>
+                    <input type="checkbox" checked={r.confirmed} onChange={(e) => set({ confirmed: e.target.checked })} />
+                    <span>
+                      These answers are true and I hold this document. OpennJob may give them on application forms for jobs in {countryName(r.country) ?? r.country}.
+                      {r.confirmedAt && r.confirmed ? <span className="muted small"> Confirmed {new Date(r.confirmedAt).toLocaleDateString('en-GB')}.</span> : null}
+                    </span>
+                  </label>
+                  <button type="button" className="link" onClick={() => setWorkRights((rows) => rows.filter((_, j) => j !== i))}>
+                    Remove this country
+                  </button>
+                </div>
+              );
+            })}
+            {workRights.length < 10 ? (
+              <button type="button" className="btn" onClick={() => setWorkRights((rows) => [...rows, { ...EMPTY_WORK_RIGHTS, country: rows.some((x) => x.country === 'GB') ? 'IE' : 'GB' }])}>
+                Add a country
+              </button>
+            ) : null}
+          </section>
 
           <span className="label">Mandatory training</span>
           {training.map((t, i) => {

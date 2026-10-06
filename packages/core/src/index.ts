@@ -13,6 +13,7 @@ export * from './matching';
 export * from './statement';
 export * from './policy';
 export * from './fields';
+export * from './work-rights';
 export * from './interview';
 export * from './interview-docs';
 export * from './search';

@@ -8,9 +8,12 @@ import {
   applicationSystemFor,
   buildFillValues,
   customAnswers,
+  inferPlace,
   screeningFillValues,
   screeningKey,
   screeningRefusal,
+  workRightsContext,
+  zonedDate,
 } from '@opennjob/core';
 import type { Application, ApplicationSystemSetting, ScreeningAnswers, StandingAuthorisation } from '@opennjob/core';
 import { DEPS } from './deps';
@@ -196,10 +199,16 @@ export class ApplyingService {
     const profile = await this.service.getProfile(userId);
     const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
     const screening = (await this.deps.repository.getScreeningAnswers(userId)) ?? EMPTY_SCREENING;
+    // The job's country, for right to work and sponsorship from the person's own record (OD-5).
+    const job = await this.deps.repository.getJob(application.jobId);
+    const jobCountry = job?.country ?? inferPlace(job?.location).country;
+    const today = zonedDate(this.deps.clock());
+    const workRights = workRightsContext(passport, jobCountry, today);
     return {
       application: { id: application.id, jobTitle: application.jobTitle, employer: application.employer, applyUrl: application.applyUrl, score: application.score },
-      values: { ...buildFillValues(profile, passport, application.statement), ...screeningFillValues(screening) },
+      values: { ...buildFillValues(profile, passport, application.statement, { ...(jobCountry ? { jobCountry } : {}), today }), ...screeningFillValues(screening) },
       custom: customAnswers(screening),
+      ...(workRights ? { workRights } : {}),
     };
   }
 

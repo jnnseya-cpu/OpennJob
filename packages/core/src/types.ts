@@ -127,8 +127,29 @@ export interface Passport {
   dbs?: DbsDetails;
   /** The user's own confirmation that they have the right to work in the UK. Not a verification. */
   rightToWorkConfirmed: boolean;
+  /**
+   * Right to work and sponsorship per country, each resting on a document the person says they
+   * hold (owner decision OD-5, work-rights.ts). Used to answer those two questions on forms for
+   * jobs in that country without asking again. OpennJob does not see or check the document.
+   */
+  workRights?: WorkRightsRecord[];
   training: TrainingRecord[];
   referees: Referee[];
+}
+
+export interface WorkRightsRecord {
+  /** ISO 3166-1 alpha-2, upper case. */
+  country: string;
+  /** "Do you have the right to work in <country>?" */
+  rightToWork: boolean;
+  /** "Will you now or in future need visa sponsorship to work in <country>?" */
+  requiresSponsorship: boolean;
+  /** The document the person holds as evidence, from WORK_RIGHTS_BASES. */
+  basis: string;
+  /** YYYY-MM-DD. After this date the record is not used. Absent for a document without expiry. */
+  documentExpires?: string;
+  /** ISO time the person confirmed this record. A record without it is never used. */
+  confirmedAt: string;
 }
 
 export const EMPTY_PASSPORT: Passport = { rightToWorkConfirmed: false, training: [], referees: [] };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFillValues, classifyField, detectSensitiveCategory, normaliseFieldText } from '../src';
+import { buildFillValues, classifyField, detectSensitiveCategory, normaliseFieldText, workRightsAnswer } from '../src';
 import type { FieldDescriptor, Passport, Profile } from '../src';
 
 const classify = (label: string, extra: Partial<FieldDescriptor> = {}) => classifyField({ label, type: 'text', tag: 'input', ...extra });
@@ -63,7 +63,6 @@ describe('fields treated as sensitive: clearance, sponsorship, conflict of inter
     for (const label of [
       'Do you hold current security clearance?',
       'Security clearance reference number',
-      'Will you need visa sponsorship for this role?',
       'Do you hold a valid work permit?',
       'Work authorisation status',
       'Do you have any conflict of interest to declare?',
@@ -71,6 +70,15 @@ describe('fields treated as sensitive: clearance, sponsorship, conflict of inter
       expect(classify(label).key, label).toBeNull();
       expect(classify(label, { type: 'radio' }).key, label).toBeNull();
     }
+  });
+
+  it('OD-5: the plain sponsorship question is recognised, stays sensitive, and is answered only from a valid record', () => {
+    const c = classify('Will you need visa sponsorship for this role?', { type: 'radio' });
+    expect(c).toMatchObject({ sensitive: true, category: 'right-to-work', key: 'visaSponsorship' });
+    // No record: the old UK confirmation never answers sponsorship.
+    expect(workRightsAnswer(c, { rightToWork: true }, { country: 'GB', fromRecord: false }).value).toBeUndefined();
+    // Worded the other way round: left for the person.
+    expect(classify('Are you able to work without sponsorship?', { type: 'radio' }).key).toBeNull();
   });
 
   it('detects them from the name, id or section heading when the label does not say', () => {
@@ -123,8 +131,18 @@ describe('the right-to-work answer is only offered for the UK question', () => {
     expect(classify('Right to work', { type: 'checkbox' }).key).toBe('rightToWork');
   });
   it('does not offer it when the question names another country', () => {
-    for (const label of ['Do you have the right to work in Ireland?', 'Do you have the right to work in Germany?', 'Right to work in Canada']) {
-      expect(classify(label, { type: 'radio' })).toMatchObject({ sensitive: true, category: 'right-to-work', key: null });
+    for (const [label, country] of [
+      ['Do you have the right to work in Ireland?', 'IE'],
+      ['Do you have the right to work in Germany?', 'DE'],
+      ['Right to work in Canada', 'CA'],
+    ] as const) {
+      const c = classify(label, { type: 'radio' });
+      // OD-5: the question is recognised with the country it names...
+      expect(c).toMatchObject({ sensitive: true, category: 'right-to-work', key: 'rightToWork', country });
+      // ...and no answer is offered for a UK job, from a record or from the old UK confirmation.
+      expect(workRightsAnswer(c, { rightToWork: true, visaSponsorship: false }, { country: 'GB', fromRecord: true }).value).toBeUndefined();
+      expect(workRightsAnswer(c, { rightToWork: true }, { country: 'GB', fromRecord: false }).value).toBeUndefined();
+      expect(workRightsAnswer(c, { rightToWork: true }, undefined).value).toBeUndefined();
     }
   });
 });

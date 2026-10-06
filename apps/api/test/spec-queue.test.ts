@@ -272,3 +272,35 @@ describe('APP-9: an application system is used only after the operator enables i
     await t.as('anything').put('/operator/pause').send({ paused: true }).expect(401);
   });
 });
+
+describe('OD-5: right to work and sponsorship from the person\'s own record', () => {
+  const RECORD = { country: 'gb', rightToWork: true, requiresSponsorship: false, basis: 'British or Irish passport', confirmed: true };
+
+  it('is saved only with the person\'s confirmation and a known document, and the time is stamped by the API', async () => {
+    t = await createTestApp();
+    await t.api.put('/passport').send({ ...PASSPORT, workRights: [{ ...RECORD, confirmed: false }] }).expect(400);
+    await t.api.put('/passport').send({ ...PASSPORT, workRights: [{ ...RECORD, basis: 'A note from a friend' }] }).expect(400);
+    await t.api.put('/passport').send({ ...PASSPORT, workRights: [{ ...RECORD, confirmedAt: '2020-01-01T00:00:00.000Z' }] }).expect(400);
+    await t.api.put('/passport').send({ ...PASSPORT, workRights: [RECORD, RECORD] }).expect(400);
+    const saved = (await t.api.put('/passport').send({ ...PASSPORT, workRights: [RECORD] }).expect(200)).body;
+    expect(saved.passport.workRights).toEqual([{ country: 'GB', rightToWork: true, requiresSponsorship: false, basis: 'British or Irish passport', confirmedAt: NOW }]);
+    const event = (await t.deps.repository.listEvents(USER_ID)).find((e) => e.type === 'passport.updated');
+    expect(event?.payload).toMatchObject({ workRights: 1 });
+    expect(JSON.stringify(event?.payload)).not.toContain('passport');
+  });
+
+  it('the queue hands the extension the job\'s country and the answers from the record', async () => {
+    await queued(1);
+    await t.api.put('/passport').send({ ...PASSPORT, workRights: [RECORD] }).expect(200);
+    const next = (await t.api.get('/agent/queue/next').expect(200)).body;
+    expect(next.workRights).toEqual({ country: 'GB', fromRecord: true });
+    expect(next.values).toMatchObject({ rightToWork: true, visaSponsorship: false });
+  });
+
+  it('without a record the queue says so, and sponsorship has no value', async () => {
+    await queued(1);
+    const next = (await t.api.get('/agent/queue/next').expect(200)).body;
+    expect(next.workRights).toEqual({ country: 'GB', fromRecord: false });
+    expect(next.values.visaSponsorship).toBeUndefined();
+  });
+});

@@ -97,6 +97,7 @@ export function scanFields(doc: Document): DetectedField[] {
         sensitive: c.sensitive,
         category: c.category,
         key: c.key,
+        ...(c.country ? { country: c.country } : {}),
         required: (el as HTMLInputElement).required,
         elements: [el],
       };
@@ -126,6 +127,7 @@ export function scanFields(doc: Document): DetectedField[] {
       sensitive: c.sensitive,
       category: c.category,
       key: c.key,
+      ...(c.country ? { country: c.country } : {}),
       required: el.required || el.getAttribute('aria-required') === 'true',
       elements: [el],
     });

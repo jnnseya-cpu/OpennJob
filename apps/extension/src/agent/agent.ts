@@ -1,5 +1,5 @@
-import { decide, fieldsAllowedToFill, maySubmit, screeningKey } from '@opennjob/core/browser';
-import type { FillValue, PolicyField } from '@opennjob/core/browser';
+import { decide, fieldsAllowedToFill, maySubmit, screeningKey, workRightsAnswer } from '@opennjob/core/browser';
+import type { FillValue, FillValues, PolicyField, WorkRightsContext } from '@opennjob/core/browser';
 import { blockerMessage, detectBlockers } from './blockers';
 import { fillField } from './fill';
 import { hasValue, scanFields } from './scan';
@@ -25,6 +25,19 @@ function markSensitive(field: DetectedField, state: FieldState): void {
     el.setAttribute('data-opennjob-state', state);
   }
 }
+
+/**
+ * The value proposed for a field, and whether it comes from the person's own right-to-work record
+ * (OD-5). Right-to-work fields go through workRightsAnswer(), which checks the country.
+ */
+function proposedValue(field: DetectedField, request: Pick<RunRequest, 'values' | 'custom' | 'workRights'>): { value: FillValue | undefined; fromRecord: boolean } {
+  if (field.category === 'right-to-work') return workRightsAnswer(field, request.values, request.workRights);
+  const value = field.key ? request.values[field.key] : !field.sensitive && request.custom ? request.custom[screeningKey(field.label)] : undefined;
+  return { value, fromRecord: false };
+}
+
+/** A sensitive field that stops auto mode: every sensitive field except one answered from the record. */
+const blocksAuto = (field: DetectedField, fromRecord: ReadonlySet<string>) => field.sensitive && !fromRecord.has(field.id);
 
 function findSubmitControl(fields: DetectedField[]): HTMLElement | null {
   const forms = new Set<HTMLFormElement>();
@@ -56,12 +69,15 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
 
   const fields = scanFields(doc);
   const confirmedFieldIds = request.confirmedFieldIds ?? [];
-  const toPolicy = (): PolicyField[] => fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f) }));
+  const proposed = new Map(fields.map((f) => [f.id, proposedValue(f, request)]));
+  const fromRecord = new Set(fields.filter((f) => proposed.get(f.id)?.fromRecord).map((f) => f.id));
+  const toPolicy = (): PolicyField[] =>
+    fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f), ...(fromRecord.has(f.id) ? { fromWorkRights: true } : {}) }));
   const allowed = new Set(fieldsAllowedToFill({ mode: request.mode, fields: toPolicy(), confirmedFieldIds }));
 
   const reports: FieldReport[] = fields.map((field) => {
     // A stored custom answer is only ever looked at for a field that is not sensitive (SCR-3).
-    const value = field.key ? request.values[field.key] : !field.sensitive && request.custom ? request.custom[screeningKey(field.label)] : undefined;
+    const value = proposed.get(field.id)?.value;
     let state: FieldState;
     let reason: string | undefined;
 
@@ -88,6 +104,7 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
       key: field.key,
       required: field.required,
       proposed: preview(value),
+      ...(fromRecord.has(field.id) ? { fromRecord: true } : {}),
       state,
       ...(reason ? { reason } : {}),
     };
@@ -105,15 +122,17 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
     message = 'Preview only. Nothing has been filled.';
   } else if (request.holdSubmit) {
     // The queue: never submits here. It reports, asks the API for the go, then sends OPENNJOB_SUBMIT.
-    readyToSubmit = maySubmit(decision) && request.mode === 'auto' && !fields.some((f) => f.sensitive) && fileInputs.required === 0 && findSubmitControl(fields) !== null;
+    readyToSubmit = maySubmit(decision) && request.mode === 'auto' && !fields.some((f) => blocksAuto(f, fromRecord)) && fileInputs.required === 0 && findSubmitControl(fields) !== null;
     message = readyToSubmit ? 'Filled. Waiting for the go to submit.' : 'Filled as far as allowed. This form waits for you.';
-  } else if (maySubmit(decision) && request.mode === 'auto' && !fields.some((f) => f.sensitive)) {
+  } else if (maySubmit(decision) && request.mode === 'auto' && !fields.some((f) => blocksAuto(f, fromRecord))) {
     // The second and third conditions repeat what the policy already guarantees. Deliberate belt and braces.
     const control = findSubmitControl(fields);
     if (control) {
       control.click();
       submitted = true;
-      message = 'Auto mode: this form has no sensitive fields, so OpennJob pressed submit.';
+      message = fromRecord.size
+        ? 'Auto mode: right to work answered from your record and no other sensitive field, so OpennJob pressed submit.'
+        : 'Auto mode: this form has no sensitive fields, so OpennJob pressed submit.';
     } else {
       message = 'Auto mode: the form is filled but OpennJob could not identify a single submit button, so it did not submit. Press submit yourself.';
     }
@@ -139,16 +158,20 @@ function countFileInputs(doc: Document): { required: number; total: number } {
 
 /**
  * The queue's second step, after the API gave the go. Everything is checked again on the
- * page as it is now: no blocker, no sensitive field, every required field filled, no
- * required file, exactly one submit button. Only then is submit pressed. Auto mode only;
- * the same policy function as every other path (packages/core/src/policy.ts).
+ * page as it is now: no blocker, no sensitive field other than right to work answered from the
+ * person's record (OD-5, with the same values and country as the fill), every required field
+ * filled, no required file, exactly one submit button. Only then is submit pressed. Auto mode
+ * only; the same policy function as every other path (packages/core/src/policy.ts).
  */
-export function submitNow(doc: Document): SubmitReport {
+export function submitNow(doc: Document, filledWith?: { values: FillValues; workRights?: WorkRightsContext }): SubmitReport {
   if (detectBlockers(doc).length > 0) return { submitted: false, message: 'A CAPTCHA or sign-in appeared. Not submitted.' };
   const fields = scanFields(doc);
-  const policyFields: PolicyField[] = fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f) }));
+  const fromRecord = new Set(
+    filledWith ? fields.filter((f) => f.category === 'right-to-work' && hasValue(f) && workRightsAnswer(f, filledWith.values, filledWith.workRights).fromRecord).map((f) => f.id) : [],
+  );
+  const policyFields: PolicyField[] = fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f), ...(fromRecord.has(f.id) ? { fromWorkRights: true } : {}) }));
   const decision = decide({ mode: 'auto', fields: policyFields, confirmedFieldIds: [] });
-  if (!maySubmit(decision) || fields.some((f) => f.sensitive) || countFileInputs(doc).required > 0) return { submitted: false, message: 'The form changed and now waits for you. Not submitted.' };
+  if (!maySubmit(decision) || fields.some((f) => blocksAuto(f, fromRecord)) || countFileInputs(doc).required > 0) return { submitted: false, message: 'The form changed and now waits for you. Not submitted.' };
   const control = findSubmitControl(fields);
   if (!control) return { submitted: false, message: 'No single submit button. Not submitted.' };
   control.click();

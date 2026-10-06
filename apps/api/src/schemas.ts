@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PipeTransform } from '@nestjs/common';
 import { z } from 'zod';
-import { CREDENTIAL_IDS, NOTIFICATION_CATALOGUE, PACK_IDS, REGION_IDS, cityCountry, isoDateToUtcDay, normaliseCountryCode, normaliseLanguage } from '@opennjob/core';
+import { CREDENTIAL_IDS, NOTIFICATION_CATALOGUE, PACK_IDS, REGION_IDS, WORK_RIGHTS_BASES, cityCountry, isoDateToUtcDay, normaliseCountryCode, normaliseLanguage } from '@opennjob/core';
 
 /** Validates a request body/query against a zod schema; replies 400 with the list of problems. */
 @Injectable()
@@ -95,6 +95,24 @@ export const passportSchema = z
       .strict()
       .optional(),
     rightToWorkConfirmed: z.boolean(),
+    // OD-5: right to work and sponsorship per country, resting on a document the person holds.
+    // `confirmed: true` is the person's confirmation; the API stamps the time (confirmedAt).
+    workRights: z
+      .array(
+        z
+          .object({
+            country: z.string().refine((v) => normaliseCountryCode(v) !== undefined, 'must be an ISO 3166-1 alpha-2 country code').transform((v) => normaliseCountryCode(v) as string),
+            rightToWork: z.boolean(),
+            requiresSponsorship: z.boolean(),
+            basis: z.enum(WORK_RIGHTS_BASES),
+            documentExpires: isoDate.optional(),
+            confirmed: z.literal(true, { errorMap: () => ({ message: 'tick to confirm these answers are true and you hold this document' }) }),
+          })
+          .strict(),
+      )
+      .max(10)
+      .refine((rows) => new Set(rows.map((r) => r.country)).size === rows.length, 'one record per country')
+      .optional(),
     training: z
       .array(z.object({ name: text(120), completedOn: isoDate.optional(), expiresOn: isoDate.optional() }).strict())
       .max(50)

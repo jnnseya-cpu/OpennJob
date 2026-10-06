@@ -32,7 +32,7 @@ import {
   zonedDayStart,
   nextZonedDayStart,
 } from '@opennjob/core';
-import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory, SearchQuery } from '@opennjob/core';
+import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory, SearchQuery, WorkRightsRecord } from '@opennjob/core';
 import { DEPS, applyThresholdOf, limitsOf } from './deps';
 import type { OpennJobDeps } from './deps';
 import type {
@@ -123,9 +123,19 @@ export class OpennJobService {
   }
 
   async savePassport(userId: string, input: PassportInput) {
-    const passport = compact(input) as Passport;
+    const { workRights: rows, ...rest } = input;
+    const passport = compact(rest) as Passport;
+    if (rows && rows.length > 0) {
+      // OD-5: the confirmation time is kept while a record is unchanged, and renewed when it changes.
+      const before = (await this.deps.repository.getPassport(userId))?.workRights ?? [];
+      passport.workRights = rows.map(({ confirmed: _confirmed, ...r }) => {
+        const record: Omit<WorkRightsRecord, 'confirmedAt'> = { country: r.country, rightToWork: r.rightToWork, requiresSponsorship: r.requiresSponsorship, basis: r.basis, ...(r.documentExpires ? { documentExpires: r.documentExpires } : {}) };
+        const same = before.find((b) => b.country === r.country && b.rightToWork === r.rightToWork && b.requiresSponsorship === r.requiresSponsorship && b.basis === r.basis && b.documentExpires === r.documentExpires);
+        return { ...record, confirmedAt: same?.confirmedAt ?? this.now() };
+      });
+    }
     await this.deps.repository.savePassport(userId, passport);
-    await this.emit(userId, 'passport.updated', { trainingRecords: passport.training.length, referees: passport.referees.length, hasNmcPin: Boolean(nmcPinOf(passport)), credentials: Object.keys(passport.credentials ?? {}).length });
+    await this.emit(userId, 'passport.updated', { trainingRecords: passport.training.length, referees: passport.referees.length, hasNmcPin: Boolean(nmcPinOf(passport)), credentials: Object.keys(passport.credentials ?? {}).length, workRights: passport.workRights?.length ?? 0 });
     return this.passportView(passport);
   }
 

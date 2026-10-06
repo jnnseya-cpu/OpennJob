@@ -11,4 +11,6 @@ export type { Pack, PackDeclaration, PackCredentialField } from './packs';
 export { REGIONS, REGION_IDS, COUNTRIES, KNOWN_CITIES, countryName, cityCountry } from './geo';
 export type { Region, Country } from './geo';
 export { LANGUAGES } from './languages';
+export { WORK_RIGHTS_BASES, workRightsProblem, describeWorkRights } from './work-rights';
+export type { WorkRightsRecord } from './types';
 export type { Language } from './languages';

@@ -79,6 +79,7 @@ Paths: `api/` is `apps/api/test/`, `web/` is `apps/web/test/e2e/`, `ext/` is
 | APP-8 daily limit | Tested | `api/spec-applying.test.ts` (T-12) |
 | APP-9 one adapter per system, enabled after a supervised real submission | Partly | `api/spec-queue.test.ts` (off until the operator records a terms check and a supervised submission). **No real system has been enabled: no supervised real submission has been made.** |
 | APP-10 person's pause and operator's pause | Tested | `api/spec-queue.test.ts` (T-22), `web/account-flows.spec.ts` |
+| OD-5 right to work and sponsorship from the person's own record (owner decision, 6 October 2026) | Tested on fictional forms | `core/work-rights.test.ts`, `core/policy.test.ts` (second sweep), `core/packs-fields.test.ts`, `api/spec-queue.test.ts` (OD-5), `ext/work-rights.spec.ts`, `web/work-rights.spec.ts`. Never run on a real employer site. OpennJob does not see or check the document. |
 | SCR-1 ordinary answers stored once | Tested | `core/screening.test.ts`, `ext/queue.spec.ts` (T-14), `web/account-flows.spec.ts` |
 | SCR-2 unknown question holds; answer saved | Tested | `api/spec-queue.test.ts` (T-14) |
 | SCR-3 declarations never stored | Tested | `core/screening.test.ts`, `api/spec-queue.test.ts`, `web/account-flows.spec.ts` (refused on save) |

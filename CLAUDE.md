@@ -124,11 +124,22 @@ hold them, whatever a task seems to ask. If a request conflicts with one, stop a
    of interest, fitness to practise, safeguarding, health, equality monitoring, and any
    "I declare / I confirm" box are answered by the person, every time. The code holds no
    fill value for them and must not gain one. Do not store those answers.
+   **One exception, owner decision OD-5 (6 October 2026):** the two plain questions "Do you
+   have the right to work in <country>?" and "Will you need visa sponsorship?" may be
+   answered from the person's own right-to-work record for the job's country
+   (`packages/core/src/work-rights.ts`): confirmed by them, answered yes or no, naming the
+   document they hold, not expired. Nothing else about immigration (nationality, passport,
+   share code, NI number, visa type or expiry, evidence), no question worded the other way
+   round, and no other declaration falls under it. Convictions, "I confirm" boxes and the
+   rest stay the person's, every time.
 2. **A sensitive field is confirmed by the user before it is written. It is never
    auto-filled.** In every mode. Bulk "tick all" exists only for ordinary fields.
 3. **Auto mode never submits a form that has any sensitive field**, even after the user
    has confirmed those fields. It submits only a form with no sensitive field, at least
-   one field, and no empty required field. `review` and `hybrid` never submit.
+   one field, and no empty required field. `review` and `hybrid` never submit. Under
+   OD-5 a right-to-work or sponsorship field answered from a valid record
+   (`fromWorkRights` in `policy.ts`) does not count as stopping auto mode; any other
+   sensitive field still does. Review mode still asks for it.
 4. **No CAPTCHA solving and no bot-evasion.** On a CAPTCHA or a login wall the agent
    stops and says why. No proxy rotation, fingerprint spoofing, stealth plugins, headless
    detection workarounds, or anything meant to get past a site's defences.
@@ -147,7 +158,8 @@ hold them, whatever a task seems to ask. If a request conflicts with one, stop a
    Do not mark anything in `GO-LIVE.md` as done without a test or a real-world check.
 
 The decision logic is one pure function, `decide()` in `packages/core/src/policy.ts`,
-with a sweep test over about 68,000 combinations. The extension bundles that same file.
+with a sweep test over about 68,000 combinations, and a second sweep (about 25,000)
+that includes fields answered from the right-to-work record (OD-5). The extension bundles that same file.
 Changing it changes what the product does to people's applications: treat any edit there
 as needing explicit sign-off from the owner.
 

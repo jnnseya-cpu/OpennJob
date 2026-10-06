@@ -1,4 +1,4 @@
-import type { FillValues } from '@opennjob/core/browser';
+import type { FillValues, WorkRightsContext } from '@opennjob/core/browser';
 import type { Confirmation } from '../agent/confirmation';
 import type { RunReport, SubmitReport } from '../agent/types';
 import { holdReasonsOf } from './reasons';
@@ -31,6 +31,8 @@ interface NextReply {
   application?: { id: string; jobTitle: string; employer: string; applyUrl: string };
   values?: FillValues;
   custom?: Record<string, string>;
+  /** The job's country and whether right to work comes from the person's record (OD-5). */
+  workRights?: WorkRightsContext;
 }
 
 const STEP_LIMIT = 25;
@@ -128,7 +130,7 @@ export async function runQueue(): Promise<QueueState> {
       try {
         await waitForLoad(tabId);
         await inject(tabId);
-        const report = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true })) as RunReport;
+        const report = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true, ...(next.workRights ? { workRights: next.workRights } : {}) })) as RunReport;
         const reasons = holdReasonsOf(report);
         if (reasons.length > 0) {
           await api(`/agent/queue/${app.id}/result`, { method: 'POST', body: { outcome: 'held', reasons } });

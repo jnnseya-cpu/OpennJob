@@ -1,4 +1,4 @@
-import type { FieldKey, FillValues, Mode, PolicyDecision, SensitiveCategory } from '@opennjob/core/browser';
+import type { FieldKey, FillValues, Mode, PolicyDecision, SensitiveCategory, WorkRightsContext } from '@opennjob/core/browser';
 
 export type FieldKind = 'text' | 'textarea' | 'select' | 'checkbox' | 'radio';
 
@@ -10,6 +10,8 @@ export interface DetectedField {
   sensitive: boolean;
   category: SensitiveCategory | null;
   key: FieldKey | null;
+  /** Right-to-work fields: the country the question names, if any. */
+  country?: string;
   required: boolean;
   elements: HTMLElement[];
 }
@@ -38,6 +40,8 @@ export interface FieldReport {
   required: boolean;
   /** Short preview of the value OpennJob proposes (never the full statement). */
   proposed: string | null;
+  /** OD-5: filled from the person's own right-to-work record, without asking on this form. */
+  fromRecord?: boolean;
   state: FieldState;
   reason?: string;
 }
@@ -60,6 +64,8 @@ export interface RunRequest {
    * The queue asks the API for the go, then sends OPENNJOB_SUBMIT.
    */
   holdSubmit?: boolean;
+  /** The job's country and whether the right-to-work answers come from the person's record (OD-5). */
+  workRights?: WorkRightsContext;
 }
 
 export interface RunReport {

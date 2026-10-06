@@ -7,7 +7,9 @@ import { useApp } from '../../components/AppShell';
 import { api, errorText } from '../../lib/api';
 import { ALL_FIELDS_CHECKED, STATEMENT_FIELD, declarationField, declarationsFor } from '../../lib/declarations';
 import { HOLD_LABEL, STATUS_LABEL, needsLabel, placeOf } from '../../lib/labels';
-import type { AgentStatus, Application, MatchView, PublicUser } from '../../lib/types';
+import { describeWorkRights, workRightsProblem } from '../../lib/core';
+import type { WorkRightsRecord } from '../../lib/core';
+import type { AgentStatus, Application, MatchView, PassportView, PublicUser } from '../../lib/types';
 
 const FILLED: [string, string][] = [
   ['Name, contact details', 'from your profile'],
@@ -35,9 +37,11 @@ function Review() {
   const [busy, setBusy] = useState(false);
   const [agent, setAgent] = useState<AgentStatus>();
   const [verified, setVerified] = useState<boolean>();
+  const [workRights, setWorkRights] = useState<WorkRightsRecord[]>([]);
   useEffect(() => {
     api<AgentStatus>('/agent/status').then(setAgent).catch(() => undefined);
     api<PublicUser>('/account').then((u) => setVerified(u.emailVerified)).catch(() => undefined);
+    api<PassportView>('/passport').then((v) => setWorkRights(v.passport.workRights ?? [])).catch(() => undefined);
   }, []);
 
   const showApp = useCallback((a: Application | undefined) => {
@@ -100,8 +104,13 @@ function Review() {
     }
   }
 
-  // Referees are filled from the passport after the person confirms them on the form, so they are listed above, not here.
-  const declarations = declarationsFor(match?.job).filter((d) => d.id !== 'ref');
+  // OD-5: a valid right-to-work record for the job's country answers right to work and sponsorship.
+  const today = new Date().toISOString().slice(0, 10);
+  const record = workRights.find((r) => r.country === match?.job.country && !workRightsProblem(r, today));
+  // Referees are filled from the passport after the person confirms them on the form, and right to
+  // work from a valid record, so they are listed under "The extension fills these", not here.
+  const declarations = declarationsFor(match?.job).filter((d) => d.id !== 'ref' && !(record && d.id === 'rtw'));
+  const filled: [string, string][] = record ? [...FILLED, ['Right to work and sponsorship', `filled from your record: ${describeWorkRights(record)}`]] : FILLED;
 
   async function approve() {
     if (!app) return;
@@ -252,7 +261,7 @@ function Review() {
           <section className="card">
             <span className="label">The extension fills these</span>
             <dl className="kv">
-              {FILLED.map(([k, v]) => (
+              {filled.map(([k, v]) => (
                 <div key={k} style={{ display: 'contents' }}>
                   <dt>{k}</dt>
                   <dd>{v}</dd>
@@ -288,7 +297,7 @@ function Review() {
             })}
           </section>
 
-          {appMode === 'auto' && status !== 'submitted' ? <AutoChecklist agent={agent} verified={verified} declarations={declarations.map((d) => d.label)} /> : null}
+          {appMode === 'auto' && status !== 'submitted' ? <AutoChecklist agent={agent} verified={verified} declarations={declarations.map((d) => d.label)} rightToWork={record ? describeWorkRights(record) : null} /> : null}
 
           {error ? <div className="note bad" role="alert">{error}</div> : null}
           {notice ? <div className="note ok" role="status">{notice}</div> : null}
@@ -365,7 +374,7 @@ export default function ReviewPage() {
  * What stands between this application and OpennJob sending it without the person: each line is
  * met or not, read from the account and the agent status. Declarations on the form always stop it.
  */
-function AutoChecklist({ agent, verified, declarations }: { agent?: AgentStatus; verified?: boolean; declarations: string[] }) {
+function AutoChecklist({ agent, verified, declarations, rightToWork }: { agent?: AgentStatus; verified?: boolean; declarations: string[]; rightToWork: string | null }) {
   const enabledSystems = (agent?.systems ?? []).filter((s) => s.enabled).map((s) => s.label);
   const on = agent ? agent.authorisation.enabled && !agent.authorisation.paused : undefined;
   const rows: { ok: boolean | undefined; text: string; fix?: { href: string; label: string } }[] = [
@@ -381,6 +390,11 @@ function AutoChecklist({ agent, verified, declarations }: { agent?: AgentStatus;
         enabledSystems.length > 0
           ? `OpennJob can send only on: ${enabledSystems.join(', ')}. Another site waits for you.`
           : 'No employer application system is enabled yet: each needs one supervised test submission first.',
+    },
+    {
+      ok: rightToWork !== null,
+      text: rightToWork ? `Right to work and sponsorship are answered from your record: ${rightToWork}.` : 'No right-to-work record for this job’s country, so those questions wait for you.',
+      ...(rightToWork ? {} : { fix: { href: '/profile/', label: 'Add one in Profile' } }),
     },
     {
       ok: declarations.length === 0,

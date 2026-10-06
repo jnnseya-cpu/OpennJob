@@ -20,6 +20,13 @@ import type { Mode } from './types';
  *            and the user then presses submit. (Deliberately the stricter reading of
  *            "holds for the user".)
  *  anything else (unknown mode, malformed input) - await-confirmation. Fail closed.
+ *
+ * One exception (owner decision OD-5, 6 October 2026): a right-to-work or sponsorship field
+ * answered from the person's own confirmed, unexpired right-to-work record for the job's country
+ * (fromWorkRights: true, set only by workRightsAnswer() in fields.ts) counts as confirmed in
+ * hybrid and auto, and does not stop auto mode from submitting. Review mode still asks for it.
+ * Every other sensitive field - convictions, conflicts of interest, any declaration or
+ * "I confirm" box - still stops auto mode, exactly as before.
  */
 
 export interface PolicyField {
@@ -29,6 +36,8 @@ export interface PolicyField {
   required?: boolean;
   /** Does the field currently hold a value? Only used by auto mode. */
   filled?: boolean;
+  /** OD-5: right to work or sponsorship, answered from the person's own valid record. */
+  fromWorkRights?: boolean;
 }
 
 export interface PolicyInput {
@@ -44,7 +53,9 @@ export function decide(input: PolicyInput): PolicyDecision {
   if (!input || !Array.isArray(input.fields) || !Array.isArray(input.confirmedFieldIds)) return 'await-confirmation';
   const confirmed = new Set(input.confirmedFieldIds);
   const sensitive = input.fields.filter((f) => f.sensitive !== false); // anything not explicitly non-sensitive counts as sensitive
-  const unconfirmedSensitive = sensitive.some((f) => !confirmed.has(f.id));
+  const fromRecord = (f: PolicyField) => f.fromWorkRights === true;
+  const unconfirmedSensitive = sensitive.some((f) => !confirmed.has(f.id) && !fromRecord(f));
+  const blocking = sensitive.filter((f) => !fromRecord(f)); // what stops auto mode submitting
 
   switch (input.mode) {
     case 'review':
@@ -53,7 +64,7 @@ export function decide(input: PolicyInput): PolicyDecision {
       return unconfirmedSensitive ? 'await-confirmation' : 'fill-only';
     case 'auto': {
       if (unconfirmedSensitive) return 'await-confirmation';
-      if (sensitive.length > 0) return 'fill-only';
+      if (blocking.length > 0) return 'fill-only';
       if (input.fields.length === 0) return 'fill-only';
       if (input.fields.some((f) => f.required === true && f.filled !== true)) return 'fill-only';
       return 'submit';
@@ -72,7 +83,7 @@ export function fieldsAllowedToFill(input: PolicyInput): string[] {
       return input.fields.filter((f) => confirmed.has(f.id)).map((f) => f.id);
     case 'hybrid':
     case 'auto':
-      return input.fields.filter((f) => f.sensitive === false || confirmed.has(f.id)).map((f) => f.id);
+      return input.fields.filter((f) => f.sensitive === false || confirmed.has(f.id) || f.fromWorkRights === true).map((f) => f.id);
     default:
       return [];
   }
