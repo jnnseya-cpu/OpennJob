@@ -148,6 +148,26 @@ export interface Application {
   submittedAt?: string;
 }
 
+/**
+ * An account. `passwordHash` is a one-way hash (bcrypt); it never leaves the API.
+ * The consent fields record which versions of the terms and the privacy notice the
+ * person accepted when they registered, and when.
+ */
+export interface User {
+  id: string;
+  /** Lower case, unique. */
+  email: string;
+  passwordHash: string;
+  createdAt: string;
+  acceptedTermsVersion: string;
+  acceptedPrivacyVersion: string;
+  /** When the two versions above were accepted. */
+  consentAt: string;
+}
+
+/** Events that belong to no account (an employer's posting, an account deletion) carry this user id. */
+export const SYSTEM_USER_ID = 'system';
+
 export interface DomainEvent {
   id: string;
   type: string;

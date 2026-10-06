@@ -3,7 +3,7 @@ import { createSampleSource } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
 import { DEFAULT_APPLY_THRESHOLD, applyThresholdOf, buildSources, loadConfig } from '../src/deps';
 import type { OpennJobDeps } from '../src/deps';
-import { PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm } from './helpers';
+import { PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
 let t: TestApp;
@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 const EMPLOYER_KEY = 'employer-key-not-a-secret';
-const BASE_CONFIG = { apiToken: TOKEN, llmCriteria: false, llmCriteriaMaxJobs: 25 };
+const BASE_CONFIG = testConfig();
 
 /** Entirely fictional person. Says nothing about languages, security clearance or registration. */
 const INFRA_CV = [
@@ -593,10 +593,10 @@ describe('configuration', () => {
     expect(applyThresholdOf({ ...BASE_CONFIG, applyThreshold: 150 })).toBe(80);
   });
 
-  it('OPENNJOB_EMPLOYER_KEY is optional and separate from the API token', () => {
-    expect(loadConfig({ OPENNJOB_API_TOKEN: 'user' }).employerKey).toBeUndefined();
-    expect(loadConfig({ OPENNJOB_API_TOKEN: 'user', OPENNJOB_EMPLOYER_KEY: '  ' }).employerKey).toBeUndefined();
-    expect(loadConfig({ OPENNJOB_API_TOKEN: 'user', OPENNJOB_EMPLOYER_KEY: ' emp ' })).toMatchObject({ apiToken: 'user', employerKey: 'emp' });
+  it('OPENNJOB_EMPLOYER_KEY is optional and separate from the signing secret', () => {
+    expect(loadConfig({ OPENNJOB_JWT_SECRET: 'user' }).employerKey).toBeUndefined();
+    expect(loadConfig({ OPENNJOB_JWT_SECRET: 'user', OPENNJOB_EMPLOYER_KEY: '  ' }).employerKey).toBeUndefined();
+    expect(loadConfig({ OPENNJOB_JWT_SECRET: 'user', OPENNJOB_EMPLOYER_KEY: ' emp ' })).toMatchObject({ jwtSecret: 'user', employerKey: 'emp' });
   });
 
   it('ADZUNA_COUNTRIES builds one adapter per country code, defaulting to gb', () => {

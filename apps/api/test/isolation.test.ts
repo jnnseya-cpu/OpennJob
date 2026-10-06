@@ -1,0 +1,274 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createSampleSource } from '@opennjob/core';
+import type { Application } from '@opennjob/core';
+import { BACKENDS } from './backends';
+import { PASSPORT, PROFILE, USER_ID, USER_PASSWORD, createTestApp, scriptedLlm, testConfig } from './helpers';
+import type { TestApp } from './helpers';
+
+/**
+ * USER A CANNOT READ OR CHANGE USER B'S DATA, ON ANY ROUTE.
+ *
+ * Two fictional accounts on one API. A (USER_ID) has a profile, a passport, applications,
+ * usage and events. B is a different person. Every route the API has is exercised as B
+ * against A's data, and the last test fails if a route exists that this file does not name.
+ */
+
+/** Every route of the API. A new route must be added here AND given an isolation check below. */
+const ROUTES = [
+  'DELETE /account',
+  'GET /account',
+  'GET /account/export',
+  'GET /applications',
+  'GET /applications/:id',
+  'GET /auth/versions',
+  'GET /health',
+  'GET /interview/questions',
+  'GET /jobs/matches',
+  'GET /passport',
+  'GET /profile',
+  'GET /usage',
+  'POST /agent/run',
+  'POST /applications',
+  'POST /applications/:id/confirm',
+  'POST /applications/:id/submitted',
+  'POST /auth/login',
+  'POST /auth/register',
+  'POST /employer/jobs',
+  'POST /interview/feedback',
+  'POST /jobs/refresh',
+  'PUT /passport',
+  'PUT /profile',
+];
+/** Routes that carry no user data and take no user token. */
+const NOT_USER_SCOPED = ['GET /auth/versions', 'GET /health', 'GET /interview/questions', 'POST /auth/login', 'POST /auth/register', 'POST /employer/jobs'];
+
+const B_ID = 'user-b';
+/** Fictional. A site manager, so B's matches differ from A's (a nurse). */
+const B_PROFILE = {
+  firstName: 'Bola',
+  lastName: 'Adeyemi',
+  email: 'bola.adeyemi@example.org',
+  phone: '07700 900777',
+  addressLine1: '4 Sample Road',
+  city: 'Leeds',
+  postcode: 'LS1 1AA',
+  cvText: 'Healthcare assistant with four years of experience in a care home.\nI hold the Care Certificate and give personal care with dignity.\nTrained in moving and handling.',
+};
+const B_PASSPORT = { rightToWorkConfirmed: false, training: [], referees: [] };
+const A_SECRETS = ['Registered nurse with five years', 'Okafor', '18A1234E', '001234567890', 'Priya Shah', '12 Example Street'];
+
+for (const backend of BACKENDS) {
+  describe.skipIf(backend.skip)(`isolation between users: ${backend.name}`, () => {
+    let t: TestApp;
+    let close: () => Promise<void>;
+    let b: Awaited<ReturnType<TestApp['addUser']>>;
+    let aApp: Application;
+    let aProfile: unknown;
+    let aPassport: unknown;
+
+    /** A's data as A sees it. Compared before and after everything B does. */
+    const snapshotOfA = async () => ({
+      profile: (await t.api.get('/profile').expect(200)).body,
+      passport: (await t.api.get('/passport').expect(200)).body,
+      applications: (await t.api.get('/applications').expect(200)).body,
+      usage: (await t.api.get('/usage').expect(200)).body,
+      events: await t.deps.repository.listEvents(USER_ID),
+    });
+
+    beforeEach(async () => {
+      const made = await backend.make();
+      close = made.close;
+      t = await createTestApp({ repository: made.repository, usageMeter: made.usageMeter, persistence: backend.persistence, llm: scriptedLlm(), sources: [createSampleSource()], config: testConfig({ employerKey: 'employer-key-for-tests' }) });
+      await t.api.put('/profile').send(PROFILE).expect(200);
+      await t.api.put('/passport').send(PASSPORT).expect(200);
+      await t.api.post('/jobs/refresh').expect(200);
+      aApp = (await t.api.post('/applications').send({ jobId: 'sample:staff-nurse-medical', mode: 'hybrid' }).expect(201)).body;
+      aProfile = (await t.api.get('/profile').expect(200)).body;
+      aPassport = (await t.api.get('/passport').expect(200)).body;
+      b = await t.addUser(B_ID, 'bola.adeyemi@example.org');
+    });
+    afterEach(async () => {
+      await t?.app.close();
+      await close?.();
+    });
+
+    it('GET /profile, PUT /profile: B has no profile until B saves one, and saving it does not touch A', async () => {
+      await b.get('/profile').expect(404);
+      const saved = await b.put('/profile').send(B_PROFILE).expect(200);
+      expect(saved.body).toEqual(B_PROFILE);
+      expect((await b.get('/profile').expect(200)).body).toEqual(B_PROFILE);
+      expect((await t.api.get('/profile').expect(200)).body).toEqual(aProfile);
+    });
+
+    it('GET /passport, PUT /passport: the same for the passport', async () => {
+      await b.get('/passport').expect(404);
+      const saved = await b.put('/passport').send(B_PASSPORT).expect(200);
+      expect(saved.body.passport).toEqual(B_PASSPORT);
+      expect(JSON.stringify((await b.get('/passport').expect(200)).body)).not.toContain('18A1234E');
+      expect((await t.api.get('/passport').expect(200)).body).toEqual(aPassport);
+    });
+
+    it('a user id in the body, query or header is not a way in', async () => {
+      await b.put('/profile').send({ ...B_PROFILE, userId: USER_ID }).expect(400);
+      await b.put('/passport').send({ ...B_PASSPORT, userId: USER_ID }).expect(400);
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      await b.post('/applications').send({ jobId: 'sample:hca-elderly-care', mode: 'hybrid', userId: USER_ID }).expect(400);
+      await b.post('/agent/run').send({ mode: 'hybrid', userId: USER_ID }).expect(400);
+      const viaQuery = await b.get(`/applications?userId=${USER_ID}`).set('X-User-Id', USER_ID).expect(200);
+      expect(viaQuery.body).toEqual([]);
+      expect((await b.get(`/profile?userId=${USER_ID}`).set('X-User-Id', USER_ID).expect(200)).body).toEqual(B_PROFILE);
+      expect((await b.get(`/account/export?userId=${USER_ID}`).expect(200)).body.user.id).toBe(B_ID);
+    });
+
+    it("GET /applications, GET /applications/:id: B sees none of A's applications", async () => {
+      expect((await b.get('/applications').expect(200)).body).toEqual([]);
+      const res = await b.get(`/applications/${aApp.id}`).expect(404);
+      expect(JSON.stringify(res.body)).not.toContain(aApp.statement);
+    });
+
+    it("POST /applications/:id/confirm and /submitted: B cannot change A's application", async () => {
+      await b.post(`/applications/${aApp.id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(404);
+      await b.post(`/applications/${aApp.id}/submitted`).expect(404);
+      expect((await t.api.get(`/applications/${aApp.id}`).expect(200)).body).toEqual(aApp);
+      expect((await t.deps.repository.listEvents(B_ID)).map((e) => e.type)).toEqual([]);
+    });
+
+    it("POST /applications: B's draft is made from B's CV and belongs to B", async () => {
+      await b.post('/applications').send({ jobId: 'sample:hca-elderly-care', mode: 'hybrid' }).expect(404); // B has no profile yet
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      // B holds no NMC PIN: A's stored PIN does not make B eligible for the registered-nurse job.
+      await b.post('/applications').send({ jobId: 'sample:staff-nurse-medical', mode: 'hybrid' }).expect(422);
+      const mine = (await b.post('/applications').send({ jobId: 'sample:hca-elderly-care', mode: 'review' }).expect(201)).body as Application;
+      expect(mine.userId).toBe(B_ID);
+      expect((await b.get('/applications').expect(200)).body.map((x: Application) => x.id)).toEqual([mine.id]);
+      expect((await t.api.get('/applications').expect(200)).body.map((x: Application) => x.id)).toEqual([aApp.id]);
+      await t.api.get(`/applications/${mine.id}`).expect(404);
+      await t.api.post(`/applications/${mine.id}/submitted`).expect(404);
+      expect((await b.get(`/applications/${mine.id}`).expect(200)).body.status).toBe('draft');
+    });
+
+    it("GET /jobs/matches: scored against the caller's own CV and passport", async () => {
+      await b.get('/jobs/matches').expect(404);
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      const forA = (await t.api.get('/jobs/matches').expect(200)).body as { job: { id: string }; score: number; eligible: boolean; hits: { evidence?: string }[] }[];
+      const forB = (await b.get('/jobs/matches').expect(200)).body as typeof forA;
+      const nurse = (rows: typeof forA) => rows.find((m) => m.job.id === 'sample:staff-nurse-medical');
+      expect(nurse(forA)?.eligible).toBe(true);
+      expect(nurse(forB)?.eligible).toBe(false);
+      expect(nurse(forB)?.score).not.toBe(nurse(forA)?.score);
+      const evidence = JSON.stringify(forB);
+      for (const secret of A_SECRETS) expect(evidence, secret).not.toContain(secret);
+    });
+
+    it("POST /agent/run: prepares drafts for the caller only, and one user's drafts do not count as another's", async () => {
+      await b.post('/agent/run').send({}).expect(404);
+      await b.put('/profile').send(PROFILE).expect(200); // the same CV as A, so the same jobs qualify
+      await b.put('/passport').send(PASSPORT).expect(200);
+      const runA = (await t.api.post('/agent/run').send({}).expect(200)).body;
+      const runB = (await b.post('/agent/run').send({}).expect(200)).body;
+      // A already had the nurse job drafted; B had not, so B gets one more draft than A's run made.
+      expect(runA.skipped.alreadyPrepared).toBe(1);
+      expect(runB.skipped.alreadyPrepared).toBe(0);
+      expect(runB.prepared.length).toBe(runA.prepared.length + 1);
+      expect(runB.prepared.every((x: Application) => x.userId === B_ID)).toBe(true);
+      expect(runA.prepared.every((x: Application) => x.userId === USER_ID)).toBe(true);
+      const idsA = (await t.api.get('/applications').expect(200)).body.map((x: Application) => x.id);
+      const idsB = (await b.get('/applications').expect(200)).body.map((x: Application) => x.id);
+      expect(idsA.filter((id: string) => idsB.includes(id))).toEqual([]);
+      expect((await t.deps.repository.listEvents(B_ID)).filter((e) => e.type === 'agent.run')).toHaveLength(1);
+      expect((await t.deps.repository.listEvents(USER_ID)).filter((e) => e.type === 'agent.run')).toHaveLength(1);
+    });
+
+    it('GET /usage, POST /interview/feedback: usage is metered and shown per user', async () => {
+      expect((await t.api.get('/usage').expect(200)).body.totals.calls).toBe(1); // A's statement draft
+      expect((await b.get('/usage').expect(200)).body).toEqual({ totals: { calls: 0, inputTokens: 0, outputTokens: 0, acu: 0 }, records: [] });
+      await b.post('/interview/feedback').send({ question: 'Tell me about a time you worked in a team.', answer: 'On my ward we were short staffed, so I organised the handover.' }).expect(200);
+      const usageB = (await b.get('/usage').expect(200)).body;
+      expect(usageB.totals.calls).toBe(1);
+      expect(usageB.records.every((r: { userId: string }) => r.userId === B_ID)).toBe(true);
+      const usageA = (await t.api.get('/usage').expect(200)).body;
+      expect(usageA.totals.calls).toBe(1);
+      expect(usageA.records.every((r: { userId: string }) => r.userId === USER_ID)).toBe(true);
+    });
+
+    it('POST /jobs/refresh: the catalogue is shared, the event is the caller\'s', async () => {
+      await b.post('/jobs/refresh').expect(200);
+      expect((await t.deps.repository.listEvents(B_ID)).map((e) => e.type)).toEqual(['jobs.refreshed']);
+      expect((await t.deps.repository.listEvents(USER_ID)).filter((e) => e.type === 'jobs.refreshed')).toHaveLength(1);
+    });
+
+    it("GET /account, GET /account/export: only the caller's own account and data", async () => {
+      expect((await b.get('/account').expect(200)).body).toMatchObject({ id: B_ID, email: 'bola.adeyemi@example.org' });
+      const empty = (await b.get('/account/export').expect(200)).body;
+      expect(empty).toMatchObject({ user: { id: B_ID }, profile: null, passport: null, applications: [], events: [], usage: [] });
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      const exported = JSON.stringify((await b.get('/account/export').expect(200)).body);
+      for (const secret of [...A_SECRETS, aApp.id, USER_ID, 'amara.okafor@example.org']) expect(exported, secret).not.toContain(secret);
+      expect(exported).toContain('Adeyemi');
+    });
+
+    it("DELETE /account: B can delete only B's account; A's password is useless to B and A is untouched", async () => {
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      const before = await snapshotOfA();
+      await b.delete('/account').send({ password: 'not the password at all' }).expect(401);
+      await b.delete('/account').send({ password: USER_PASSWORD, userId: USER_ID }).expect(400);
+      await b.delete('/account').send({ password: USER_PASSWORD }).expect(200, { deleted: true });
+      expect(await t.deps.repository.getUserById(B_ID)).toBeUndefined();
+      expect(await t.deps.repository.getUserById(USER_ID)).toBeDefined();
+      expect(await snapshotOfA()).toEqual(before);
+      await b.get('/profile').expect(401); // B's token died with the account
+    });
+
+    it("after everything B can do on every route, A's data is exactly as it was", async () => {
+      const before = await snapshotOfA();
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      await b.put('/passport').send(B_PASSPORT).expect(200);
+      await b.get('/jobs/matches?min=0').expect(200);
+      await b.post('/agent/run').send({ mode: 'auto' }).expect(200);
+      await b.post('/applications').send({ jobId: 'sample:support-worker-ld', mode: 'auto' });
+      for (const id of [aApp.id, `${aApp.id}%00`, '../' + aApp.id, 'id-1', '*']) {
+        await b.get(`/applications/${encodeURIComponent(id)}`).expect((r) => expect([400, 404]).toContain(r.status));
+        await b.post(`/applications/${encodeURIComponent(id)}/confirm`).send({ confirmedFields: ['x'] }).expect((r) => expect([400, 404]).toContain(r.status));
+        await b.post(`/applications/${encodeURIComponent(id)}/submitted`).expect((r) => expect([400, 404]).toContain(r.status));
+      }
+      await b.get('/usage').expect(200);
+      await b.get('/account/export').expect(200);
+      await b.post('/interview/feedback').send({ questionId: 'val-compassion', answer: 'I sat with a resident who was upset and listened.' }).expect(200);
+      expect(await snapshotOfA()).toEqual(before);
+    });
+
+    it('routes without a user: need no token and return nothing of any user; the employer key opens no user route', async () => {
+      const text = JSON.stringify([
+        (await t.raw().get('/health').expect(200)).body,
+        (await t.raw().get('/auth/versions').expect(200)).body,
+        (await t.raw().post('/employer/jobs').set('Authorization', 'Bearer employer-key-for-tests').send({ title: 'Site Manager', employer: 'Example Build Ltd (fictional)', country: 'GB', city: 'Leeds', applyUrl: 'https://example.org/apply/1', description: 'Essential\n- CDM 2015 duties.\n- SMSTS certificate.' }).expect(201)).body,
+      ]);
+      for (const secret of [...A_SECRETS, USER_ID]) expect(text, secret).not.toContain(secret);
+      const employer = t.as('employer-key-for-tests');
+      for (const path of ['/profile', '/passport', '/applications', `/applications/${aApp.id}`, '/usage', '/account', '/account/export', '/jobs/matches']) await employer.get(path).expect(401);
+      // interview questions need a token but hold no user data
+      expect(JSON.stringify((await b.get('/interview/questions').expect(200)).body)).not.toContain('Okafor');
+    });
+
+    it('every user-scoped route refuses a request with no token', async () => {
+      for (const route of ROUTES.filter((r) => !NOT_USER_SCOPED.includes(r))) {
+        const [method, path] = route.split(' ') as [string, string];
+        const url = path.replace(':id', aApp.id);
+        const req = method === 'GET' ? t.raw().get(url) : method === 'PUT' ? t.raw().put(url) : method === 'DELETE' ? t.raw().delete(url) : t.raw().post(url);
+        await req.send(method === 'GET' ? undefined : {}).expect(401);
+      }
+      await t.raw().get('/interview/questions').expect(401);
+    });
+
+    it('this file names every route the API has', () => {
+      type Layer = { route?: { path: string; methods: Record<string, boolean> } };
+      const express = t.app.getHttpAdapter().getInstance() as { router?: { stack: Layer[] }; _router?: { stack: Layer[] } };
+      const stack = (express.router ?? express._router)?.stack ?? [];
+      const actual = stack
+        .filter((l): l is Required<Layer> => Boolean(l.route))
+        .flatMap((l) => Object.keys(l.route.methods).filter((m) => l.route.methods[m]).map((m) => `${m.toUpperCase()} ${l.route.path}`))
+        .sort();
+      expect(actual).toEqual([...ROUTES].sort());
+    });
+  });
+}

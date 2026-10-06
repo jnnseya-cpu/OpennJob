@@ -8,14 +8,32 @@ import type { FieldReport, RunReport, RunRequest } from '../agent/types';
 
 interface Settings {
   apiBase: string;
-  token: string;
   mode: Mode;
 }
+
+/** What is kept after signing in: the access token and when it stops working. Never the password. */
+interface Session {
+  accessToken: string;
+  /** ISO time. */
+  expiresAt: string;
+  email: string;
+}
+
+const DEFAULT_API_BASE = 'http://127.0.0.1:3000';
+const SESSION_KEYS = ['accessToken', 'tokenExpiresAt', 'accountEmail'];
+const SIGNED_OUT = 'Sign in to load your details.';
+const EXPIRED = 'Your session has expired. Sign in again.';
+
+/** Thrown by api() when the API says the token is no longer good. */
+class SessionEndedError extends Error {}
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const modeSelect = $<HTMLSelectElement>('mode');
 const apiBaseInput = $<HTMLInputElement>('apiBase');
-const tokenInput = $<HTMLInputElement>('token');
+const signInForm = $<HTMLFormElement>('sign-in');
+const emailInput = $<HTMLInputElement>('email');
+const passwordInput = $<HTMLInputElement>('password');
+const accountEl = $<HTMLParagraphElement>('account');
 const applicationSelect = $<HTMLSelectElement>('application');
 const statusEl = $<HTMLParagraphElement>('status');
 const fillButton = $<HTMLButtonElement>('fill');
@@ -42,6 +60,7 @@ let profile: Profile | undefined;
 let passport: Passport | undefined;
 let applications: Application[] = [];
 let lastReport: RunReport | undefined;
+let session: Session | undefined;
 const confirmed = new Set<string>();
 
 function setStatus(text: string, kind: '' | 'blocked' | 'warn' = ''): void {
@@ -50,41 +69,158 @@ function setStatus(text: string, kind: '' | 'blocked' | 'warn' = ''): void {
 }
 
 async function loadSettings(): Promise<Settings> {
-  const s = await chrome.storage.local.get(['apiBase', 'token', 'mode']);
+  const s = await chrome.storage.local.get(['apiBase', 'mode']);
   const mode: Mode = s.mode === 'review' || s.mode === 'auto' ? s.mode : 'hybrid';
-  return { apiBase: typeof s.apiBase === 'string' && s.apiBase ? s.apiBase : 'http://127.0.0.1:3000', token: typeof s.token === 'string' ? s.token : '', mode };
+  return { apiBase: typeof s.apiBase === 'string' && s.apiBase ? s.apiBase : DEFAULT_API_BASE, mode };
 }
 
-function currentSettings(): Settings {
-  return { apiBase: apiBaseInput.value.trim().replace(/\/+$/, ''), token: tokenInput.value.trim(), mode: modeSelect.value as Mode };
+async function loadSession(): Promise<Session | undefined> {
+  // `token` was the shared API token of the first version. It opens nothing now; remove it.
+  await chrome.storage.local.remove('token');
+  const s = await chrome.storage.local.get(SESSION_KEYS);
+  if (typeof s.accessToken !== 'string' || !s.accessToken || typeof s.tokenExpiresAt !== 'string') return undefined;
+  return { accessToken: s.accessToken, expiresAt: s.tokenExpiresAt, email: typeof s.accountEmail === 'string' ? s.accountEmail : '' };
+}
+
+const isExpired = (s: Session): boolean => !(Date.parse(s.expiresAt) > Date.now());
+
+function currentApiBase(): string {
+  return apiBaseInput.value.trim().replace(/\/+$/, '');
+}
+
+/**
+ * The address the password and token are sent to. It must be https, except on this
+ * computer (localhost, 127.0.0.1), where http is what a developer runs.
+ */
+function apiBaseProblem(apiBase: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(apiBase);
+  } catch {
+    return 'The OpennJob API address is not a web address.';
+  }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  if (url.protocol === 'https:' || (url.protocol === 'http:' && local)) return undefined;
+  return 'The OpennJob API address must start with https:// (http:// is only allowed for this computer).';
+}
+
+function clearData(): void {
+  profile = undefined;
+  passport = undefined;
+  applications = [];
+  confirmed.clear();
+  lastReport = undefined;
+  applicationSelect.replaceChildren(new Option('No statement (profile details only)', ''));
+  fieldsList.replaceChildren();
+  $('results').hidden = true;
+  fillButton.disabled = true;
+  markSubmittedButton.hidden = true;
+}
+
+/** Shows the sign-in form or the signed-in line. */
+function showSession(): void {
+  // The last characters of the token in use, for the automated tests. Not enough to use as a token.
+  if (session) document.body.dataset.sessionToken = session.accessToken.slice(-8);
+  else delete document.body.dataset.sessionToken;
+  signInForm.hidden = session !== undefined;
+  accountEl.hidden = session === undefined;
+  $('account-email').textContent = session ? `Signed in as ${session.email}` : '';
+}
+
+/** Forgets the token and everything loaded with it, and asks the user to sign in. */
+async function endSession(message: string, kind: '' | 'blocked' | 'warn' = 'warn'): Promise<void> {
+  session = undefined;
+  await chrome.storage.local.remove(SESSION_KEYS);
+  clearData();
+  showSession();
+  setStatus(message, kind);
 }
 
 async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T | undefined> {
-  const { apiBase, token } = currentSettings();
-  const res = await fetch(`${apiBase}${path}`, {
+  if (!session) throw new SessionEndedError(SIGNED_OUT);
+  // Known to be out of date: do not send it at all.
+  if (isExpired(session)) throw new SessionEndedError(EXPIRED);
+  const res = await fetch(`${currentApiBase()}${path}`, {
     method: init.method ?? 'GET',
-    headers: { Authorization: `Bearer ${token}`, ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { Authorization: `Bearer ${session.accessToken}`, ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
     ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
   });
+  if (res.status === 401) throw new SessionEndedError(EXPIRED); // expired, revoked, or the account was deleted
   if (res.status === 404) return undefined;
-  if (!res.ok) throw new Error(res.status === 401 ? 'The API rejected the token.' : `The API replied ${res.status}.`);
+  if (!res.ok) throw new Error(`The API replied ${res.status}.`);
   return (await res.json()) as T;
 }
 
-async function loadData(): Promise<void> {
+/** Runs an API call; when the session has ended it signs the user out and returns false. */
+async function withSession(work: () => Promise<void>, onError: (message: string) => void): Promise<boolean> {
   try {
-    profile = await api<Profile>('/profile');
-    passport = (await api<{ passport: Passport }>('/passport'))?.passport;
-    applications = ((await api<Application[]>('/applications')) ?? []).filter((a) => a.status !== 'submitted');
+    await work();
+    return true;
   } catch (err) {
-    profile = undefined;
-    setStatus(`Could not reach OpennJob: ${err instanceof Error ? err.message : String(err)}`, 'blocked');
-    return;
+    if (err instanceof SessionEndedError) {
+      await endSession(err.message);
+      return false;
+    }
+    onError(err instanceof Error ? err.message : String(err));
+    return false;
   }
+}
+
+async function loadData(): Promise<void> {
+  const ok = await withSession(
+    async () => {
+      profile = await api<Profile>('/profile');
+      passport = (await api<{ passport: Passport }>('/passport'))?.passport;
+      applications = ((await api<Application[]>('/applications')) ?? []).filter((a) => a.status !== 'submitted');
+    },
+    (message) => {
+      profile = undefined;
+      setStatus(`Could not reach OpennJob: ${message}`, 'blocked');
+    },
+  );
+  if (!ok) return;
   applicationSelect.replaceChildren(new Option('No statement (profile details only)', ''));
   for (const a of applications) applicationSelect.add(new Option(`${a.jobTitle} - ${a.employer}`, a.id));
   if (applications[0]) applicationSelect.value = applications[0].id;
   setStatus(profile ? `Loaded details for ${profile.firstName} ${profile.lastName}.` : 'No profile is saved in OpennJob yet.', profile ? '' : 'warn');
+}
+
+/** POST /auth/login. The password goes to the API and nowhere else; only the token is stored. */
+async function signIn(): Promise<void> {
+  const apiBase = currentApiBase();
+  const problem = apiBaseProblem(apiBase);
+  if (problem) {
+    $<HTMLDetailsElement>('settings').open = true;
+    setStatus(problem, 'blocked');
+    return;
+  }
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) {
+    setStatus('Enter your email address and password.', 'warn');
+    return;
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+  } catch {
+    setStatus('Could not reach OpennJob at that address.', 'blocked');
+    return;
+  }
+  passwordInput.value = '';
+  if (!res.ok) {
+    setStatus(res.status === 401 ? 'Email address or password is incorrect.' : res.status === 429 ? 'Too many attempts. Wait a few minutes and try again.' : `Sign-in failed: the API replied ${res.status}.`, 'blocked');
+    return;
+  }
+  const body = (await res.json()) as { accessToken?: unknown; expiresAt?: unknown; user?: { email?: unknown } };
+  if (typeof body.accessToken !== 'string' || typeof body.expiresAt !== 'string') {
+    setStatus('Sign-in failed: the API reply was not understood.', 'blocked');
+    return;
+  }
+  session = { accessToken: body.accessToken, expiresAt: body.expiresAt, email: typeof body.user?.email === 'string' ? body.user.email : email };
+  await chrome.storage.local.set({ apiBase, accessToken: session.accessToken, tokenExpiresAt: session.expiresAt, accountEmail: session.email });
+  showSession();
+  await loadData();
 }
 
 function selectedApplication(): Application | undefined {
@@ -171,7 +307,7 @@ function render(report: RunReport): void {
 
 async function run(dryRun: boolean): Promise<void> {
   if (!profile && !dryRun) {
-    setStatus('Load your details from OpennJob first (open Connection).', 'warn');
+    setStatus(session ? 'No profile is saved in OpennJob yet.' : SIGNED_OUT, 'warn');
     return;
   }
   try {
@@ -189,25 +325,46 @@ async function recordOutcome(report: RunReport): Promise<void> {
   const application = selectedApplication();
   if (!application || report.status !== 'ok') return;
   const confirmedSensitive = report.fields.filter((f) => f.sensitive && confirmed.has(f.id)).map((f) => f.key ?? `${f.category}:${f.id}`);
-  try {
-    if (confirmedSensitive.length > 0) await api(`/applications/${application.id}/confirm`, { method: 'POST', body: { confirmedFields: confirmedSensitive } });
-    if (report.submitted) {
-      await api(`/applications/${application.id}/submitted`, { method: 'POST' });
-      markSubmittedButton.hidden = true;
-    }
-  } catch (err) {
-    setStatus(`${report.message} (Could not update OpennJob: ${err instanceof Error ? err.message : String(err)})`, 'warn');
-  }
+  await withSession(
+    async () => {
+      if (confirmedSensitive.length > 0) await api(`/applications/${application.id}/confirm`, { method: 'POST', body: { confirmedFields: confirmedSensitive } });
+      if (report.submitted) {
+        await api(`/applications/${application.id}/submitted`, { method: 'POST' });
+        markSubmittedButton.hidden = true;
+      }
+    },
+    (message) => setStatus(`${report.message} (Could not update OpennJob: ${message})`, 'warn'),
+  );
 }
 
 async function init(): Promise<void> {
   const settings = await loadSettings();
   apiBaseInput.value = settings.apiBase;
-  tokenInput.value = settings.token;
   modeSelect.value = settings.mode;
   $('mode-help').textContent = MODE_HELP[settings.mode];
-  if (!settings.token) $<HTMLDetailsElement>('settings').open = true;
-  else await loadData();
+  session = await loadSession();
+  if (session && isExpired(session)) await endSession(EXPIRED);
+  else if (session) {
+    showSession();
+    await loadData();
+  } else {
+    showSession();
+    setStatus(SIGNED_OUT);
+  }
+
+  // Follow the stored session: signing out (or in) in another OpennJob window applies here too.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !SESSION_KEYS.some((k) => k in changes)) return;
+    void loadSession().then((stored) => {
+      const had = session !== undefined;
+      session = stored;
+      if (!stored && had) {
+        clearData();
+        setStatus(SIGNED_OUT, 'warn');
+      }
+      showSession();
+    });
+  });
 
   modeSelect.addEventListener('change', async () => {
     const mode = modeSelect.value as Mode;
@@ -217,10 +374,23 @@ async function init(): Promise<void> {
     if (lastReport) await run(true);
   });
   $('save').addEventListener('click', async () => {
-    const s = currentSettings();
-    await chrome.storage.local.set({ apiBase: s.apiBase, token: s.token });
-    await loadData();
+    const apiBase = currentApiBase();
+    const problem = apiBaseProblem(apiBase);
+    if (problem) {
+      setStatus(problem, 'blocked');
+      return;
+    }
+    const previous = (await loadSettings()).apiBase;
+    await chrome.storage.local.set({ apiBase });
+    // A token belongs to the API that issued it. It is never sent to a different address.
+    if (session && previous !== apiBase) await endSession('The API address changed. Sign in again.');
+    else setStatus('Address saved.');
   });
+  signInForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void signIn();
+  });
+  $('sign-out').addEventListener('click', () => void endSession('Signed out.', ''));
   $('scan').addEventListener('click', () => {
     confirmed.clear();
     void run(true);
@@ -236,13 +406,14 @@ async function init(): Promise<void> {
   markSubmittedButton.addEventListener('click', async () => {
     const application = selectedApplication();
     if (!application) return;
-    try {
-      await api(`/applications/${application.id}/submitted`, { method: 'POST' });
-      markSubmittedButton.hidden = true;
-      setStatus('Marked as submitted in OpennJob.');
-    } catch (err) {
-      setStatus(`Could not update OpennJob: ${err instanceof Error ? err.message : String(err)}`, 'warn');
-    }
+    await withSession(
+      async () => {
+        await api(`/applications/${application.id}/submitted`, { method: 'POST' });
+        markSubmittedButton.hidden = true;
+        setStatus('Marked as submitted in OpennJob.');
+      },
+      (message) => setStatus(`Could not update OpennJob: ${message}`, 'warn'),
+    );
   });
 }
 

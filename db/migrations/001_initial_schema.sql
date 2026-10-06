@@ -1,14 +1,12 @@
--- OpennJob - PostgreSQL schema
+-- OpennJob - migration 001: the initial schema (this was db/schema.sql).
 --
--- STATUS: this schema mirrors the Repository interface in packages/core/src/repository.ts.
--- The application does NOT use it yet: it runs on the in-memory repository. A
--- PostgresRepository that implements the interface against these tables is a next step.
+-- Run by `npm run migrate` (apps/api/src/migrations.ts), inside one transaction, once.
+-- Do not edit a migration after it has been applied anywhere: add a new file instead.
+-- The runner records a checksum and refuses to continue if an applied file has changed.
 --
--- Personal data: profiles.cv_text, every column of passports, and applications.statement
--- are personal data under UK GDPR. Before real users: encrypt at rest (at minimum the
--- passports table), restrict access, and set retention/deletion rules (see README).
+-- Personal data: profiles.cv_text, passports and applications.statement are personal data
+-- under UK GDPR. Migration 002 changes how they are stored (encrypted by the API).
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
@@ -146,5 +144,3 @@ CREATE TABLE IF NOT EXISTS usage_records (
   at             TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS usage_records_user_idx ON usage_records (user_id, at);
-
-COMMIT;

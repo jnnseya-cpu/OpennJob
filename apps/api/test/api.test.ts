@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGreenhouseSource, createLeverSource, createSampleSource } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
-import { CV_TEXT, NOW, PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm } from './helpers';
+import { CV_TEXT, NOW, PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
 let t: TestApp;
@@ -36,12 +36,12 @@ describe('auth guard', () => {
 
   it('accepts the configured token and leaves /health public', async () => {
     t = await createTestApp();
-    await t.raw().get('/health').expect(200, { status: 'ok' });
+    await t.raw().get('/health').expect(200, { status: 'ok', persistence: 'memory', database: 'up' });
     await t.api.get('/applications').expect(200, []);
   });
 
-  it('fails closed when no token is configured on the server', async () => {
-    t = await createTestApp({ config: { apiToken: '', llmCriteria: false, llmCriteriaMaxJobs: 0 } });
+  it('fails closed when no signing secret is configured on the server', async () => {
+    t = await createTestApp({ config: testConfig({ jwtSecret: '', llmCriteriaMaxJobs: 0 }) });
     const res = await t.raw().get('/profile').set('Authorization', 'Bearer ').expect(401);
     expect(res.body.message).toMatch(/not configured/);
     await t.raw().get('/profile').set('Authorization', `Bearer ${TOKEN}`).expect(401);
@@ -154,7 +154,7 @@ describe('POST /jobs/refresh', () => {
 
   it('extracts criteria with the LLM when enabled, up to the cap, metering each call, and does not repeat for unchanged jobs', async () => {
     const llm = scriptedLlm();
-    t = await createTestApp({ llm, config: { apiToken: TOKEN, llmCriteria: true, llmCriteriaMaxJobs: 2 } });
+    t = await createTestApp({ llm, config: testConfig({ llmCriteria: true, llmCriteriaMaxJobs: 2 }) });
     const res = await t.api.post('/jobs/refresh').expect(200);
     expect(res.body.criteriaFromLlm).toBe(2);
     expect(llm.calls).toHaveLength(2);

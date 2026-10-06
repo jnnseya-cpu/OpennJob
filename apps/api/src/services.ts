@@ -6,6 +6,7 @@ import {
   credentialLabel,
   draftStatement,
   extractCriteria,
+  SYSTEM_USER_ID,
   findPackQuestion,
   findQuestion,
   inScope,
@@ -21,7 +22,7 @@ import {
   trainingWarnings,
 } from '@opennjob/core';
 import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory } from '@opennjob/core';
-import { DEPS, DEV_USER_ID, applyThresholdOf } from './deps';
+import { DEPS, applyThresholdOf } from './deps';
 import type { OpennJobDeps } from './deps';
 import type {
   AgentRunInput,
@@ -43,36 +44,37 @@ function compact<T extends object>(value: T): T {
 export class OpennJobService {
   constructor(@Inject(DEPS) private readonly deps: OpennJobDeps) {}
 
-  private readonly userId = DEV_USER_ID;
+  // Every method that touches a person's data takes that person's user id first. It
+  // comes from the verified access token (see auth.guard.ts), never from the request body.
 
   private now(): string {
     return this.deps.clock().toISOString();
   }
 
   /** Payloads carry ids and counts only: never CV text, declarations or contact details. */
-  private async emit(type: string, payload: Record<string, unknown>): Promise<void> {
-    await this.deps.eventBus.publish({ id: this.deps.newId(), type, userId: this.userId, occurredAt: this.now(), payload });
+  private async emit(userId: string, type: string, payload: Record<string, unknown>): Promise<void> {
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type, userId, occurredAt: this.now(), payload });
   }
 
-  private llmFor(purpose: string): LlmPort | undefined {
-    return this.deps.llm ? meteredLlm(this.deps.llm, this.deps.usageMeter, { userId: this.userId, purpose }, this.deps.clock) : undefined;
+  private llmFor(userId: string, purpose: string): LlmPort | undefined {
+    return this.deps.llm ? meteredLlm(this.deps.llm, this.deps.usageMeter, { userId, purpose }, this.deps.clock) : undefined;
   }
 
   // ----- profile & passport ---------------------------------------------------------
 
-  async saveProfile(input: ProfileInput): Promise<Profile> {
+  async saveProfile(userId: string, input: ProfileInput): Promise<Profile> {
     const profile = compact(input) as Profile;
-    await this.deps.repository.saveProfile(this.userId, profile);
+    await this.deps.repository.saveProfile(userId, profile);
     const prefs = preferencesOf(profile);
-    await this.emit('profile.updated', {
+    await this.emit(userId, 'profile.updated', {
       cvCharacters: profile.cvText.length,
       ...(profile.preferences ? { languages: prefs.languages.length, countries: prefs.countries.length, cities: prefs.cities.length } : {}),
     });
     return profile;
   }
 
-  async getProfile(): Promise<Profile> {
-    const profile = await this.deps.repository.getProfile(this.userId);
+  async getProfile(userId: string): Promise<Profile> {
+    const profile = await this.deps.repository.getProfile(userId);
     if (!profile) throw new NotFoundException('No profile saved yet. PUT /profile first.');
     return profile;
   }
@@ -81,27 +83,27 @@ export class OpennJobService {
     return { passport, training: checkTraining(passport.training, this.deps.clock) };
   }
 
-  async savePassport(input: PassportInput) {
+  async savePassport(userId: string, input: PassportInput) {
     const passport = compact(input) as Passport;
-    await this.deps.repository.savePassport(this.userId, passport);
-    await this.emit('passport.updated', { trainingRecords: passport.training.length, referees: passport.referees.length, hasNmcPin: Boolean(nmcPinOf(passport)), credentials: Object.keys(passport.credentials ?? {}).length });
+    await this.deps.repository.savePassport(userId, passport);
+    await this.emit(userId, 'passport.updated', { trainingRecords: passport.training.length, referees: passport.referees.length, hasNmcPin: Boolean(nmcPinOf(passport)), credentials: Object.keys(passport.credentials ?? {}).length });
     return this.passportView(passport);
   }
 
-  async getPassport() {
-    const passport = await this.deps.repository.getPassport(this.userId);
+  async getPassport(userId: string) {
+    const passport = await this.deps.repository.getPassport(userId);
     if (!passport) throw new NotFoundException('No passport saved yet. PUT /passport first.');
     return this.passportView(passport);
   }
 
   // ----- jobs -----------------------------------------------------------------------
 
-  async refreshJobs() {
+  async refreshJobs(userId: string) {
     const collected = await collectJobs(this.deps.sources);
     let jobs: Job[] = collected.jobs;
     let llmExtracted = 0;
 
-    const llm = this.deps.config.llmCriteria ? this.llmFor('criteria-extraction') : undefined;
+    const llm = this.deps.config.llmCriteria ? this.llmFor(userId, 'criteria-extraction') : undefined;
     if (llm) {
       const enriched: Job[] = [];
       for (const job of jobs) {
@@ -145,7 +147,7 @@ export class OpennJobService {
       criteriaFromLlm: llmExtracted,
       errors: collected.errors,
     };
-    await this.emit('jobs.refreshed', { fetched: summary.fetched, stored: summary.stored, new: added, sourceErrors: summary.errors.length });
+    await this.emit(userId, 'jobs.refreshed', { fetched: summary.fetched, stored: summary.stored, new: added, sourceErrors: summary.errors.length });
     return summary;
   }
 
@@ -184,10 +186,10 @@ export class OpennJobService {
    * (if nothing is selected, everything is available). Discovered and employer-posted
    * jobs are treated exactly alike. `pack`, `region` and `country` narrow the list further.
    */
-  async matches(min: number, filters: MatchFilterInput = {}) {
-    const profile = await this.getProfile();
+  async matches(userId: string, min: number, filters: MatchFilterInput = {}) {
+    const profile = await this.getProfile(userId);
     const preferences = preferencesOf(profile);
-    const passport = await this.deps.repository.getPassport(this.userId);
+    const passport = await this.deps.repository.getPassport(userId);
     const jobs = await this.deps.repository.listJobs();
     return jobs
       .filter((job) => inScope(job, preferences))
@@ -228,7 +230,7 @@ export class OpennJobService {
       ...(body.employmentType ? { employmentType: body.employmentType } : {}),
     }) as Job;
     await this.deps.repository.upsertJobs([job]);
-    await this.emit('employer.job.posted', { jobId: job.id, pack: job.pack ?? null, country: job.country ?? null });
+    await this.emit(SYSTEM_USER_ID, 'employer.job.posted', { jobId: job.id, pack: job.pack ?? null, country: job.country ?? null });
     return job;
   }
 
@@ -241,11 +243,11 @@ export class OpennJobService {
   }
 
   /** Drafts and stores one application. The caller has already checked eligibility. */
-  private async draftFor(job: Job, profile: Profile, passport: Passport, match: MatchResult, mode: Mode): Promise<Application> {
-    const draft = await draftStatement({ job, cvText: profile.cvText, match }, this.llmFor('supporting-statement'));
+  private async draftFor(userId: string, job: Job, profile: Profile, passport: Passport, match: MatchResult, mode: Mode): Promise<Application> {
+    const draft = await draftStatement({ job, cvText: profile.cvText, match }, this.llmFor(userId, 'supporting-statement'));
     const application: Application = {
       id: this.deps.newId(),
-      userId: this.userId,
+      userId,
       jobId: job.id,
       jobTitle: job.title,
       employer: job.employer,
@@ -261,18 +263,18 @@ export class OpennJobService {
       createdAt: this.now(),
     };
     await this.deps.repository.createApplication(application);
-    await this.emit('application.drafted', { applicationId: application.id, jobId: job.id, mode: application.mode, statementSource: draft.source, score: match.score, gaps: draft.gaps.length });
+    await this.emit(userId, 'application.drafted', { applicationId: application.id, jobId: job.id, mode: application.mode, statementSource: draft.source, score: match.score, gaps: draft.gaps.length });
     return application;
   }
 
-  async createApplication(input: CreateApplicationInput): Promise<Application> {
-    const profile = await this.getProfile();
+  async createApplication(userId: string, input: CreateApplicationInput): Promise<Application> {
+    const profile = await this.getProfile(userId);
     const job = await this.deps.repository.getJob(input.jobId);
     if (!job) throw new NotFoundException(`Job ${input.jobId} not found. Run POST /jobs/refresh and use an id from GET /jobs/matches.`);
-    const passport = (await this.deps.repository.getPassport(this.userId)) ?? EMPTY_PASSPORT;
+    const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
     const match = matchJob(job, profile.cvText, passport, preferencesOf(profile));
     if (!match.eligible) throw new UnprocessableEntityException(OpennJobService.ineligibleMessage(match));
-    return this.draftFor(job, profile, passport, match, input.mode);
+    return this.draftFor(userId, job, profile, passport, match, input.mode);
   }
 
   /**
@@ -287,12 +289,12 @@ export class OpennJobService {
    * unchanged. The user still confirms every sensitive field, and in auto mode a form
    * containing any sensitive field still waits for the user.
    */
-  async runAgent(input: AgentRunInput) {
-    const profile = await this.getProfile();
+  async runAgent(userId: string, input: AgentRunInput) {
+    const profile = await this.getProfile(userId);
     const preferences = preferencesOf(profile);
-    const passport = (await this.deps.repository.getPassport(this.userId)) ?? EMPTY_PASSPORT;
+    const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
     const threshold = applyThresholdOf(this.deps.config);
-    const already = new Set((await this.deps.repository.listApplications(this.userId)).map((a) => a.jobId));
+    const already = new Set((await this.deps.repository.listApplications(userId)).map((a) => a.jobId));
     const jobs = await this.deps.repository.listJobs();
 
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
@@ -311,25 +313,25 @@ export class OpennJobService {
     candidates.sort((a, b) => b.match.score - a.match.score || a.job.id.localeCompare(b.job.id));
 
     const prepared: Application[] = [];
-    for (const { job, match } of candidates) prepared.push(await this.draftFor(job, profile, passport, match, input.mode));
+    for (const { job, match } of candidates) prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
 
-    await this.emit('agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped });
+    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped });
     return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped };
   }
 
-  private async mustGetApplication(id: string): Promise<Application> {
-    const application = await this.deps.repository.getApplication(this.userId, id);
+  private async mustGetApplication(userId: string, id: string): Promise<Application> {
+    const application = await this.deps.repository.getApplication(userId, id);
     if (!application) throw new NotFoundException(`Application ${id} not found`);
     return application;
   }
 
-  getApplication(id: string): Promise<Application> {
-    return this.mustGetApplication(id);
+  getApplication(userId: string, id: string): Promise<Application> {
+    return this.mustGetApplication(userId, id);
   }
 
   /** Records which fields the user explicitly confirmed. This is the audit trail for sensitive fields. */
-  async confirmApplication(id: string, input: ConfirmApplicationInput): Promise<Application> {
-    const application = await this.mustGetApplication(id);
+  async confirmApplication(userId: string, id: string, input: ConfirmApplicationInput): Promise<Application> {
+    const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
     const updated: Application = {
       ...application,
@@ -338,22 +340,22 @@ export class OpennJobService {
       confirmedAt: this.now(),
     };
     await this.deps.repository.updateApplication(updated);
-    await this.emit('application.confirmed', { applicationId: id, confirmedFieldCount: updated.confirmedFields.length });
+    await this.emit(userId, 'application.confirmed', { applicationId: id, confirmedFieldCount: updated.confirmedFields.length });
     return updated;
   }
 
   /** Records that the form was submitted (by the user, or by the agent in auto mode on a form with no sensitive fields). */
-  async markSubmitted(id: string): Promise<Application> {
-    const application = await this.mustGetApplication(id);
+  async markSubmitted(userId: string, id: string): Promise<Application> {
+    const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
     const updated: Application = { ...application, status: 'submitted', submittedAt: this.now() };
     await this.deps.repository.updateApplication(updated);
-    await this.emit('application.submitted', { applicationId: id, mode: application.mode, wasConfirmed: application.status === 'confirmed' });
+    await this.emit(userId, 'application.submitted', { applicationId: id, mode: application.mode, wasConfirmed: application.status === 'confirmed' });
     return updated;
   }
 
-  async listApplications(): Promise<Application[]> {
-    const all = await this.deps.repository.listApplications(this.userId);
+  async listApplications(userId: string): Promise<Application[]> {
+    const all = await this.deps.repository.listApplications(userId);
     return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -368,22 +370,22 @@ export class OpennJobService {
     return questionsForPack(pack as PackId);
   }
 
-  async interviewFeedback(input: InterviewFeedbackInput) {
+  async interviewFeedback(userId: string, input: InterviewFeedbackInput) {
     const bankQuestion = input.questionId ? findQuestion(input.questionId) : undefined;
     const packQuestion = input.questionId && !bankQuestion ? findPackQuestion(input.questionId) : undefined;
     if (input.questionId && !bankQuestion && !packQuestion) throw new NotFoundException(`Question ${input.questionId} not found. See GET /interview/questions.`);
     const question = bankQuestion?.text ?? packQuestion?.text ?? (input.question as string);
     const feedback = await scoreAnswer(
       { question, answer: input.answer, ...(bankQuestion ? { lookFor: bankQuestion.lookFor } : {}) },
-      this.llmFor('interview-feedback'),
+      this.llmFor(userId, 'interview-feedback'),
     );
-    await this.emit('interview.feedback', { questionId: bankQuestion?.id ?? packQuestion?.id ?? 'custom', total: feedback.total, source: feedback.source });
+    await this.emit(userId, 'interview.feedback', { questionId: bankQuestion?.id ?? packQuestion?.id ?? 'custom', total: feedback.total, source: feedback.source });
     return { question, lookFor: bankQuestion?.lookFor ?? [], feedback };
   }
 
   // ----- usage ----------------------------------------------------------------------
 
-  async usage() {
-    return { totals: await this.deps.usageMeter.totals(this.userId), records: await this.deps.usageMeter.list(this.userId) };
+  async usage(userId: string) {
+    return { totals: await this.deps.usageMeter.totals(userId), records: await this.deps.usageMeter.list(userId) };
   }
 }

@@ -1,37 +1,50 @@
 import 'reflect-metadata';
 import { existsSync } from 'node:fs';
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { createDefaultDeps } from './deps';
+import { consoleJsonLogger } from './logging';
+import { StartupError, startServer } from './server';
 
-async function bootstrap(): Promise<void> {
+/** How long a shutdown may take before the process exits anyway. Cloud Run gives 10 seconds by default. */
+const SHUTDOWN_TIMEOUT_MS = 9_000;
+
+async function main(): Promise<void> {
   // Load .env from the working directory when present (Node 20.12+). Real environment variables win.
   const loadEnvFile = (process as unknown as { loadEnvFile?: (path?: string) => void }).loadEnvFile;
   if (existsSync('.env') && typeof loadEnvFile === 'function') loadEnvFile('.env');
 
-  const deps = createDefaultDeps(process.env);
-  if (!deps.config.apiToken) {
-    console.error('[opennjob] OPENNJOB_API_TOKEN is not set. Copy .env.example to .env and set a long random value.');
+  const logger = consoleJsonLogger;
+  let server;
+  try {
+    server = await startServer(process.env, logger);
+  } catch (err) {
+    if (err instanceof StartupError) for (const problem of err.problems) logger.error({ msg: 'refusing to start', problem });
+    else logger.error({ msg: 'failed to start', errorName: err instanceof Error ? err.name : 'unknown', detail: err instanceof Error ? err.message : String(err) });
     process.exit(1);
   }
 
-  const app = await NestFactory.create(AppModule.register(deps));
-  const extraOrigins = (process.env.OPENNJOB_CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  app.enableCors({
-    // The extension calls the API from a chrome-extension:// origin. Requests still need the bearer token.
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) =>
-      callback(null, !origin || origin.startsWith('chrome-extension://') || extraOrigins.includes(origin)),
-    allowedHeaders: ['Authorization', 'Content-Type'],
-    methods: ['GET', 'PUT', 'POST'],
-  });
-
-  const port = Number.parseInt(process.env.PORT ?? '3000', 10);
-  const host = process.env.HOST ?? '127.0.0.1';
-  await app.listen(port, host);
-  console.log(`[opennjob] API listening on http://${host}:${port}`);
-  console.log(`[opennjob] LLM: ${deps.llm ? 'Anthropic (configured)' : 'not configured - deterministic fallbacks in use'}`);
-  console.log(`[opennjob] Job sources: ${deps.sources.length ? deps.sources.map((s) => s.label).join(', ') : 'none configured (set OPENNJOB_DEMO_JOBS=true to try the sample jobs)'}`);
-  console.log('[opennjob] Persistence: in-memory. All data is lost when this process stops.');
+  // Graceful shutdown: stop taking requests, finish the ones in flight, close the pool, exit 0.
+  let stopping = false;
+  const stop = (signal: string): void => {
+    if (stopping) return;
+    stopping = true;
+    logger.info({ msg: 'shutting down', signal });
+    const timer = setTimeout(() => {
+      logger.error({ msg: 'shutdown timed out' });
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    timer.unref();
+    server.close().then(
+      () => {
+        logger.info({ msg: 'shutdown complete' });
+        process.exit(0);
+      },
+      () => {
+        logger.error({ msg: 'shutdown failed' });
+        process.exit(1);
+      },
+    );
+  };
+  process.on('SIGTERM', () => stop('SIGTERM'));
+  process.on('SIGINT', () => stop('SIGINT'));
 }
 
-void bootstrap();
+void main();

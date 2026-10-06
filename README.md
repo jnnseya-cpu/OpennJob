@@ -6,12 +6,28 @@ mission-critical; energy and grid; rail and transport; francophone Africa and di
 healthcare), **candidate preferences** (languages, countries, cities), French-language
 applications, the **80% rule** (`POST /agent/run`) and optional employer posting.
 
+The latest round made it **deployable**: real user accounts, PostgreSQL, encryption at
+rest for the most sensitive data, hardened HTTP, a Dockerfile, docker-compose, a CI
+workflow and hand-over documents.
+
 This is a tested version of the codebase for a developer to take forward. It is
-not a finished product and it has never been used on a real employer's website. The
-sections "What is real, what is stubbed" and "What was NOT verified" below are the
-honest state of it. Please read those before promising anything to anyone.
+not a finished product and it has never been used on a real employer's website.
+Deployable is not the same as ready for real users: **`GO-LIVE.md` lists what is done
+and, more importantly, what is not.** The sections "What is real, what is stubbed" and
+"What was NOT verified" below are the honest state of it. Please read those before
+promising anything to anyone.
+
+| Document | For |
+| --- | --- |
+| `README.md` | What it is, how to run it, how it works |
+| `GO-LIVE.md` | The checklist: done and tested / not done |
+| `CLAUDE.md` | Working on the code with Claude Code: commands, map, rules |
+| `deploy/gcp-cloud-run.md` | Cloud Run + Cloud SQL + Secret Manager steps (from memory, not executed) |
 
 ## What it does
+
+First the user **registers an account** (email, password, acceptance of the terms and
+privacy notice) and signs in. Everything below belongs to that account alone.
 
 1. The user stores a **CV** (plain text), their **preferences** (languages, countries,
    cities; all optional) and a **credential passport**: a map of credential id to value
@@ -45,11 +61,11 @@ npm test               # unit and API integration tests (vitest)
 npm run test:e2e       # builds, then runs the browser tests (Playwright + Chromium)
 ```
 
-Run the API:
+Run the API (in-memory store, nothing to install):
 
 ```bash
-cp .env.example .env   # then set OPENNJOB_API_TOKEN to a long random value
-npm start              # http://127.0.0.1:3000
+cp .env.example .env   # nothing needs setting for a local try-out
+npm start              # http://127.0.0.1:3000 ; JSON log lines on stdout
 ```
 
 With `OPENNJOB_DEMO_JOBS=true` (the default in `.env.example`) there are 28 fictional
@@ -58,10 +74,20 @@ countries), so the whole flow can be tried with no API keys. Every employer in t
 invented.
 
 ```bash
-TOKEN=the-value-you-put-in-.env
 API=http://127.0.0.1:3000
-AUTH="Authorization: Bearer $TOKEN"
 JSON="Content-Type: application/json"
+
+# Register (fictional person). The versions to accept come from GET /auth/versions.
+curl $API/auth/versions
+curl -X POST $API/auth/register -H "$JSON" -d '{
+  "email":"amara.okafor@example.org","password":"a long fictional passphrase",
+  "acceptedTermsVersion":"draft-1","acceptedPrivacyVersion":"draft-1"}'
+
+# Sign in. The reply has "accessToken"; it lasts an hour by default.
+TOKEN=$(curl -s -X POST $API/auth/login -H "$JSON" \
+  -d '{"email":"amara.okafor@example.org","password":"a long fictional passphrase"}' \
+  | node -pe "JSON.parse(require('fs').readFileSync(0)).accessToken")
+AUTH="Authorization: Bearer $TOKEN"
 
 curl -X PUT $API/profile -H "$AUTH" -H "$JSON" -d '{
   "firstName":"Amara","lastName":"Okafor","email":"amara.okafor@example.org",
@@ -77,6 +103,9 @@ curl -X POST $API/jobs/refresh -H "$AUTH"
 curl "$API/jobs/matches?min=40" -H "$AUTH"
 curl -X POST $API/applications -H "$AUTH" -H "$JSON" -d '{"jobId":"sample:hca-elderly-care","mode":"hybrid"}'
 curl -X POST $API/interview/feedback -H "$AUTH" -H "$JSON" -d '{"questionId":"val-compassion","answer":"..."}'
+
+curl $API/account/export -H "$AUTH"                                   # everything held about the account
+curl -X DELETE $API/account -H "$AUTH" -H "$JSON" -d '{"password":"a long fictional passphrase"}'   # removes all of it
 ```
 
 Packs, preferences and the 80% rule (add `preferences` to the same profile body; every
@@ -93,33 +122,82 @@ curl "$API/jobs/matches?pack=dc&region=eu" -H "$AUTH"     # also: country=DE, mi
 curl -X POST $API/agent/run -H "$AUTH" -H "$JSON" -d '{"mode":"hybrid"}'
 curl "$API/interview/questions?pack=fr" -H "$AUTH"
 
-# Optional. Needs OPENNJOB_EMPLOYER_KEY to be set on the server; it is not the user's token.
+# Optional. Needs OPENNJOB_EMPLOYER_KEY to be set on the server; it is not a user's access token.
 curl -X POST $API/employer/jobs -H "Authorization: Bearer $EMPLOYER_KEY" -H "$JSON" -d '{
   "title":"Site Manager","employer":"Example Build Ltd","country":"GB","city":"Leeds",
   "applyUrl":"https://example.org/apply/1",
   "description":"Essential\n- CDM 2015 duties.\n- SMSTS certificate."}'
 ```
 
-All data is held in memory. **It is lost when the API stops.**
+Without `DATABASE_URL` all data is held in memory and **is lost when the API stops**.
+
+Run it on PostgreSQL:
+
+```bash
+# in .env:  DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DBNAME
+#           OPENNJOB_DATA_KEY=<32 random bytes, base64>   (see "Encryption at rest")
+npm run build
+npm run migrate        # applies db/migrations; safe to run again
+npm start
+```
+
+Or everything in containers (API + PostgreSQL + a one-shot migration step):
+
+```bash
+cp .env.example .env   # set POSTGRES_PASSWORD, OPENNJOB_JWT_SECRET and OPENNJOB_DATA_KEY
+docker compose up --build
+curl http://127.0.0.1:3000/health
+```
+
+**The Docker image was not built and `docker compose` was not run where this was
+written** (no Docker daemon). See "What was NOT verified".
 
 ### Test results at hand-over
 
-Run on 6 October 2026, Node 22.22.0, npm 10.9.4, Linux, with `npm run build`, `npm test`
-and `npm run test:e2e` from the repository root. (v1 was run from a clean checkout after
-`rm -rf node_modules`; this time the existing `node_modules` was used. No dependency
-changed.)
+Run on 6 October 2026, Node 22.22.0, npm 10.9.4, Linux, from the repository root, after
+`npm install` and `npm run build`. PostgreSQL was 16.15, a throwaway instance started
+by `scripts/test-with-postgres.sh` (`initdb` and `pg_ctl` in a temporary directory, run
+as a non-root user, deleted afterwards).
 
 | Command | Result |
 | --- | --- |
-| `npm test` | 16 test files, 438 tests passed, 0 failed |
-| `npm run test:e2e` | 51 tests passed, 0 failed (45 against the injected content script, 6 through the real loaded extension and real API) |
+| `npm test` (no `DATABASE_URL`) | 24 test files, 539 passed, 0 failed, **91 skipped** (the PostgreSQL-backed tests) |
+| `npm run test:pg` (the same, with a live PostgreSQL) | 24 test files, **630 passed**, 0 failed, 0 skipped |
+| `npm run test:e2e` (no `DATABASE_URL`) | 60 passed, 0 failed, **1 skipped** (the API process on PostgreSQL) |
+| `npm run test:pg -- npm run test:e2e` (with a live PostgreSQL) | **61 passed**, 0 failed, 0 skipped |
 
-v1 had 221 and 32. The v1 test files still hold their 221 and 32 tests and all of them
-pass. The new tests are in new files (`packs*.test.ts`, `preferences.test.ts`,
-`french.test.ts`, `pack-forms.spec.ts`), plus one test added to `real-extension.spec.ts`.
+A run that says "skipped" has not tested PostgreSQL. The numbers that count are the two
+with a live database, and CI is set up to produce those (it has a postgres service
+container). The CI workflow itself has never run.
 
-No test is skipped. Green tests show the code does what the tests describe on the
-fixtures. They do not show it works on real websites or against the live job APIs.
+What the numbers are made of:
+
+- **vitest, 630.** The 438 tests that existed before this round are all still there and
+  pass (their 16 files; the edits to them are listed below). 192 are new, in 8 files
+  under `apps/api/test/`: `repository.contract.test.ts` (81: one suite of 27, against the
+  in-memory store, PostgreSQL in plain text, and PostgreSQL encrypted), `isolation.test.ts`
+  (32: 16 per store), `auth.test.ts` (24), `crypto.test.ts` (16), `http.test.ts` (11),
+  `migrations.test.ts` (10), `account.test.ts` (9), `server.test.ts` (9).
+- **Playwright, 61.** 45 against the injected content script (unchanged). 10 through the
+  real loaded extension and the real built API (6 before; 4 new, for sign-in, a second
+  account, and token expiry twice). 6 new that run the built API as a process
+  (`apps/api/test/e2e/api-process.spec.ts`).
+
+Changes made to tests that already existed, all forced by replacing the shared token
+with accounts; no assertion was removed or loosened:
+
+- `apps/api/test/helpers.ts`: the test app now starts with one account (id `dev-user`,
+  as before) and a real access token for it, instead of a shared token.
+- `apps/api/test/api.test.ts`: `GET /health` is now expected to return
+  `{ status, persistence, database }`; "no token configured" became "no signing secret
+  configured"; two config literals lost `apiToken`.
+- `apps/api/test/config.test.ts`, `apps/api/test/packs.test.ts`: `OPENNJOB_API_TOKEN`
+  became `OPENNJOB_JWT_SECRET`, and the expected default configuration grew.
+- `apps/extension/test/e2e/real-extension.spec.ts`: the test registers accounts over
+  HTTP and the popup signs in with an email address and password instead of a pasted token.
+
+Green tests show the code does what the tests describe on the fixtures. They do not show
+it works on real websites, against the live job APIs, or in a real deployment.
 
 ### Notes on the browser tests
 
@@ -134,9 +212,10 @@ fixtures. They do not show it works on real websites or against the live job API
 1. `npm run build` (creates `apps/extension/dist`).
 2. Open `chrome://extensions`, switch on **Developer mode** (top right).
 3. Click **Load unpacked** and choose the folder `apps/extension/dist`.
-4. Start the API (`npm start`). Pin the OpennJob icon, open it, open **Connection**, enter
-   the API address (`http://127.0.0.1:3000`) and your `OPENNJOB_API_TOKEN`, press
-   **Save and load my data**.
+4. Start the API (`npm start`) and register an account (see Quick start; the popup can
+   sign in but cannot register). Pin the OpennJob icon and open it. Under **Connection**
+   set the API address (`http://127.0.0.1:3000` is the default) and press **Save
+   address**. Enter your email address and password and press **Sign in**.
 5. On an application form: open OpennJob, choose the application (for its statement),
    press **Scan this page**, tick what needs ticking, press **Fill**.
 
@@ -150,6 +229,20 @@ test drives the same popup in headless Chromium.
 
 The extension asks for three permissions only: `activeTab`, `scripting`, `storage`. It
 does nothing on any page until the user opens it and presses a button on that page.
+
+**Signing in.** The popup sends the email address and password to `POST /auth/login` at
+the configured address and keeps what comes back: the access token (a JWT), when it
+expires, and the email address, in `chrome.storage.local`. The password is not kept.
+Every API call carries the token. When the token has run out (the popup checks the time,
+and the API replies 401), the popup forgets it, clears what it had loaded and shows the
+sign-in form again with "Your session has expired. Sign in again." There are no refresh
+tokens. The API address must be `https://`, except for `localhost` / `127.0.0.1`: the
+popup will not send a password over plain http to another machine. Changing the address
+signs you out, so a token is never sent to an API that did not issue it.
+
+In production the API accepts only the extension origins you list in
+`OPENNJOB_CORS_ORIGINS` (`chrome-extension://<id>`). Outside production any extension
+origin is accepted, which is what makes "Load unpacked" work in development.
 
 ## The three modes and the sensitive-field rule
 
@@ -227,21 +320,44 @@ opennjob/
     src/sources/              Greenhouse, Lever, Ashby, Adzuna, Reed adapters, demo jobs, de-duplication
     src/browser.ts            the subset the extension bundles (policy + fields)
   apps/api/                 NestJS REST API over packages/core
+    src/main.ts               process entry; graceful shutdown on SIGTERM / SIGINT
+    src/server.ts             start-up checks (secrets in production, migrations applied), wiring
+    src/http.ts               helmet, CORS allow-list, body size limit, request log
+    src/deps.ts               configuration from the environment; PostgreSQL or in-memory
+    src/auth.ts               password rules, bcrypt, JWT, rate limiter
+    src/auth.guard.ts         access-token guard, @CurrentUser, rate-limit guard
+    src/account.service.ts    register, login, export, delete
+    src/services.ts           profile, passport, jobs, matching, applications, interview, usage
+    src/postgres.ts           PostgresRepository, PostgresUsageMeter (pg)
+    src/crypto.ts             AES-256-GCM encryption of CV text, passport, statements
+    src/migrations.ts         the migration runner; migrate-cli.ts is `npm run migrate`
+    src/logging.ts            JSON logger, request log, error filter
   apps/extension/           Chrome Manifest V3 extension, bundled with esbuild into dist/
     src/agent/                scan the form, detect blockers, fill, apply the policy
-    src/popup/                the popup UI
+    src/popup/                the popup UI: API address, sign-in, mode, scan, fill
     test/fixtures/            fictional application forms
     test/e2e/                 Playwright tests
-  db/schema.sql             PostgreSQL tables (not used by the app yet)
+  db/migrations/            versioned SQL migrations (001 was db/schema.sql)
+  deploy/gcp-cloud-run.md   Cloud Run steps (from memory, not executed)
+  Dockerfile, docker-compose.yml, .github/workflows/ci.yml, .env.example
+  scripts/test-with-postgres.sh   `npm run test:pg`: tests against a throwaway PostgreSQL
 ```
 
 ### REST API
 
-Every route except `GET /health` needs `Authorization: Bearer <OPENNJOB_API_TOKEN>`,
-apart from `POST /employer/jobs`, which takes `OPENNJOB_EMPLOYER_KEY` instead.
+Every route needs `Authorization: Bearer <access token>`, where the token comes from
+`POST /auth/login` or `POST /auth/register`. The exceptions: `GET /health` and the three
+`/auth` routes need none, and `POST /employer/jobs` takes `OPENNJOB_EMPLOYER_KEY`
+instead. The user a request acts for is taken from the token and from nowhere else.
 
 | Route | Purpose |
 | --- | --- |
+| `GET /auth/versions` | The terms and privacy-notice versions registration must accept |
+| `POST /auth/register` | `{ email, password, acceptedTermsVersion, acceptedPrivacyVersion }`; creates the account, records consent, returns an access token |
+| `POST /auth/login` | `{ email, password }`; returns `{ accessToken, tokenType, expiresIn, expiresAt, user }` |
+| `GET /account` | The signed-in account: id, email, when created, consent record |
+| `GET /account/export` | Everything held about the account, as JSON: account, profile, passport, applications, events, usage |
+| `DELETE /account` | `{ password }`; deletes the account and all of its data |
 | `PUT /profile`, `GET /profile` | Contact details, CV text and `preferences: { languages, countries, cities }` |
 | `PUT /passport`, `GET /passport` | Credential passport (`credentials: { id: value }`, v1 `nmcPin` still accepted); the reply includes training-expiry status |
 | `POST /jobs/refresh` | Runs the configured job sources, de-duplicates, stores |
@@ -256,10 +372,114 @@ apart from `POST /employer/jobs`, which takes `OPENNJOB_EMPLOYER_KEY` instead.
 | `GET /interview/questions?role=&category=` | The healthcare question bank |
 | `GET /interview/questions?pack=` | The questions of one industry pack (ids such as `rail-2`, usable as `questionId`) |
 | `GET /usage` | ACU usage records and totals |
-| `GET /health` | Liveness, no auth |
+| `GET /health` | `{ status, persistence, database }`; 503 when the database cannot be reached. No auth |
 
 `GET /applications/:id`, `GET /interview/questions`, `GET /usage` and `GET /health` were
 added beyond the v1 brief because the extension and a developer need them.
+
+### Accounts
+
+- **Passwords.** At least 12 characters, at most 72 bytes (bcrypt reads no more), at
+  least 5 different characters, not one of a short list of common passwords, and not
+  containing the email address. Stored as a bcrypt hash (cost `OPENNJOB_BCRYPT_ROUNDS`,
+  default 12); the password itself is never stored or logged.
+- **Access tokens.** JWT, HS256, signed with `OPENNJOB_JWT_SECRET`, valid for
+  `OPENNJOB_JWT_TTL_SECONDS` (default one hour). The guard checks signature, algorithm,
+  issuer, audience and expiry, and that the account still exists, on every request.
+  There are no refresh tokens and no server-side sign-out: a token works until it
+  expires or its account is deleted.
+- **Start-up.** With `NODE_ENV=production` the API refuses to start without
+  `OPENNJOB_JWT_SECRET` (at least 32 characters) and without `OPENNJOB_DATA_KEY`.
+  Outside production a missing secret is replaced by a random one for that run.
+- **Rate limit.** `/auth/*` allows `OPENNJOB_AUTH_RATE_LIMIT_MAX` attempts (default 10)
+  per client address, and per email address, per window (default 15 minutes), then
+  replies 429 with `Retry-After`. The counts are in the memory of one process.
+- **Consent.** Registration must carry `acceptedTermsVersion` and
+  `acceptedPrivacyVersion`, equal to the server's current versions
+  (`OPENNJOB_TERMS_VERSION`, `OPENNJOB_PRIVACY_VERSION`). They are stored with the time.
+  The defaults are `draft-1` because **the documents themselves do not exist yet**.
+- **Separation.** Every profile, passport, preference, application, agent run, match,
+  usage record and event belongs to one account. `apps/api/test/isolation.test.ts` runs
+  every route as a second user against the first user's data, on both stores, and fails
+  if the API has a route the test does not name. Jobs are a shared catalogue.
+- **Export and deletion.** `GET /account/export` and `DELETE /account` (which asks for
+  the password again). Deletion removes the profile, passport, applications, events and
+  usage records; in PostgreSQL the test reads every table afterwards.
+- **Not there:** email verification, password reset, change of password or email,
+  multi-factor authentication, account lock-out, admin tools. See `GO-LIVE.md`.
+
+### PostgreSQL and migrations
+
+- `DATABASE_URL` set: `PostgresRepository` and `PostgresUsageMeter` (the `pg` driver).
+  Not set: the in-memory store. Both implement the same `Repository` interface, and one
+  contract suite (`apps/api/test/repository.contract.ts`) runs against both.
+- The schema is in `db/migrations/NNN_name.sql`. `npm run migrate` applies whatever the
+  database does not have, each file in its own transaction, and records it in the
+  `schema_migrations` table with a checksum. Running it again does nothing. It refuses
+  to continue if an applied file was edited afterwards. To change the schema, add a file.
+- The API does not migrate by itself. It checks at start-up and refuses to start on a
+  database that is missing migrations.
+- PostgreSQL 16 is what it was run against.
+
+### Encryption at rest
+
+With `OPENNJOB_DATA_KEY` set (exactly 32 bytes, base64), these are encrypted with
+AES-256-GCM before they reach PostgreSQL: **CV text** (`profiles.cv_text`), **the whole
+credential passport** (`passports.data`) and **supporting statements**
+(`applications.statement`). Each value has its own random nonce, and is bound to its
+place (which column, which user), so a value altered in the database, or copied into
+another user's row, fails to decrypt and the request fails rather than returning it.
+
+What is **not** encrypted by the application: names, contact details and preferences
+in `profiles`, account email addresses, job data, event and usage records; and nothing
+in the in-memory store. Use disk-level encryption on the database as well.
+
+**Key management and rotation are the operator's job.** The code reads one key from one
+environment variable. It does not generate, store, back up, version or rotate keys.
+
+- Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+- Keep it in a secret manager, never in the repository or the image, and keep a
+  recoverable copy somewhere separate. **If the key is lost, the encrypted data cannot
+  be read by anyone.**
+- There is no rotation. Changing `OPENNJOB_DATA_KEY` makes every existing encrypted row
+  unreadable. Rotating means writing a tool that reads each row with the old key and
+  writes it with the new one; that tool does not exist.
+- Rows written before a key was set are plain text; they are read as they are and
+  become ciphertext the next time they are saved. Removing the key afterwards makes the
+  encrypted rows unreadable (the API returns an error, not ciphertext).
+
+### Logging and HTTP hardening
+
+- **Logs** are JSON lines on stdout / stderr. One line per request: request id, method,
+  path without the query string, status, duration, user id (the opaque account id).
+  Bodies, headers and query strings are never logged. An unexpected error is logged by
+  its type and code only, because a database error message can quote the data that
+  caused it. A test drives every route and checks that no CV, passport or statement
+  content, password, token or email address appears; another checks the real process's
+  output.
+- **Headers.** `helmet` with a deny-everything content policy (the API serves JSON
+  only), `Cache-Control: no-store`, an `X-Request-Id` on every response.
+- **CORS.** `OPENNJOB_CORS_ORIGINS` is the allow-list. Any `chrome-extension://` origin
+  is also accepted outside production (`OPENNJOB_CORS_ALLOW_ANY_EXTENSION`).
+- **Body size.** `OPENNJOB_BODY_LIMIT`, default 256kb; larger requests get 413.
+- **Behind a proxy** set `OPENNJOB_TRUST_PROXY` so the rate limit sees the caller's
+  address. The API itself speaks plain HTTP: TLS is the proxy's job.
+
+### Deployment files
+
+- `Dockerfile`: multi-stage, production dependencies only, runs as the non-root `node`
+  user, listens on `0.0.0.0:8080`, has a health check, and starts `node` directly so
+  SIGTERM reaches it.
+- `docker-compose.yml`: `postgres` (16), a one-shot `migrate`, then `api` on
+  `127.0.0.1:3000`. Secrets come from `.env`; none has a default.
+- `.github/workflows/ci.yml`: install, build, typecheck, migrate, vitest with a postgres
+  service container, Playwright; and a second job that builds the image.
+- `deploy/gcp-cloud-run.md`: gcloud steps for Cloud Run + Cloud SQL + Secret Manager.
+- Graceful shutdown: on SIGTERM or SIGINT the API stops accepting connections, lets
+  requests in flight finish, closes the database pool and exits 0.
+
+None of the four was run for real: no Docker daemon, no GitHub runner and no Google
+Cloud project were available. See "What was NOT verified".
 
 ### Industry packs
 
@@ -338,10 +558,9 @@ Country codes are validated against a full ISO 3166-1 alpha-2 list in
 Jobs are found by the system from its sources. `POST /employer/jobs` is an extra way in:
 it stores a job with `origin: 'employer'`, after which it is matched, scoped and drafted
 exactly like a discovered job. The route is closed (HTTP 401) unless
-`OPENNJOB_EMPLOYER_KEY` is set, the user's token does not open it, and the employer key
-opens no other route. A single shared employer key is a placeholder like the user
-token: there are no employer accounts, and nothing checks who the employer is or
-moderates what is posted.
+`OPENNJOB_EMPLOYER_KEY` is set, a user's access token does not open it, and the employer
+key opens no other route. A single shared employer key is a placeholder: there are no
+employer accounts, and nothing checks who the employer is or moderates what is posted.
 
 ### How matching works
 
@@ -372,20 +591,25 @@ moderates what is posted.
 - The complete chain in one test file (`real-extension.spec.ts`): the built API process,
   the unpacked extension loaded in Chromium, the popup, the content script injected by
   `chrome.scripting`, and a fixture form.
-- `db/schema.sql` (with the new columns) was applied to a fresh, throwaway PostgreSQL 16
-  instance and loads cleanly. Nothing reads or writes those tables. It is a create
-  script, not a migration: it adds no columns to a database made from the v1 file.
+- Accounts, the PostgreSQL repository, migrations, encryption at rest, export and
+  deletion, the request log and the start-up checks, each with tests; the
+  PostgreSQL-backed ones were run against a live, throwaway PostgreSQL 16.
+- The built API as a real process: refusing to start, JSON logs, SIGTERM
+  (`apps/api/test/e2e/api-process.spec.ts`).
 
 **Stubbed, placeholder or missing**
 
 | Area | State |
 | --- | --- |
-| Persistence | In-memory only. There is no `PostgresRepository`. Data is lost on restart. |
-| Authentication | One shared bearer token and one hard-coded user (`dev-user`). A placeholder, not real auth: no accounts, sessions, per-user separation or rotation. |
+| Persistence | PostgreSQL when `DATABASE_URL` is set; otherwise in memory and lost on restart. No backups, no retention rule. |
+| Authentication | Real accounts with bcrypt and JWT. Missing: email verification, password reset, password change, refresh tokens, server-side sign-out, multi-factor authentication. |
+| Candidate web app | None. Registration, the CV, the passport, matches, export and deletion are API calls only. |
+| Encryption | CV text, passport and statements only, and only in PostgreSQL. One key, no rotation. |
+| Terms and privacy notice | The versions accepted at registration (`draft-1`) refer to documents that do not exist. |
 | LLM | `AnthropicLlm` uses the official `@anthropic-ai/sdk`, but **no real call to Anthropic has been made by this code** (no API key was available where it was built). Its request/response mapping is tested with a stub client. |
 | Model name | `OPENNJOB_MODEL` must be set. If it is not, the code falls back to `PLACEHOLDER_MODEL_CONFIRM_BEFORE_USE` in `packages/core/src/llm.ts` and warns. That placeholder has not been checked against Anthropic's current model list. |
-| Billing | `UsageMeter` records ACU per LLM call in memory. The ACU formula (1 ACU per 1,000 tokens) is a placeholder. `BitriPayBillingPort` is an interface with **no implementation**; it states what OpennJob needs and does not describe BitriPay's real API. |
-| Events | In-process `EventBus`. Events are also appended to the (in-memory) event log. |
+| Billing | `UsageMeter` records ACU per LLM call (in the `usage_records` table with PostgreSQL). The ACU formula (1 ACU per 1,000 tokens) is a placeholder. `BitriPayBillingPort` is an interface with **no implementation**; it states what OpennJob needs and does not describe BitriPay's real API. |
+| Events | In-process `EventBus`. Events are also appended to the event log (the `events` table with PostgreSQL). |
 | CV input | Plain text only. No PDF or Word parsing. |
 | Statement drafting without an LLM | A list of the matching sentences copied from the CV, in criteria order. It cannot invent anything, and it is not polished prose. |
 | LLM statement check | The prompt forbids invented experience and a cheap check flags criteria the CV does not evidence but the draft mentions. That is a warning, not a guarantee. The user must read every AI-drafted statement. |
@@ -396,15 +620,30 @@ moderates what is posted.
 | French statements without an LLM | Only the opening line is French. The CV's sentences are copied untranslated, and the draft says so. |
 | Interview feedback in French without an LLM | A much smaller cue list than the English one, tried only on the test answers. |
 | Employer posting | One shared key, no employer accounts, no moderation, no editing or withdrawing a posting. |
+| Job refresh | Any signed-in user can call `POST /jobs/refresh`, which refreshes the shared catalogue. No scheduler. |
 | Preferences | Languages, countries and cities only. No salary, contract type, distance or remote-working preference. |
 | Interview scoring without an LLM | Looks for wording that signals Situation / Task / Action / Result. It cannot judge whether an answer is true, safe or relevant. |
-| Extension UI | A popup. It closes when the user clicks on the page, which loses the ticks. A Chrome side panel would fix that. No icons, no onboarding, no error reporting. |
-| Extension storage | The API token is kept in `chrome.storage.local`, unencrypted. |
+| Extension UI | A popup. It closes when the user clicks on the page, which loses the ticks. A Chrome side panel would fix that. It can sign in but not register. No icons, no onboarding, no error reporting. |
+| Extension storage | The access token is kept in `chrome.storage.local`, unencrypted, until it expires or the user signs out. |
 | Form coverage | Text boxes, text areas, drop-downs, tick boxes and yes/no radio groups in an ordinary HTML form. Not handled: multi-page forms, file uploads (CV upload), date pickers made of several boxes, fields inside iframes or shadow DOM, custom drop-down widgets. |
-| Rate limiting, logging, monitoring, deployment | None. |
+| Rate limiting | `/auth/*` only, counted per process. Nothing on other routes. |
+| Monitoring, alerting, backups, hosting, TLS | None. The deployment files exist; nothing is deployed. |
 
 ## What was NOT verified
 
+- **The Docker image.** `docker build` and `docker compose up` were not run: there was
+  no Docker daemon. The Dockerfile's commands were run by hand outside Docker (install,
+  build, production-only install, then the result started as a non-root user against
+  PostgreSQL, where it migrated, served `/health` and stopped). That checks the commands,
+  not the image.
+- **The GitHub Actions workflow.** Written, never executed.
+- **The Cloud Run guide.** `deploy/gcp-cloud-run.md` was written from memory. No command
+  in it was run.
+- **PostgreSQL versions other than 16**, managed PostgreSQL (Cloud SQL), TLS to the
+  database, and connection through the Cloud SQL socket: none tried.
+- **Behaviour under load**, with more than one API instance, or over a long run.
+- **An independent security review.** None. The accounts, the separation between users
+  and the encryption were written and tested by the same author.
 - **Job-source response shapes.** The Greenhouse, Lever, Ashby, Adzuna and Reed
   endpoints and response shapes in `packages/core/src/sources/` are from memory of the
   public docs and have not been checked against the live APIs today. The same warning
@@ -491,10 +730,15 @@ OpennJob handles personal data, and some of the most sensitive kinds.
   where data is processed (international transfers), and their retention and training
   settings all need confirming. Tell users plainly that their CV is sent to an AI
   provider.
-- **Security.** Encrypt the passport at rest, use real per-user authentication, use
-  HTTPS, and keep secrets out of the repository. None of that exists in v1.
-- **Retention and rights.** Decide how long data is kept; build export and deletion
-  (the schema uses `ON DELETE CASCADE` from `users` to make deletion straightforward).
+- **Security.** This version has per-user authentication, encrypts the CV, the passport
+  and statements at rest in PostgreSQL, and keeps secrets out of the repository. It does
+  not provide HTTPS (a proxy must), key management, or an independent security test.
+- **Consent.** Registration records which versions of the terms and privacy notice were
+  accepted and when. That record is only worth something once those documents exist and
+  say plainly what the product does, including each mode and the use of an AI provider.
+- **Retention and rights.** Export (`GET /account/export`) and deletion
+  (`DELETE /account`) exist. Still to decide: how long data is kept, and what happens to
+  backups and logs when an account is deleted.
 - **Events and logs.** Event payloads carry ids and counters only, by design, and a
   test checks no CV text, contact details or PIN leak into them. Keep that rule when
   Kafka is added.
@@ -511,7 +755,6 @@ OpennJob handles personal data, and some of the most sensitive kinds.
   function calls today. If multi-step agent orchestration is wanted later, the pure
   functions in `packages/core` are the nodes; `LlmPort` is the model boundary.
 - **BitriPay.** `BitriPayBillingPort` in `packages/core/src/usage.ts`.
-- **PostgreSQL.** `Repository` interface plus `db/schema.sql`.
 
 ## Known issues
 
@@ -530,14 +773,20 @@ OpennJob handles personal data, and some of the most sensitive kinds.
    including which countries Adzuna really supports.
 2. Make one real Anthropic call end to end; confirm the model name; review statement
    quality with real nurses' CVs (with their consent).
-3. Real authentication and a `PostgresRepository`; encrypt the passport.
-4. DPIA, consent screens and privacy notice, before any real user's data; and a legal
+3. A web app for candidates (at least registration with the consent screen, CV and
+   passport entry, matches, export and deletion); email verification and password reset.
+4. Privacy policy and terms, DPIA, ICO check, before any real user's data; and a legal
    check per country before offering jobs outside the UK.
-5. Try the extension on real forms, English and French, by hand, in hybrid mode only,
+5. Build the image, run `docker compose up`, run the CI workflow, and deploy to a
+   staging environment with TLS, backups (restore one) and alerting. Decide key
+   management for `OPENNJOB_DATA_KEY`. Commission an independent security test.
+6. Try the extension on real forms, English and French, by hand, in hybrid mode only,
    with permission where a site's terms require it. Expect to extend the form coverage
    listed above.
-6. Move the popup to a side panel so the user can see the form while confirming.
-7. PDF and Word CV import.
-8. Terms-of-use checks or partnerships for NHS Jobs and Trac.
-9. BitriPay billing adapter and a real ACU rate card.
-10. Keep auto mode switched off for real users until hybrid has a track record.
+7. Move the popup to a side panel so the user can see the form while confirming.
+8. PDF and Word CV import.
+9. Terms-of-use checks or partnerships for NHS Jobs and Trac.
+10. BitriPay billing adapter and a real ACU rate card.
+11. Keep auto mode switched off for real users until hybrid has a track record.
+
+`GO-LIVE.md` has the full list.

@@ -23,9 +23,21 @@
     <details id="settings">
       <summary>Connection</summary>
       <label>OpennJob API address <input id="apiBase" type="url" placeholder="http://127.0.0.1:3000" /></label>
-      <label>API token <input id="token" type="password" autocomplete="off" /></label>
-      <button id="save" type="button" class="secondary">Save and load my data</button>
+      <button id="save" type="button" class="secondary">Save address</button>
     </details>
+
+    <form id="sign-in" hidden>
+      <h2>Sign in</h2>
+      <label>Email address <input id="email" type="email" autocomplete="username" required /></label>
+      <label>Password <input id="password" type="password" autocomplete="current-password" required /></label>
+      <button id="sign-in-button" type="submit">Sign in</button>
+      <p class="help">Your password is sent to the address under Connection and is not kept by this extension.</p>
+    </form>
+
+    <p id="account" class="account" hidden>
+      <span id="account-email"></span>
+      <button id="sign-out" type="button" class="link">Sign out</button>
+    </p>
 
     <label class="block">Application
       <select id="application"><option value="">No statement (profile details only)</option></select>

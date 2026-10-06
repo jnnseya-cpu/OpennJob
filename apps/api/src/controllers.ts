@@ -1,9 +1,15 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
-import { EmployerRoute, Public } from './auth.guard';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { AccountService } from './account.service';
+import { AuthRateLimitGuard, CurrentUser, EmployerRoute, Public } from './auth.guard';
+import { DEPS } from './deps';
+import type { OpennJobDeps } from './deps';
 import { OpennJobService } from './services';
 import {
   ZodPipe,
   agentRunSchema,
+  deleteAccountSchema,
+  loginSchema,
+  registerSchema,
   confirmApplicationSchema,
   employerJobSchema,
   matchFilterSchema,
@@ -14,6 +20,7 @@ import {
   profileSchema,
   questionQuerySchema,
 } from './schemas';
+import type { DeleteAccountInput, LoginInput, RegisterInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput } from './schemas';
 
 // Note: every constructor parameter uses an explicit @Inject(...) so the app does not
@@ -21,10 +28,65 @@ import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, Em
 
 @Controller('health')
 export class HealthController {
+  constructor(@Inject(DEPS) private readonly deps: OpennJobDeps) {}
+
+  /** Liveness and database connectivity. 200 when the store answers, 503 when it does not. No auth. */
   @Public()
   @Get()
-  health() {
-    return { status: 'ok' };
+  async health(@Res({ passthrough: true }) res: { status(code: number): unknown }) {
+    const database = await this.deps.repository.ping().then(
+      () => 'up' as const,
+      () => 'down' as const,
+    );
+    if (database === 'down') res.status(503);
+    return { status: database === 'up' ? 'ok' : 'degraded', persistence: this.deps.persistence, database };
+  }
+}
+
+@Controller('auth')
+@UseGuards(AuthRateLimitGuard)
+export class AuthController {
+  constructor(@Inject(AccountService) private readonly accounts: AccountService) {}
+
+  /** The versions of the terms and privacy notice that registration must accept. */
+  @Public()
+  @Get('versions')
+  versions() {
+    return this.accounts.versions();
+  }
+
+  @Public()
+  @Post('register')
+  register(@Body(new ZodPipe(registerSchema)) body: RegisterInput) {
+    return this.accounts.register(body);
+  }
+
+  @Public()
+  @Post('login')
+  @HttpCode(200)
+  login(@Body(new ZodPipe(loginSchema)) body: LoginInput) {
+    return this.accounts.login(body);
+  }
+}
+
+@Controller('account')
+export class AccountController {
+  constructor(@Inject(AccountService) private readonly accounts: AccountService) {}
+
+  @Get()
+  me(@CurrentUser() userId: string) {
+    return this.accounts.me(userId);
+  }
+
+  @Get('export')
+  export(@CurrentUser() userId: string) {
+    return this.accounts.exportAccount(userId);
+  }
+
+  @Delete()
+  @HttpCode(200)
+  remove(@CurrentUser() userId: string, @Body(new ZodPipe(deleteAccountSchema)) body: DeleteAccountInput) {
+    return this.accounts.deleteAccount(userId, body);
   }
 }
 
@@ -33,13 +95,13 @@ export class ProfileController {
   constructor(@Inject(OpennJobService) private readonly service: OpennJobService) {}
 
   @Put()
-  put(@Body(new ZodPipe(profileSchema)) body: ProfileInput) {
-    return this.service.saveProfile(body);
+  put(@CurrentUser() userId: string, @Body(new ZodPipe(profileSchema)) body: ProfileInput) {
+    return this.service.saveProfile(userId, body);
   }
 
   @Get()
-  get() {
-    return this.service.getProfile();
+  get(@CurrentUser() userId: string) {
+    return this.service.getProfile(userId);
   }
 }
 
@@ -48,13 +110,13 @@ export class PassportController {
   constructor(@Inject(OpennJobService) private readonly service: OpennJobService) {}
 
   @Put()
-  put(@Body(new ZodPipe(passportSchema)) body: PassportInput) {
-    return this.service.savePassport(body);
+  put(@CurrentUser() userId: string, @Body(new ZodPipe(passportSchema)) body: PassportInput) {
+    return this.service.savePassport(userId, body);
   }
 
   @Get()
-  get() {
-    return this.service.getPassport();
+  get(@CurrentUser() userId: string) {
+    return this.service.getPassport(userId);
   }
 }
 
@@ -64,13 +126,13 @@ export class JobsController {
 
   @Post('refresh')
   @HttpCode(200)
-  refresh() {
-    return this.service.refreshJobs();
+  refresh(@CurrentUser() userId: string) {
+    return this.service.refreshJobs(userId);
   }
 
   @Get('matches')
-  matches(@Query('min', new ZodPipe(minScoreSchema)) min: number, @Query(new ZodPipe(matchFilterSchema)) filters: MatchFilterInput) {
-    return this.service.matches(min, filters);
+  matches(@CurrentUser() userId: string, @Query('min', new ZodPipe(minScoreSchema)) min: number, @Query(new ZodPipe(matchFilterSchema)) filters: MatchFilterInput) {
+    return this.service.matches(userId, min, filters);
   }
 }
 
@@ -81,8 +143,8 @@ export class AgentController {
   /** The 80% rule. Prepares drafts only; it never fills or submits a form. */
   @Post('run')
   @HttpCode(200)
-  run(@Body(new ZodPipe(agentRunSchema)) body: AgentRunInput) {
-    return this.service.runAgent(body);
+  run(@CurrentUser() userId: string, @Body(new ZodPipe(agentRunSchema)) body: AgentRunInput) {
+    return this.service.runAgent(userId, body);
   }
 }
 
@@ -103,30 +165,30 @@ export class ApplicationsController {
   constructor(@Inject(OpennJobService) private readonly service: OpennJobService) {}
 
   @Post()
-  create(@Body(new ZodPipe(createApplicationSchema)) body: CreateApplicationInput) {
-    return this.service.createApplication(body);
+  create(@CurrentUser() userId: string, @Body(new ZodPipe(createApplicationSchema)) body: CreateApplicationInput) {
+    return this.service.createApplication(userId, body);
   }
 
   @Get()
-  list() {
-    return this.service.listApplications();
+  list(@CurrentUser() userId: string) {
+    return this.service.listApplications(userId);
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.service.getApplication(id);
+  get(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.service.getApplication(userId, id);
   }
 
   @Post(':id/confirm')
   @HttpCode(200)
-  confirm(@Param('id') id: string, @Body(new ZodPipe(confirmApplicationSchema)) body: ConfirmApplicationInput) {
-    return this.service.confirmApplication(id, body);
+  confirm(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(confirmApplicationSchema)) body: ConfirmApplicationInput) {
+    return this.service.confirmApplication(userId, id, body);
   }
 
   @Post(':id/submitted')
   @HttpCode(200)
-  submitted(@Param('id') id: string) {
-    return this.service.markSubmitted(id);
+  submitted(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.service.markSubmitted(userId, id);
   }
 }
 
@@ -142,8 +204,8 @@ export class InterviewController {
 
   @Post('feedback')
   @HttpCode(200)
-  feedback(@Body(new ZodPipe(interviewFeedbackSchema)) body: InterviewFeedbackInput) {
-    return this.service.interviewFeedback(body);
+  feedback(@CurrentUser() userId: string, @Body(new ZodPipe(interviewFeedbackSchema)) body: InterviewFeedbackInput) {
+    return this.service.interviewFeedback(userId, body);
   }
 }
 
@@ -152,7 +214,7 @@ export class UsageController {
   constructor(@Inject(OpennJobService) private readonly service: OpennJobService) {}
 
   @Get()
-  usage() {
-    return this.service.usage();
+  usage(@CurrentUser() userId: string) {
+    return this.service.usage(userId);
   }
 }

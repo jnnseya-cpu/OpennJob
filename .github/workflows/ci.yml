@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          # A throwaway database that exists for one CI run. Not a secret.
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: opennjob_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # With this set, every PostgreSQL-backed test runs (repository contract, migrations,
+      # encryption at rest, account deletion, isolation, API process). Each test file
+      # works in a schema of its own and drops it.
+      DATABASE_URL: postgres://postgres:ci-only-password@127.0.0.1:5432/opennjob_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Migrations apply to an empty database, twice
+        run: |
+          npm run migrate
+          npm run migrate
+
+      - name: Unit and API tests (vitest, with PostgreSQL)
+        run: npm test
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests (Playwright)
+        run: npm run test:e2e
+
+      - name: Keep the Playwright output when a test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the API image
+        run: docker build -t opennjob-api:ci .
+      - name: The image runs as a non-root user
+        run: test "$(docker run --rm opennjob-api:ci id -u)" != "0"
+      - name: The image refuses to start without its secrets
+        run: |
+          if docker run --rm opennjob-api:ci; then
+            echo "The container started with no OPENNJOB_JWT_SECRET and no OPENNJOB_DATA_KEY" >&2
+            exit 1
+          fi

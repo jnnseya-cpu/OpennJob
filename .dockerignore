@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.env
+.env.*
+!.env.example
+test-results
+playwright-report
+apps/extension/test
+apps/api/test
+packages/core/test
+*.md
+deploy

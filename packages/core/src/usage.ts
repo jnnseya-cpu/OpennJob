@@ -32,6 +32,8 @@ export interface UsageMeter {
   record(entry: UsageRecord): Promise<void>;
   list(userId: string): Promise<UsageRecord[]>;
   totals(userId: string): Promise<UsageTotals>;
+  /** Removes every record of one account (account deletion). */
+  deleteForUser(userId: string): Promise<void>;
 }
 
 export class InMemoryUsageMeter implements UsageMeter {
@@ -43,6 +45,10 @@ export class InMemoryUsageMeter implements UsageMeter {
 
   async list(userId: string): Promise<UsageRecord[]> {
     return this.records.filter((r) => r.userId === userId).map((r) => ({ ...r }));
+  }
+
+  async deleteForUser(userId: string): Promise<void> {
+    for (let i = this.records.length - 1; i >= 0; i -= 1) if (this.records[i]?.userId === userId) this.records.splice(i, 1);
   }
 
   async totals(userId: string): Promise<UsageTotals> {

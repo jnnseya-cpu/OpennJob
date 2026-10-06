@@ -2,7 +2,7 @@
   "name": "opennjob",
   "version": "0.1.0",
   "private": true,
-  "description": "OpennJob - AI job-application assistant (industry packs: construction, data centres, energy, rail, francophone Africa, healthcare)",
+  "description": "OpennJob - AI job-application assistant (API, Chrome extension, domain core)",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -14,7 +14,9 @@
     "build": "npm run build -w @opennjob/core && npm run build -w @opennjob/api && npm run build -w @opennjob/extension",
     "typecheck": "npm run typecheck -w @opennjob/core && npm run typecheck -w @opennjob/api && npm run typecheck -w @opennjob/extension",
     "test": "vitest run",
+    "test:pg": "bash scripts/test-with-postgres.sh",
     "test:e2e": "npm run build && playwright test",
+    "migrate": "node apps/api/dist/migrate-cli.js",
     "start": "node apps/api/dist/main.js"
   },
   "devDependencies": {

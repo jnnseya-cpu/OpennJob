@@ -1,14 +1,42 @@
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { FakeLlm, InMemoryRepository, InMemoryUsageMeter, InProcessEventBus, createSampleSource } from '@opennjob/core';
-import type { LlmRequest } from '@opennjob/core';
-import { AppModule } from '../src/app.module';
-import type { OpennJobDeps } from '../src/deps';
+import type { LlmRequest, User } from '@opennjob/core';
+import { signAccessToken } from '../src/auth';
+import type { OpennJobConfig, OpennJobDeps } from '../src/deps';
+import { createApp } from '../src/http';
+import { silentLogger } from '../src/logging';
 
-export const TOKEN = 'test-token-not-a-secret';
 export const NOW = '2026-10-06T09:00:00.000Z';
+export const JWT_SECRET = 'test-signing-secret-not-a-real-secret-0123456789';
+/** The id of the account every test app starts with. */
+export const USER_ID = 'dev-user';
+export const USER_EMAIL = 'amara.okafor@example.org';
+export const USER_PASSWORD = 'a long fictional passphrase';
+/** bcrypt (cost 4) of USER_PASSWORD. Not a secret: the password is one line up. */
+export const USER_PASSWORD_HASH = '$2b$04$CcK3vJhnxdkC7Hi7//VxTudrz3LJpEk6emUyD7dZVwRkYzdZJh2ke';
+/** A valid access token for USER_ID at NOW. */
+export const TOKEN = signAccessToken(USER_ID, JWT_SECRET, 3600, new Date(NOW)).accessToken;
+
+/** A complete configuration for tests; pass only what a test changes. */
+export function testConfig(overrides: Partial<OpennJobConfig> = {}): OpennJobConfig {
+  return {
+    jwtSecret: JWT_SECRET,
+    jwtTtlSeconds: 3600,
+    bcryptRounds: 4, // the lowest cost bcrypt allows: tests hash many passwords
+    termsVersion: 'terms-test-1',
+    privacyVersion: 'privacy-test-1',
+    authRateLimitMax: 1000,
+    authRateLimitWindowMs: 60_000,
+    corsOrigins: [],
+    corsAllowAnyExtension: true,
+    bodyLimit: '256kb',
+    llmCriteria: false,
+    llmCriteriaMaxJobs: 25,
+    ...overrides,
+  };
+}
 
 /** Fictional person. */
 export const CV_TEXT = [
@@ -56,38 +84,73 @@ export function scriptedLlm(): FakeLlm {
   });
 }
 
+type Client = {
+  get: (url: string) => request.Test;
+  post: (url: string) => request.Test;
+  put: (url: string) => request.Test;
+  delete: (url: string) => request.Test;
+};
+
 export interface TestApp {
   app: INestApplication;
   deps: OpennJobDeps;
-  /** supertest agent factory with the bearer token already set. */
-  api: {
-    get: (url: string) => request.Test;
-    post: (url: string) => request.Test;
-    put: (url: string) => request.Test;
-  };
+  /** supertest client with USER_ID's access token already set. */
+  api: Client;
+  /** A client for any other bearer token (another account's, an expired one, ...). */
+  as: (token: string) => Client;
+  /** Creates another account straight in the repository and returns a client signed in as it. */
+  addUser: (id: string, email?: string) => Promise<Client>;
   raw: () => ReturnType<typeof request>;
 }
 
+export const userRecord = (id: string, email: string): User => ({
+  id,
+  email,
+  passwordHash: USER_PASSWORD_HASH,
+  createdAt: NOW,
+  acceptedTermsVersion: 'terms-test-1',
+  acceptedPrivacyVersion: 'privacy-test-1',
+  consentAt: NOW,
+});
+
+/**
+ * The real HTTP application (createApp: helmet, CORS, body limit, request log, error
+ * filter) over fakes, with one account (USER_ID) already in the repository. The account
+ * is created directly rather than through POST /auth/register so that the id counter and
+ * the event log start clean for the test.
+ */
 export async function createTestApp(overrides: Partial<OpennJobDeps> = {}): Promise<TestApp> {
   let n = 0;
   const deps: OpennJobDeps = {
     repository: new InMemoryRepository(),
+    persistence: 'memory',
     usageMeter: new InMemoryUsageMeter(),
     eventBus: new InProcessEventBus(),
     sources: [createSampleSource()],
     clock: () => new Date(NOW),
     newId: () => `id-${++n}`,
-    config: { apiToken: TOKEN, llmCriteria: false, llmCriteriaMaxJobs: 25 },
+    config: testConfig(),
+    logger: silentLogger,
     ...overrides,
   };
-  const app = await NestFactory.create(AppModule.register(deps), { logger: false });
+  await deps.repository.createUser(userRecord(USER_ID, USER_EMAIL));
+  const app = await createApp(deps);
   await app.init();
   const raw = () => request(app.getHttpServer());
-  const auth = (t: request.Test) => t.set('Authorization', `Bearer ${TOKEN}`);
+  const as = (token: string): Client => {
+    const auth = (t: request.Test) => t.set('Authorization', `Bearer ${token}`);
+    return { get: (url) => auth(raw().get(url)), post: (url) => auth(raw().post(url)), put: (url) => auth(raw().put(url)), delete: (url) => auth(raw().delete(url)) };
+  };
+  const tokenFor = (id: string) => (deps.config.jwtSecret ? signAccessToken(id, deps.config.jwtSecret, deps.config.jwtTtlSeconds, deps.clock()).accessToken : 'no-secret-configured');
   return {
     app,
     deps,
     raw,
-    api: { get: (url) => auth(raw().get(url)), post: (url) => auth(raw().post(url)), put: (url) => auth(raw().put(url)) },
+    as,
+    api: as(tokenFor(USER_ID)),
+    addUser: async (id, email = `${id}@example.org`) => {
+      await deps.repository.createUser(userRecord(id, email));
+      return as(tokenFor(id));
+    },
   };
 }

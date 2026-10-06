@@ -177,6 +177,26 @@ export const employerJobSchema = z
   })
   .strict();
 
+const accountEmail = z.string().trim().toLowerCase().email().max(254);
+const version = z.string().trim().min(1).max(40);
+
+/**
+ * Registration. The password's rules (length and so on) are checked in auth.ts so the
+ * reply can name each problem; here it only has to be a string of a sane size.
+ * `acceptedTermsVersion` and `acceptedPrivacyVersion` are required: there is no account
+ * without recorded consent.
+ */
+export const registerSchema = z
+  .object({ email: accountEmail, password: z.string().min(1).max(1000), acceptedTermsVersion: version, acceptedPrivacyVersion: version })
+  .strict();
+
+export const loginSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000) }).strict();
+
+export const deleteAccountSchema = z.object({ password: z.string().min(1).max(1000) }).strict();
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
 export type ProfileInput = z.infer<typeof profileSchema>;
 export type MatchFilterInput = z.infer<typeof matchFilterSchema>;
 export type AgentRunInput = z.infer<typeof agentRunSchema>;

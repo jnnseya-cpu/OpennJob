@@ -1,0 +1,71 @@
+# OpennJob API + PostgreSQL on one machine. For trying the deployable shape locally and
+# for a small single-host install. It is not a production topology by itself: there is
+# no TLS, no backup and no monitoring here (see GO-LIVE.md).
+#
+#   cp .env.example .env      # then set POSTGRES_PASSWORD, OPENNJOB_JWT_SECRET, OPENNJOB_DATA_KEY
+#   docker compose up --build
+#   curl http://127.0.0.1:3000/health
+#
+# Order: postgres becomes healthy -> `migrate` runs once and exits -> `api` starts.
+# No secret has a default: compose stops with a message if one is missing from .env.
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: opennjob
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: opennjob
+    volumes:
+      - opennjob-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opennjob -d opennjob"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Not published to the host. Only the api and migrate containers reach it.
+
+  # One-shot: applies db/migrations and exits. Safe to run again (it does nothing the second time).
+  migrate:
+    build: .
+    command: ["node", "apps/api/dist/migrate-cli.js"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgres://opennjob:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/opennjob
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATABASE_URL: postgres://opennjob:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/opennjob
+      OPENNJOB_JWT_SECRET: ${OPENNJOB_JWT_SECRET:?Set OPENNJOB_JWT_SECRET in .env}
+      OPENNJOB_DATA_KEY: ${OPENNJOB_DATA_KEY:?Set OPENNJOB_DATA_KEY in .env}
+      OPENNJOB_JWT_TTL_SECONDS: ${OPENNJOB_JWT_TTL_SECONDS:-3600}
+      OPENNJOB_TERMS_VERSION: ${OPENNJOB_TERMS_VERSION:-draft-1}
+      OPENNJOB_PRIVACY_VERSION: ${OPENNJOB_PRIVACY_VERSION:-draft-1}
+      OPENNJOB_CORS_ORIGINS: ${OPENNJOB_CORS_ORIGINS:-}
+      OPENNJOB_CORS_ALLOW_ANY_EXTENSION: ${OPENNJOB_CORS_ALLOW_ANY_EXTENSION:-false}
+      OPENNJOB_TRUST_PROXY: ${OPENNJOB_TRUST_PROXY:-}
+      OPENNJOB_APPLY_THRESHOLD: ${OPENNJOB_APPLY_THRESHOLD:-80}
+      OPENNJOB_EMPLOYER_KEY: ${OPENNJOB_EMPLOYER_KEY:-}
+      OPENNJOB_DEMO_JOBS: ${OPENNJOB_DEMO_JOBS:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENNJOB_MODEL: ${OPENNJOB_MODEL:-}
+    ports:
+      - "127.0.0.1:3000:8080" # this machine only; put a TLS-terminating proxy in front for anything else
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 15s
+
+volumes:
+  opennjob-pgdata:
