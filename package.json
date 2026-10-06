@@ -2,7 +2,7 @@
   "name": "opennjob",
   "version": "0.1.0",
   "private": true,
-  "description": "OpennJob v1 - AI job-application agent (launch niche: UK healthcare jobs)",
+  "description": "OpennJob - AI job-application assistant (industry packs: construction, data centres, energy, rail, francophone Africa, healthcare)",
   "workspaces": [
     "packages/*",
     "apps/*"

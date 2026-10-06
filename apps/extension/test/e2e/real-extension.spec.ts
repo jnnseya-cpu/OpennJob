@@ -278,3 +278,31 @@ test('through the popup: stops on the CAPTCHA page and says why', async () => {
   await form.close();
   await popup.close();
 });
+
+test('hybrid, through the popup: fills the French form from French labels and holds its sensitive questions', async () => {
+  const { form, popup } = await openPopupFor('candidature-fr.html');
+  await popup.locator('#mode').selectOption('hybrid');
+  await popup.locator('#application').selectOption(hcaApplicationId);
+  await popup.locator('#scan').click();
+  await expect(popup.locator('#fields li')).toHaveCount(15);
+  await expect(popup.locator('#fields li.sensitive')).toHaveCount(7);
+  await expect(form.locator('#prenom')).toHaveValue('');
+
+  await popup.locator('#fill').click();
+  await expect(popup.locator('#status')).toContainText('Sensitive fields are outlined and have not been filled');
+  await expect(form.locator('#prenom')).toHaveValue('Amara');
+  await expect(form.locator('#nom')).toHaveValue('Okafor');
+  await expect(form.locator('#courriel')).toHaveValue('amara.okafor@example.org');
+  await expect(form.locator('#telephone')).toHaveValue('07700 900123');
+  await expect(form.locator('#adresse')).toHaveValue('12 Example Street');
+  await expect(form.locator('#code-postal')).toHaveValue('B1 1AA');
+  await expect(form.locator('#motivation')).not.toHaveValue('');
+  // Sensitive: referee details wait for a tick; the questions are never answered.
+  await expect(form.locator('#ref-courriel')).toHaveValue('');
+  for (const id of ['#casier-oui', '#casier-non', '#permis-oui', '#permis-non', '#droit-oui', '#droit-non', '#honneur']) await expect(form.locator(id)).not.toBeChecked();
+  await expect(form.locator('#casier-groupe')).toHaveCSS('outline-style', 'solid');
+  expect(await form.evaluate(() => (window as unknown as { __fixture: { submitCount: number; submitClicks: number } }).__fixture)).toMatchObject({ submitCount: 0, submitClicks: 0 });
+  await expect(form.locator('#result')).toBeHidden();
+  await form.close();
+  await popup.close();
+});

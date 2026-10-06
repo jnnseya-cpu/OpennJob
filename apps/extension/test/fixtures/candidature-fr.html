@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Candidature : Directeur de projet, Infrastructure énergétique - Compagnie Énergie du Fleuve (exemple)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <header class="site">
+    <strong>Compagnie Énergie du Fleuve (exemple)</strong>
+    <p>Employeur fictif. Page de test pour OpennJob. Offre CEF-EX-0019 : Directeur de projet, Infrastructure énergétique.</p>
+  </header>
+
+  <form id="candidature" action="#" method="post" novalidate>
+    <section aria-label="Coordonnées">
+      <h2>1. Coordonnées</h2>
+      <label for="prenom">Prénom</label>
+      <input type="text" id="prenom" name="prenom" required>
+      <label for="nom">Nom</label>
+      <input type="text" id="nom" name="nom" required>
+      <label for="courriel">Courriel</label>
+      <input type="text" id="courriel" name="courriel" required>
+      <label for="telephone">Téléphone</label>
+      <input type="text" id="telephone" name="telephone">
+      <label for="adresse">Adresse</label>
+      <input type="text" id="adresse" name="adresse">
+      <label for="code-postal">Code postal</label>
+      <input type="text" id="code-postal" name="codePostal">
+      <label for="disponibilite">Disponibilité</label>
+      <select id="disponibilite" name="disponibilite">
+        <option value="">Veuillez choisir</option>
+        <option>Immédiate</option>
+        <option>Sous un mois</option>
+        <option>Sous trois mois</option>
+      </select>
+    </section>
+
+    <section aria-label="Votre candidature">
+      <h2>2. Votre candidature</h2>
+      <label for="motivation">Lettre de motivation</label>
+      <p class="hint">Expliquez en quoi votre parcours répond aux critères du poste.</p>
+      <textarea id="motivation" name="motivation" required></textarea>
+    </section>
+
+    <section aria-label="Questions préalables">
+      <h2>3. Questions préalables</h2>
+      <fieldset id="casier-groupe">
+        <legend>Avez-vous un casier judiciaire ?</legend>
+        <input type="radio" id="casier-oui" name="casier" value="oui"><label class="inline" for="casier-oui">Oui</label>
+        <input type="radio" id="casier-non" name="casier" value="non"><label class="inline" for="casier-non">Non</label>
+      </fieldset>
+      <fieldset id="permis-groupe">
+        <legend>Disposez-vous d'un permis de travail valide pour ce pays ?</legend>
+        <input type="radio" id="permis-oui" name="permis" value="oui"><label class="inline" for="permis-oui">Oui</label>
+        <input type="radio" id="permis-non" name="permis" value="non"><label class="inline" for="permis-non">Non</label>
+      </fieldset>
+      <fieldset id="droit-groupe">
+        <legend>Avez-vous le droit de travailler dans ce pays sans parrainage ?</legend>
+        <input type="radio" id="droit-oui" name="droit" value="oui"><label class="inline" for="droit-oui">Oui</label>
+        <input type="radio" id="droit-non" name="droit" value="non"><label class="inline" for="droit-non">Non</label>
+      </fieldset>
+    </section>
+
+    <section aria-label="Références">
+      <h2>4. Références</h2>
+      <fieldset>
+        <legend>Première référence professionnelle</legend>
+        <label for="ref-nom">Nom complet</label>
+        <input type="text" id="ref-nom" name="refNom">
+        <label for="ref-organisme">Organisme</label>
+        <input type="text" id="ref-organisme" name="refOrganisme">
+        <label for="ref-courriel">Courriel</label>
+        <input type="text" id="ref-courriel" name="refCourriel">
+      </fieldset>
+    </section>
+
+    <section aria-label="Envoi">
+      <h2>5. Envoi</h2>
+      <p>
+        <input type="checkbox" id="honneur" name="honneur" required>
+        <label class="inline" for="honneur">Déclaration sur l'honneur : les renseignements fournis sont exacts</label>
+      </p>
+      <button type="submit" id="envoyer">Envoyer ma candidature</button>
+    </section>
+  </form>
+  <p id="result" hidden>Candidature reçue (page de test).</p>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Apply: Senior Construction Manager, Hospital New Build - Halden Build Group (example)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <header class="site">
+    <strong>Halden Build Group (example)</strong>
+    <p>Fictional employer. Test fixture for OpennJob. Vacancy HBG-EX-0071: Senior Construction Manager, Hospital New Build.</p>
+  </header>
+
+  <form id="site-application" action="#" method="post" novalidate>
+    <section aria-label="About you">
+      <h2>A. About you</h2>
+      <label for="given">First name</label>
+      <input type="text" id="given" name="givenName" required>
+      <label for="family">Surname</label>
+      <input type="text" id="family" name="familyName" required>
+      <label for="mail">Email address</label>
+      <input type="email" id="mail" name="mail" required>
+      <label for="mobile">Mobile number</label>
+      <input type="tel" id="mobile" name="mobile">
+      <label for="street">Address line 1</label>
+      <input type="text" id="street" name="street">
+      <label for="locality">Town or city</label>
+      <input type="text" id="locality" name="locality">
+      <label for="post-code">Postcode</label>
+      <input type="text" id="post-code" name="postCode">
+      <label for="spoken">Languages spoken</label>
+      <input type="text" id="spoken" name="spoken">
+      <label for="notice">Notice period</label>
+      <select id="notice" name="notice">
+        <option value="">Please select</option>
+        <option>Immediately available</option>
+        <option>One month</option>
+        <option>Three months</option>
+      </select>
+    </section>
+
+    <section aria-label="Tickets and memberships">
+      <h2>B. Tickets and memberships</h2>
+      <label for="membership-no">Professional membership number</label>
+      <p class="hint">For example your CIOB or RICS number.</p>
+      <input type="text" id="membership-no" name="membershipNo">
+      <label for="cscs-no">CSCS card number</label>
+      <input type="text" id="cscs-no" name="cscsNo">
+    </section>
+
+    <section aria-label="Your application">
+      <h2>C. Your application</h2>
+      <label for="why-you">Supporting statement</label>
+      <p class="hint">Explain how you meet the essential criteria for this post.</p>
+      <textarea id="why-you" name="whyYou" required></textarea>
+    </section>
+
+    <section aria-label="Eligibility questions">
+      <h2>D. Eligibility questions</h2>
+      <fieldset id="clearance-group">
+        <legend>Do you currently hold UK security clearance (SC) or have you been through national security vetting?</legend>
+        <input type="radio" id="clearance-yes" name="clearance" value="yes"><label class="inline" for="clearance-yes">Yes</label>
+        <input type="radio" id="clearance-no" name="clearance" value="no"><label class="inline" for="clearance-no">No</label>
+      </fieldset>
+      <fieldset id="work-right-group">
+        <legend>Do you have the right to work in the UK?</legend>
+        <input type="radio" id="work-right-yes" name="workRight" value="yes"><label class="inline" for="work-right-yes">Yes</label>
+        <input type="radio" id="work-right-no" name="workRight" value="no"><label class="inline" for="work-right-no">No</label>
+      </fieldset>
+      <fieldset id="sponsor-group">
+        <legend>Will you need visa sponsorship or a work permit for this role?</legend>
+        <input type="radio" id="sponsor-yes" name="sponsor" value="yes"><label class="inline" for="sponsor-yes">Yes</label>
+        <input type="radio" id="sponsor-no" name="sponsor" value="no"><label class="inline" for="sponsor-no">No</label>
+      </fieldset>
+      <fieldset id="interest-group">
+        <legend>Do you have any conflict of interest with Halden Build Group or its supply chain?</legend>
+        <input type="radio" id="interest-yes" name="interest" value="yes"><label class="inline" for="interest-yes">Yes</label>
+        <input type="radio" id="interest-no" name="interest" value="no"><label class="inline" for="interest-no">No</label>
+      </fieldset>
+      <label for="interest-detail">If yes, describe the conflict of interest</label>
+      <input type="text" id="interest-detail" name="interestDetail">
+      <fieldset id="record-group">
+        <legend>Do you have any unspent criminal convictions?</legend>
+        <input type="radio" id="record-yes" name="record" value="yes"><label class="inline" for="record-yes">Yes</label>
+        <input type="radio" id="record-no" name="record" value="no"><label class="inline" for="record-no">No</label>
+      </fieldset>
+    </section>
+
+    <section aria-label="Referees">
+      <h2>E. Referees</h2>
+      <fieldset>
+        <legend>Referee 1</legend>
+        <label for="r1-name">Full name</label>
+        <input type="text" id="r1-name" name="r1Name">
+        <label for="r1-company">Company</label>
+        <input type="text" id="r1-company" name="r1Company">
+        <label for="r1-mail">Email address</label>
+        <input type="email" id="r1-mail" name="r1Mail">
+      </fieldset>
+    </section>
+
+    <section aria-label="Send">
+      <h2>F. Send</h2>
+      <p>
+        <input type="checkbox" id="truth" name="truth" required>
+        <label class="inline" for="truth">I confirm that everything in this application is true</label>
+      </p>
+      <button type="submit" id="send-application">Send application</button>
+    </section>
+  </form>
+  <p id="result" hidden>Application received (fixture).</p>
+</body>
+</html>

@@ -190,7 +190,7 @@ function plainKey(own: string, d: FieldDescriptor): FieldKey | null {
   // French labels for the basic fields sit beside the English ones: prénom, nom, courriel /
   // e-mail, téléphone, adresse, code postal, ville. ("e-mail" is already "e mail" after normalising.)
   if (type === 'email' || /e ?mail|courriel|adresse [ée]lectronique/.test(own)) return 'email';
-  if (/first name|forename|given name|\bfname\b|pr[ée]noms?( \||$| \()/.test(own)) return 'firstName';
+  if (/first name|forename|given name|\bfname\b|pr[ée]noms?( s)?( \||$)/.test(own)) return 'firstName';
   if (/last name|surname|family name|\blname\b|nom de famille|(^|\| )nom( \||$)/.test(own)) return 'lastName';
   if (/full name|your name|(^|\| )name( \||$)|nom complet|nom et pr[ée]nom|pr[ée]nom et nom/.test(own)) return 'fullName';
   if (type === 'tel' || /phone|mobile|telephone|\btel\b|contact number|t[ée]l[ée]phone|\bportable\b/.test(own)) return 'phone';
