@@ -6,9 +6,11 @@ mission-critical; energy and grid; rail and transport; francophone Africa and di
 healthcare), **candidate preferences** (languages, countries, cities), French-language
 applications, the **80% rule** (`POST /agent/run`) and optional employer posting.
 
-The latest round made it **deployable**: real user accounts, PostgreSQL, encryption at
+An earlier round made it **deployable**: real user accounts, PostgreSQL, encryption at
 rest for the most sensitive data, hardened HTTP, a Dockerfile, docker-compose, a CI
-workflow and hand-over documents.
+workflow and hand-over documents. The latest round adds a **candidate web app**
+(`apps/web`, Next.js 14): register, profile and passport, matches, the agent run,
+application review and approval, tracker, interview practice, export and deletion.
 
 This is a tested version of the codebase for a developer to take forward. It is
 not a finished product and it has never been used on a real employer's website.
@@ -131,6 +133,64 @@ curl -X POST $API/employer/jobs -H "Authorization: Bearer $EMPLOYER_KEY" -H "$JS
 
 Without `DATABASE_URL` all data is held in memory and **is lost when the API stops**.
 
+### The candidate web app
+
+`npm run build` also builds `apps/web` as a static site in `apps/web/out` (plain HTML,
+CSS and JavaScript; no Node server runs it). To try it locally:
+
+```bash
+# in .env, so the API accepts calls from the site's origin:
+#   OPENNJOB_CORS_ORIGINS=http://127.0.0.1:3001
+npm start                                   # the API on :3000
+npm run dev -w @opennjob/web                # the web app on http://127.0.0.1:3001 (development server)
+```
+
+The site finds the API through `/opennjob-config.json`, served next to it
+(`apps/web/public/opennjob-config.json`, default `{"apiBase": "http://127.0.0.1:3000"}`).
+To deploy, copy `apps/web/out` to any static host, edit that file to the API's address,
+and add the site's origin to `OPENNJOB_CORS_ORIGINS`. Nothing has been deployed.
+
+What it does, screen by screen (layout and wording follow
+`docs/prototype/opennjob-demo.html`; the data and the matching come from the API):
+
+| Screen | API routes |
+| --- | --- |
+| Create an account (both consent boxes start unticked), sign in | `GET /auth/versions`, `POST /auth/register`, `POST /auth/login` |
+| Profile: details, CV text, languages / countries / cities, credential passport for the chosen pack, DBS, right to work (starts unticked), training with expiry status, referees | `GET/PUT /profile`, `GET/PUT /passport` |
+| Matches: pack and region filters, score, evidence, gaps, missing credentials | `GET /jobs/matches`, `POST /jobs/refresh` (the "Look for jobs now" button on an empty catalogue) |
+| Run agent: drafts every eligible match at or above the threshold | `POST /agent/run` |
+| Review: requirements with CV evidence, editable statement, the pack's declarations to confirm one by one, approve, then "I have submitted it" | `POST /applications`, `PUT /applications/:id/statement`, `POST /applications/:id/confirm`, `POST /applications/:id/submitted` |
+| Tracker | `GET /applications` |
+| Interview practice | `GET /interview/questions?pack=`, `POST /interview/feedback` |
+| Account: download my data, delete account (needs the password), sign out | `GET /account`, `GET /account/export`, `DELETE /account` |
+
+How the web app keeps the product rules:
+
+- **Nothing is sent to an employer from the website.** Approving records the user's
+  confirmations; the form is filled by the extension in the user's browser and submitted
+  by the user, who then records it with "I have submitted it". In every mode the agent
+  run only prepares drafts, and the page says so.
+- **Every declaration is confirmed by hand, one at a time, and none starts ticked.** The
+  list is the job's pack declarations from `packages/core/src/packs.ts` (one that depends
+  on a credential appears only when the job needs that credential), plus "any other
+  declaration or 'I confirm' statement on the form". Ticking one means "I will answer
+  this myself"; no answer is asked for or stored. There is no "tick all". In review-all
+  mode the user also ticks "I have checked every field". The ids recorded are
+  `declaration:<id>`, `statement` and `review:all-fields-checked`.
+- **Auto mode never submits a form with a sensitive field**: the website submits nothing
+  at all, and an auto-mode application shows that its form will wait for the user.
+- **No logging.** The web app has no `console` calls; the end-to-end test checks that no
+  CV, passport, statement or contact value reaches the browser console or the API log.
+- The access token is kept in `sessionStorage` (gone when the tab closes); the password
+  is never stored. `localStorage` holds only the chosen mode and pack.
+- Not built, and the screens say so: email verification, password reset, password or
+  email change, CV upload as PDF or Word, billing, server-side sign-out.
+
+One API route was added for it: `PUT /applications/:id/statement` saves the user's edit
+of a drafted statement (the extension fills the saved text). It is refused once the
+application is submitted, is covered by `isolation.test.ts`, and its event carries the
+application id and a character count only.
+
 Run it on PostgreSQL:
 
 ```bash
@@ -161,10 +221,10 @@ as a non-root user, deleted afterwards).
 
 | Command | Result |
 | --- | --- |
-| `npm test` (no `DATABASE_URL`) | 24 test files, 539 passed, 0 failed, **91 skipped** (the PostgreSQL-backed tests) |
-| `npm run test:pg` (the same, with a live PostgreSQL) | 24 test files, **630 passed**, 0 failed, 0 skipped |
-| `npm run test:e2e` (no `DATABASE_URL`) | 60 passed, 0 failed, **1 skipped** (the API process on PostgreSQL) |
-| `npm run test:pg -- npm run test:e2e` (with a live PostgreSQL) | **61 passed**, 0 failed, 0 skipped |
+| `npm test` (no `DATABASE_URL`) | 24 test files, 540 passed, 0 failed, **91 skipped** (the PostgreSQL-backed tests) |
+| `npm run test:pg` (the same, with a live PostgreSQL) | 24 test files, **631 passed**, 0 failed, 0 skipped |
+| `npm run test:e2e` (no `DATABASE_URL`) | 70 passed, 0 failed, **1 skipped** (the API process on PostgreSQL); the 10 web-app tests ran on the in-memory store |
+| `npm run test:pg -- npx playwright test` (with a live PostgreSQL, after `npm run build`) | **71 passed**, 0 failed, 0 skipped; the 10 web-app tests ran on PostgreSQL with encryption on |
 
 A run that says "skipped" has not tested PostgreSQL. The numbers that count are the two
 with a live database, and CI is set up to produce those (it has a postgres service
@@ -195,6 +255,16 @@ with accounts; no assertion was removed or loosened:
   became `OPENNJOB_JWT_SECRET`, and the expected default configuration grew.
 - `apps/extension/test/e2e/real-extension.spec.ts`: the test registers accounts over
   HTTP and the popup signs in with an email address and password instead of a pasted token.
+
+The web-app round added: one vitest test (`PUT /applications/:id/statement` in
+`api.test.ts`); new assertions for that route in `isolation.test.ts`, `http.test.ts` and
+`repository.contract.ts` (no assertion removed or loosened; the request-log test's
+minimum line count went from 22 to 23 because it now makes one more request); and 10
+Playwright tests in `apps/web/test/e2e/web-app.spec.ts`, which run the built web app in
+Chromium at phone size against the built API process (register, profile and passport,
+matches and filters, agent run in auto mode, review and approve, review-all mode,
+interview practice, export and deletion, session expiry and sign-out, and a final check
+that no personal data reached the browser console or the API log).
 
 Green tests show the code does what the tests describe on the fixtures. They do not show
 it works on real websites, against the live job APIs, or in a real deployment.
@@ -319,6 +389,7 @@ opennjob/
     src/repository.ts         Repository interface, in-memory implementation
     src/sources/              Greenhouse, Lever, Ashby, Adzuna, Reed adapters, demo jobs, de-duplication
     src/browser.ts            the subset the extension bundles (policy + fields)
+    src/web.ts                the subset the web app imports (packs, countries, languages)
   apps/api/                 NestJS REST API over packages/core
     src/main.ts               process entry; graceful shutdown on SIGTERM / SIGINT
     src/server.ts             start-up checks (secrets in production, migrations applied), wiring
@@ -332,6 +403,12 @@ opennjob/
     src/crypto.ts             AES-256-GCM encryption of CV text, passport, statements
     src/migrations.ts         the migration runner; migrate-cli.ts is `npm run migrate`
     src/logging.ts            JSON logger, request log, error filter
+  apps/web/                 candidate web app: Next.js 14, App Router, static export to out/
+    src/app/                  one folder per screen: signin, register, profile, matches, review, tracker, interview, account
+    src/components/AppShell.tsx   header (pack, mode), tab bar, sign-in guard
+    src/lib/api.ts            the only API client: address from /opennjob-config.json, token in sessionStorage
+    src/lib/declarations.ts   what the user confirms on the review screen
+    test/e2e/                 Playwright: the built site + the built API process
   apps/extension/           Chrome Manifest V3 extension, bundled with esbuild into dist/
     src/agent/                scan the form, detect blockers, fill, apply the policy
     src/popup/                the popup UI: API address, sign-in, mode, scan, fill
@@ -365,6 +442,7 @@ instead. The user a request acts for is taken from the token and from nowhere el
 | `POST /agent/run` | The 80% rule: prepares a draft for every in-scope, eligible job at or above the threshold (`{ mode }`, default `hybrid`) |
 | `POST /employer/jobs` | Optional. Stores an employer's job with `origin: 'employer'`. Separate key. |
 | `POST /applications` | Creates a draft with a supporting statement (`{ jobId, mode }`) |
+| `PUT /applications/:id/statement` | `{ statement }`; saves the user's own edit of the drafted statement. 409 once submitted |
 | `POST /applications/:id/confirm` | Records which sensitive fields the user confirmed (names, not values) |
 | `POST /applications/:id/submitted` | Records that the form was submitted |
 | `GET /applications`, `GET /applications/:id` | List / read |
@@ -603,7 +681,7 @@ employer accounts, and nothing checks who the employer is or moderates what is p
 | --- | --- |
 | Persistence | PostgreSQL when `DATABASE_URL` is set; otherwise in memory and lost on restart. No backups, no retention rule. |
 | Authentication | Real accounts with bcrypt and JWT. Missing: email verification, password reset, password change, refresh tokens, server-side sign-out, multi-factor authentication. |
-| Candidate web app | None. Registration, the CV, the passport, matches, export and deletion are API calls only. |
+| Candidate web app | `apps/web`, tested in headless Chromium against the built API. Never deployed, never used by a real person, never tried on a real phone. No content-security policy is configured for it (Next.js inlines scripts, so a policy needs `'unsafe-inline'` or nonces; not done). |
 | Encryption | CV text, passport and statements only, and only in PostgreSQL. One key, no rotation. |
 | Terms and privacy notice | The versions accepted at registration (`draft-1`) refer to documents that do not exist. |
 | LLM | `AnthropicLlm` uses the official `@anthropic-ai/sdk`, but **no real call to Anthropic has been made by this code** (no API key was available where it was built). Its request/response mapping is tested with a stub client. |
@@ -758,6 +836,13 @@ OpennJob handles personal data, and some of the most sensitive kinds.
 
 ## Known issues
 
+- `npm audit --omit=dev` reports advisories in **Next.js 14** (and the `postcss` it
+  bundles). The brief asked for Next.js 14; the fixes are in later major versions. Most
+  of the advisories concern the Next.js server (image optimiser, server components,
+  server actions, middleware, rewrites), which a static export does not run; not all of
+  them have been read one by one. Decide whether to move to a supported major version
+  before deploying.
+
 - `npm audit` reports advisories in **vitest's own dependencies** (`tinypool`,
   `@vitest/mocker`). vitest is a development-only test runner; it is not part of the API
   or the extension. The fixes are in vitest 5, which needs Node 22.12+, and in vitest
@@ -773,8 +858,8 @@ OpennJob handles personal data, and some of the most sensitive kinds.
    including which countries Adzuna really supports.
 2. Make one real Anthropic call end to end; confirm the model name; review statement
    quality with real nurses' CVs (with their consent).
-3. A web app for candidates (at least registration with the consent screen, CV and
-   passport entry, matches, export and deletion); email verification and password reset.
+3. Email verification and password reset (the web app exists; these do not). Try the
+   web app on real phones; decide on the Next.js version (see Known issues).
 4. Privacy policy and terms, DPIA, ICO check, before any real user's data; and a legal
    check per country before offering jobs outside the UK.
 5. Build the image, run `docker compose up`, run the CI workflow, and deploy to a

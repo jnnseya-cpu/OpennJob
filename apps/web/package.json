@@ -1,0 +1,20 @@
+{
+  "name": "@opennjob/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpennJob candidate web app (Next.js 14, static export)",
+  "scripts": {
+    "build": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "dev": "NEXT_TELEMETRY_DISABLED=1 next dev -p 3001"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0"
+  }
+}

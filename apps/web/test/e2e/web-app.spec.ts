@@ -1,0 +1,424 @@
+import { readFileSync } from 'node:fs';
+import { expect, test } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
+import { freePort, startApi, startWeb } from './servers';
+import type { ApiProcess, WebServer } from './servers';
+
+/**
+ * The candidate web app, built (`next build`, static export), in Chromium, against the
+ * BUILT API running as a real process. Nothing is mocked: every click goes through the
+ * real API, and the test reads the API back to check what was stored.
+ *
+ * Runs in memory by default, and on PostgreSQL (encryption on) when DATABASE_URL is set:
+ *   npm run test:pg -- npm run test:e2e
+ *
+ * The person, CV and employers are fictional.
+ */
+
+const EMAIL = 'ngozi.bello@example.org';
+const PASSWORD = 'a long fictional passphrase for tests';
+const FIRST = 'Ngozi';
+const LAST = 'Bello';
+const PHONE = '07700 900456';
+const ADDRESS = '7 Example Road';
+const POSTCODE = 'B2 2BB';
+const PIN = '21C3456E';
+const CV_LINES = [
+  'Healthcare assistant with four years of experience on elderly care wards and in a care home.',
+  'I hold the Care Certificate and an NVQ Level 2 in Health and Social Care.',
+  'I give personal care with dignity and I am trained in moving and handling.',
+  'I support people living with dementia and I take clinical observations.',
+  'I work well in a team and my communication with families is clear and kind.',
+];
+const CV = CV_LINES.join('\n');
+const EDITED = 'My own words: I give personal care with dignity on a 28-bed elderly care ward. (fictional edit)';
+/** Strings that must never reach the browser console or the API's log. */
+const PERSONAL = [PASSWORD, FIRST, LAST, PHONE, ADDRESS, POSTCODE, PIN, EMAIL, ...CV_LINES, EDITED];
+
+let api: ApiProcess;
+let web: WebServer;
+let browser: Browser;
+let context: BrowserContext;
+let page: Page;
+const consoleLines: string[] = [];
+
+async function call<T>(method: string, route: string, body?: unknown): Promise<T> {
+  const token = await page.evaluate(() => JSON.parse(sessionStorage.getItem('opennjob.session') ?? '{}').accessToken as string | undefined);
+  const res = await fetch(`${api.url}${route}`, {
+    method,
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) throw new Error(`${method} ${route} -> ${res.status}`);
+  return (await res.json()) as T;
+}
+
+async function noSideScroll(): Promise<void> {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+}
+
+test.describe.configure({ mode: 'serial' });
+
+test.beforeAll(async ({ browser: b }) => {
+  browser = b;
+  const webPort = await freePort();
+  api = await startApi(`http://127.0.0.1:${webPort}`);
+  web = await startWeb(webPort, api.url);
+  // Phone-first: a phone-sized viewport throughout.
+  context = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true });
+  page = await context.newPage();
+  page.on('console', (m) => consoleLines.push(m.text()));
+});
+
+test.afterAll(async () => {
+  await context?.close();
+  await web?.close();
+  await api?.stop();
+});
+
+test('a visitor is sent to sign-in; registering needs both consents, which start unticked', async () => {
+  expect(((await (await fetch(`${api.url}/health`)).json()) as { persistence: string }).persistence).toBe(api.persistence);
+  await page.goto(`${web.url}/matches/`);
+  await expect(page).toHaveURL(/\/signin\/$/);
+  await page.getByRole('link', { name: 'Create an account' }).click();
+  await expect(page.getByRole('heading', { name: 'Create an account' })).toBeVisible();
+  await expect(page.getByText('The terms and the privacy notice have not been written yet')).toBeVisible();
+
+  const terms = page.getByRole('checkbox', { name: /I accept the terms of use \(version draft-1\)/ });
+  const privacy = page.getByRole('checkbox', { name: /privacy notice \(version draft-1\)/ });
+  await expect(terms).not.toBeChecked();
+  await expect(privacy).not.toBeChecked();
+
+  await page.getByLabel('Email address', { exact: true }).fill(EMAIL);
+  await page.getByLabel('Password', { exact: true }).fill('short');
+  const create = page.getByRole('button', { name: 'Create account' });
+  await expect(create).toBeDisabled();
+  await terms.check();
+  await expect(create).toBeDisabled();
+  await privacy.check();
+  await expect(create).toBeEnabled();
+
+  // The API's password rules are shown as the API words them.
+  await page.getByLabel('Password', { exact: true }).fill('password1234');
+  await create.click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page).toHaveURL(/\/register\/$/);
+
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await create.click();
+  await expect(page).toHaveURL(/\/profile\/$/);
+  const me = await call<{ email: string; consent: { acceptedTermsVersion: string; acceptedPrivacyVersion: string } }>('GET', '/account');
+  expect(me).toMatchObject({ email: EMAIL, consent: { acceptedTermsVersion: 'draft-1', acceptedPrivacyVersion: 'draft-1' } });
+});
+
+test('profile: details, CV, preferences and the credential passport are saved through the API', async () => {
+  await expect(page.getByLabel('Email for applications')).toHaveValue(EMAIL);
+  await expect(page.getByRole('button', { name: 'Upload PDF or Word' })).toBeDisabled();
+  await expect(page.getByText('Not available yet: paste your CV as text.')).toBeVisible();
+
+  await page.getByLabel('First name', { exact: true }).fill(FIRST);
+  await page.getByLabel('Last name', { exact: true }).fill(LAST);
+  await page.getByLabel('Phone', { exact: true }).fill(PHONE);
+  await page.getByLabel('Address line 1').fill(ADDRESS);
+  await page.getByLabel('Town or city').fill('Birmingham');
+  await page.getByLabel('Postcode').fill(POSTCODE);
+  await page.getByLabel('CV', { exact: true }).fill(CV);
+
+  // Nothing selected means everything; choose English, then two countries and a city.
+  await page.getByRole('group', { name: 'Languages you speak' }).getByRole('button', { name: 'English' }).click();
+  await page.getByLabel('Add a country').selectOption('GB');
+  await page.getByLabel('Add a country').selectOption('IE');
+  await page.getByRole('group', { name: 'Cities' }).getByRole('button', { name: 'Birmingham' }).click();
+  await page.getByLabel('Another city').fill('Atlantis');
+  await page.getByRole('button', { name: 'Add city' }).click();
+  await expect(page.getByText('Write the city with its country code')).toBeVisible();
+  await page.getByRole('button', { name: 'Save profile' }).click();
+  await expect(page.getByText('Profile saved.')).toBeVisible();
+
+  const profile = await call<{ firstName: string; cvText: string; preferences: unknown }>('GET', '/profile');
+  expect(profile.firstName).toBe(FIRST);
+  expect(profile.cvText).toBe(CV);
+  expect(profile.preferences).toEqual({ languages: ['English'], countries: ['GB', 'IE'], cities: ['Birmingham'] });
+
+  // Passport: the healthcare pack's lines. Right to work starts unticked.
+  await page.getByLabel('Industry pack').selectOption('hc');
+  const passport = page.getByRole('form', { name: 'Credential passport' });
+  await expect(passport.getByRole('checkbox', { name: /I have the right to work in the UK/ })).not.toBeChecked();
+  await passport.getByLabel('Certificate number (12 digits)').fill('12345');
+  await passport.getByRole('button', { name: 'Add training' }).click();
+  await passport.getByLabel('Training', { exact: true }).fill('Basic life support');
+  await passport.getByLabel('Expires on', { exact: true }).fill('2030-01-31');
+  await passport.getByRole('button', { name: 'Save passport' }).click();
+  await expect(passport.getByRole('alert')).toContainText('must be 12 digits'); // the API's rule, naming the field, not the value
+  await passport.getByLabel('Certificate number (12 digits)').fill('');
+  await passport.getByRole('button', { name: 'Save passport' }).click();
+  await expect(passport.getByText('Credential passport saved.')).toBeVisible();
+  await expect(passport.getByText('In date')).toBeVisible();
+
+  const stored = await call<{ passport: { credentials: Record<string, string>; rightToWorkConfirmed: boolean; training: unknown[] } }>('GET', '/passport');
+  expect(stored.passport).not.toHaveProperty('credentials');
+  expect(stored.passport).toMatchObject({ rightToWorkConfirmed: false, training: [{ name: 'Basic life support', expiresOn: '2030-01-31' }] });
+
+  // It all comes back after a reload.
+  await page.reload();
+  await expect(page.getByLabel('CV', { exact: true })).toHaveValue(CV);
+  await expect(page.getByRole('group', { name: 'Cities' }).getByRole('button', { name: 'Birmingham' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Training', { exact: true })).toHaveValue('Basic life support');
+  await noSideScroll();
+});
+
+test('matches: the catalogue is fetched, scored against the CV, and filtered by pack, region and preferences', async () => {
+  await page.getByRole('link', { name: 'Matches' }).click();
+  await expect(page).toHaveURL(/\/matches\/$/);
+  // A fresh API has an empty catalogue until someone looks for jobs.
+  await page.getByRole('button', { name: 'Look for jobs now' }).click();
+  const cards = page.getByTestId('match');
+  await expect(cards.first()).toBeVisible();
+  await expect(page.getByText('Sample jobs.')).toBeVisible();
+
+  // Healthcare pack (chosen on the Profile page) and the preferences: UK (Birmingham only) and Ireland.
+  const titles = await cards.locator('h3').allTextContents();
+  expect(titles).toContain('Healthcare Assistant - Elderly Care');
+  expect(titles).toContain('Staff Nurse - Medical Ward'); // Dublin, Ireland
+  expect(titles).not.toContain('Support Worker - Learning Disabilities'); // Coventry: outside the chosen city
+  expect(titles).not.toContain('Registered Nurse - Private Hospital'); // Dubai: outside the chosen countries
+
+  const hca = cards.filter({ hasText: 'Healthcare Assistant - Elderly Care' });
+  await expect(hca.locator('.score')).toHaveText(/^\d+%$/);
+  const apiMatch = (await call<{ job: { id: string }; score: number }[]>('GET', '/jobs/matches?min=0&pack=hc')).find((m) => m.job.id === 'sample:hca-elderly-care');
+  await expect(hca.locator('.score')).toHaveText(`${apiMatch?.score}%`);
+
+  await page.getByRole('group', { name: 'Region' }).getByRole('button', { name: 'Europe' }).click();
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText('Dublin, Ireland');
+  await page.getByRole('group', { name: 'Region' }).getByRole('button', { name: 'All regions' }).click();
+
+  // A missing credential is shown, not hidden: the nurse posts need a registration number.
+  const nurse = cards.filter({ hasText: 'Staff Nurse - Medical Ward' });
+  await expect(nurse.getByText('Needs professional registration number')).toBeVisible();
+  await page.getByRole('link', { name: 'Change' }).click();
+  await expect(page).toHaveURL(/\/profile\/$/);
+  await page.getByLabel('Professional registration number (NMC PIN)').fill(PIN);
+  await page.getByRole('button', { name: 'Save passport' }).click();
+  await expect(page.getByText('Credential passport saved.')).toBeVisible();
+  expect((await call<{ passport: { credentials: Record<string, string> } }>('GET', '/passport')).passport.credentials).toEqual({ pin: PIN });
+  await page.getByRole('link', { name: 'Matches' }).click();
+  await expect(nurse.getByText('Needs professional registration number')).toHaveCount(0);
+  await expect(nurse.getByText(/essential gap/)).toBeVisible();
+  await expect(hca.getByText('Agent prepares')).toBeVisible();
+
+  // Another pack.
+  await page.getByLabel('Industry pack').selectOption('con');
+  await expect(cards.locator('h3')).toContainText(['Senior Construction Manager - Hospital New Build']);
+  await expect(cards.filter({ hasText: 'Dublin' })).toHaveCount(1);
+  await page.getByLabel('Industry pack').selectOption('hc');
+  await noSideScroll();
+});
+
+test('agent run in auto mode prepares drafts only: nothing is approved or submitted for the user', async () => {
+  await page.getByRole('link', { name: 'Matches' }).click();
+  await page.getByRole('group', { name: 'How much the agent does alone' }).getByRole('button', { name: 'Auto' }).click();
+  await expect(page.getByTestId('mode-help')).toContainText('any form that has one waits for you');
+  await page.getByLabel('Industry pack').selectOption('all');
+  const before = new Set((await call<{ id: string }[]>('GET', '/applications')).map((a) => a.id));
+  await page.getByRole('button', { name: 'Run agent' }).click();
+
+  await expect(page).toHaveURL(/\/tracker\/$/);
+  await expect(page.getByRole('status')).toContainText('Nothing has been sent to any employer');
+  const apps = await call<{ id: string; status: string; mode: string; jobId: string }[]>('GET', '/applications');
+  const prepared = apps.filter((a) => !before.has(a.id));
+  expect(prepared.map((a) => a.jobId)).toContain('sample:hca-elderly-care');
+  expect(prepared.length).toBeGreaterThan(0);
+  for (const a of prepared) expect(a).toMatchObject({ status: 'draft', mode: 'auto' });
+  await expect(page.getByTestId('application')).toHaveCount(apps.length);
+  await expect(page.getByRole('link', { name: /Tracker/ }).locator('.count')).toHaveText(String(prepared.length));
+
+  // An auto-mode application still waits for every declaration, and says so.
+  await page.getByTestId('application').filter({ hasText: 'Healthcare Assistant - Elderly Care' }).getByRole('link', { name: 'Review and approve' }).click();
+  await expect(page.getByText('Auto mode never submits a form that has a declaration or other sensitive field.')).toBeVisible();
+  const boxes = page.getByRole('region', { name: 'Only you confirm these' }).getByRole('checkbox');
+  expect(await boxes.count()).toBeGreaterThan(0);
+  for (const box of await boxes.all()) await expect(box).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Approve' })).toBeDisabled();
+});
+
+test('review: requirements with evidence, editable statement, every declaration confirmed by hand before approve', async () => {
+  // The draft the agent prepared in the previous test.
+  await page.getByRole('link', { name: 'Matches' }).click();
+  await page.getByTestId('match').filter({ hasText: 'Healthcare Assistant - Elderly Care' }).click();
+  await expect(page).toHaveURL(/\/review\/\?job=sample%3Ahca-elderly-care$/);
+  await expect(page.getByText('“I hold the Care Certificate and an NVQ Level 2 in Health and Social Care.”')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Prepare application' })).toHaveCount(0);
+
+  const statement = page.getByLabel(/^Supporting statement/);
+  await expect(statement).not.toHaveValue('');
+  await expect(page.getByText('Built from your CV without AI.')).toBeVisible();
+  await statement.fill(EDITED);
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Statement saved.')).toBeVisible();
+  const draft = (await call<{ id: string; jobId: string; statement: string; status: string }[]>('GET', '/applications')).find((a) => a.jobId === 'sample:hca-elderly-care');
+  expect(draft).toMatchObject({ statement: EDITED, status: 'draft' });
+
+  // Healthcare declarations. A healthcare assistant post asks for no registration, so the
+  // registration-dependent declarations are not listed. None starts ticked.
+  const declarations = page.getByRole('region', { name: 'Only you confirm these' }).getByRole('checkbox');
+  await expect(declarations).toHaveCount(4);
+  for (const label of ['Right to work or visa status for this country', 'DBS or police check details', 'Criminal convictions and cautions declaration', 'Any other declaration']) {
+    await expect(page.getByRole('checkbox', { name: new RegExp(label) })).not.toBeChecked();
+  }
+  await expect(page.getByRole('checkbox', { name: /Fitness to practise/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /tick all/i })).toHaveCount(0);
+
+  const approve = page.getByRole('button', { name: 'Approve' });
+  await expect(approve).toBeDisabled();
+  for (let i = 0; i < 3; i++) await declarations.nth(i).check();
+  await expect(approve).toBeDisabled(); // one still unticked
+  await declarations.nth(3).check();
+  await expect(approve).toBeEnabled();
+  await approve.click();
+
+  await expect(page.getByText('Approved. Nothing has been sent to the employer.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open the employer’s form' })).toHaveAttribute('href', 'https://example.org/jobs/hca-elderly-care');
+  await expect(statement).toHaveAttribute('readonly', '');
+  const confirmed = await call<{ status: string; confirmedFields: string[] }>('GET', `/applications/${draft?.id}`);
+  expect(confirmed.status).toBe('confirmed');
+  expect(confirmed.confirmedFields.sort()).toEqual(['declaration:conv', 'declaration:dbs', 'declaration:declare', 'declaration:rtw', 'statement']);
+
+  await page.getByRole('button', { name: 'I have submitted it' }).click();
+  await expect(page.getByText('You recorded this application as sent')).toBeVisible();
+  expect((await call<{ status: string }>('GET', `/applications/${draft?.id}`)).status).toBe('submitted');
+  await noSideScroll();
+});
+
+test('review all mode also needs "I have checked every field"; a credential-dependent declaration appears when the job needs it', async () => {
+  await page.getByRole('link', { name: 'Matches' }).click();
+  await page.getByRole('group', { name: 'How much the agent does alone' }).getByRole('button', { name: 'Review all' }).click();
+  await expect(page.getByTestId('mode-help')).toHaveText('You see and confirm every field before anything is filled.');
+  await page.getByTestId('match').filter({ hasText: 'Staff Nurse - Medical Ward' }).click();
+  await page.getByRole('button', { name: 'Prepare application' }).click();
+
+  const declarations = page.getByRole('region', { name: 'Only you confirm these' }).getByRole('checkbox');
+  await expect(page.getByRole('checkbox', { name: /Fitness to practise declaration/ })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /Professional registration number/ })).not.toBeChecked();
+  const count = await declarations.count();
+  for (let i = 0; i < count; i++) await declarations.nth(i).check();
+  const approve = page.getByRole('button', { name: 'Approve' });
+  await expect(approve).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'I have checked every field above.' }).check();
+  // This CV evidences nothing for this post, so the draft is empty and says so. Approve waits for a statement.
+  await expect(page.getByText('No evidence for any criterion was found in the CV')).toBeVisible();
+  await expect(page.getByText('Write a supporting statement first.')).toBeVisible();
+  await expect(approve).toBeDisabled();
+  await page.getByLabel(/^Supporting statement/).fill('I am working towards registration with the NMBI. (fictional)');
+  await expect(approve).toBeEnabled();
+  await approve.click();
+  await expect(page.getByText('Approved. Nothing has been sent to the employer.')).toBeVisible();
+  const app = (await call<{ jobId: string; mode: string; confirmedFields: string[] }[]>('GET', '/applications')).find((a) => a.jobId === 'sample:h7');
+  expect(app?.mode).toBe('review');
+  expect(app?.confirmedFields).toEqual(expect.arrayContaining(['review:all-fields-checked', 'declaration:ftp', 'declaration:pin']));
+});
+
+test('interview practice: questions for the pack and STAR feedback from the API', async () => {
+  await page.getByRole('link', { name: 'Interview' }).click();
+  await page.getByLabel('Practising for').selectOption('hc');
+  await expect(page.getByRole('heading', { name: /deteriorating/ })).toBeVisible();
+  await page.getByLabel('Your answer').fill(
+    'On a night shift a patient became drowsy. My role was to check observations. I checked the NEWS2 score, escalated to the nurse in charge using SBAR and stayed with the patient. As a result the outreach team came quickly and the patient recovered.',
+  );
+  await page.getByRole('button', { name: 'Get feedback' }).click();
+  const feedback = page.locator('[aria-label="Feedback"]');
+  await expect(feedback).toContainText('Built-in check (no AI)');
+  await expect(feedback).toContainText(/Total\s*\d+\/20/);
+});
+
+test('account: export downloads everything held; delete needs the password and removes the account', async () => {
+  await page.getByRole('link', { name: 'Account' }).click();
+  await expect(page.getByText(EMAIL)).toBeVisible();
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download my data' }).click()]);
+  const exported = JSON.parse(readFileSync((await download.path()) as string, 'utf8')) as { user: { email: string }; profile: { cvText: string }; applications: unknown[] };
+  expect(exported.user.email).toBe(EMAIL);
+  expect(exported.profile.cvText).toBe(CV);
+  expect(exported.applications).toEqual(expect.arrayContaining((await call<unknown[]>('GET', '/applications')).map((a) => expect.objectContaining(a as Record<string, unknown>))));
+  expect(exported.applications).toHaveLength(2);
+
+  const form = page.getByRole('form', { name: 'Delete account' });
+  const remove = form.getByRole('button', { name: 'Delete my account' });
+  await form.getByLabel('Your password').fill('not the right passphrase');
+  await expect(remove).toBeDisabled();
+  await form.getByRole('checkbox', { name: /cannot be recovered/ }).check();
+  await remove.click();
+  await expect(form.getByRole('alert')).toHaveText('Password is incorrect');
+
+  await form.getByLabel('Your password').fill(PASSWORD);
+  await remove.click();
+  await expect(page).toHaveURL(/\/signin\/\?notice=deleted$/);
+  await expect(page.getByText('Your account and everything stored for it were deleted.')).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('opennjob.session'))).toBeNull();
+
+  const login = await fetch(`${api.url}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL, password: PASSWORD }) });
+  expect(login.status).toBe(401);
+  if (api.persistence === 'postgres') {
+    for (const table of ['users', 'profiles', 'passports', 'applications']) {
+      expect(await api.query(`SELECT count(*)::int AS n FROM {schema}.${table}`), table).toEqual([{ n: 0 }]);
+    }
+  }
+});
+
+test('an expired session sends the user back to sign in; sign-in works and is refused with a wrong password', async () => {
+  // A second, fictional account made through the API.
+  const versions = (await (await fetch(`${api.url}/auth/versions`)).json()) as { termsVersion: string; privacyVersion: string };
+  const other = { email: 'tomasz.nowak@example.org', password: 'seven green kettles on a shelf' };
+  expect((await fetch(`${api.url}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...other, acceptedTermsVersion: versions.termsVersion, acceptedPrivacyVersion: versions.privacyVersion }) })).status).toBe(201);
+
+  await page.goto(`${web.url}/signin/`);
+  await page.getByLabel('Email address', { exact: true }).fill(other.email);
+  await page.getByLabel('Password', { exact: true }).fill('a wrong passphrase 123');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await page.getByRole('button', { name: 'Forgot your password?' }).click();
+  await expect(page.getByText('Password reset is not available yet.')).toBeVisible();
+
+  await page.getByLabel('Password', { exact: true }).fill(other.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/matches\/$/);
+  await expect(page.getByText('Add your CV first.')).toBeVisible(); // no profile yet: nothing of the deleted account shows
+
+  await page.evaluate(() => {
+    const s = JSON.parse(sessionStorage.getItem('opennjob.session') ?? '{}') as Record<string, string>;
+    sessionStorage.setItem('opennjob.session', JSON.stringify({ ...s, expiresAt: new Date(Date.now() - 1000).toISOString() }));
+  });
+  await page.goto(`${web.url}/tracker/`);
+  await expect(page).toHaveURL(/\/signin\/\?notice=expired$/);
+  await expect(page.getByText('Your session ended. Sign in again.')).toBeVisible();
+
+  // A token the API no longer accepts (here: altered) ends the session at the next call.
+  await page.getByLabel('Email address', { exact: true }).fill(other.email);
+  await page.getByLabel('Password', { exact: true }).fill(other.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/matches\/$/);
+  await page.evaluate(() => {
+    const s = JSON.parse(sessionStorage.getItem('opennjob.session') ?? '{}') as Record<string, string>;
+    sessionStorage.setItem('opennjob.session', JSON.stringify({ ...s, accessToken: `${s.accessToken}x` }));
+  });
+  await page.getByRole('link', { name: 'Account' }).click();
+  await expect(page).toHaveURL(/\/signin\/\?notice=expired$/);
+
+  // Sign out from the Account page.
+  await page.getByLabel('Email address', { exact: true }).fill(other.email);
+  await page.getByLabel('Password', { exact: true }).fill(other.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Account' }).click();
+  await page.getByRole('button', { name: 'Sign out on this device' }).click();
+  await expect(page).toHaveURL(/\/signin\/\?notice=signedout$/);
+  expect(await page.evaluate(() => sessionStorage.getItem('opennjob.session'))).toBeNull();
+});
+
+test('no personal data reached the browser console or the API log', async () => {
+  const consoleText = consoleLines.join('\n');
+  const apiLog = api.output();
+  for (const value of PERSONAL) {
+    expect(consoleText, `console: ${value.slice(0, 24)}`).not.toContain(value);
+    expect(apiLog, `API log: ${value.slice(0, 24)}`).not.toContain(value);
+  }
+});

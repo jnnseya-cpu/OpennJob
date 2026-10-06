@@ -2,7 +2,7 @@
   "name": "opennjob",
   "version": "0.1.0",
   "private": true,
-  "description": "OpennJob - AI job-application assistant (API, Chrome extension, domain core)",
+  "description": "OpennJob - AI job-application assistant (API, candidate web app, Chrome extension, domain core)",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -11,8 +11,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build -w @opennjob/core && npm run build -w @opennjob/api && npm run build -w @opennjob/extension",
-    "typecheck": "npm run typecheck -w @opennjob/core && npm run typecheck -w @opennjob/api && npm run typecheck -w @opennjob/extension",
+    "build": "npm run build -w @opennjob/core && npm run build -w @opennjob/api && npm run build -w @opennjob/extension && npm run build -w @opennjob/web",
+    "typecheck": "npm run typecheck -w @opennjob/core && npm run typecheck -w @opennjob/api && npm run typecheck -w @opennjob/extension && npm run typecheck -w @opennjob/web",
     "test": "vitest run",
     "test:pg": "bash scripts/test-with-postgres.sh",
     "test:e2e": "npm run build && playwright test",

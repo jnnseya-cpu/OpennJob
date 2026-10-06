@@ -72,6 +72,28 @@ pass; it does not mean it was tried in a real deployment.
       closes, exit code 0. `server.test.ts`, `api-process.spec.ts`
 - [x] `.env.example` lists every variable. No secret is committed.
 
+**Candidate web app** (`apps/web`; tested in headless Chromium at phone size against the
+built API process, in memory and on PostgreSQL with encryption on; never deployed)
+
+- [x] Register with both consent boxes unticked until the person ticks them; sign in;
+      sign out; an expired or rejected token sends the person back to sign in.
+      `web-app.spec.ts`
+- [x] Profile, CV text, preferences and the credential passport saved and read back
+      through the API. `web-app.spec.ts`
+- [x] Matches with pack and region filters, scores equal to the API's, missing
+      credentials shown. `web-app.spec.ts`
+- [x] Review: every declaration starts unticked and is ticked one at a time; Approve
+      stays disabled until all are ticked (and, in review-all mode, "I have checked
+      every field"); no "tick all". Nothing is submitted from the website; an auto-mode
+      agent run leaves every application as a draft. `web-app.spec.ts`
+- [x] `PUT /applications/:id/statement` saves the user's edited statement; refused once
+      submitted; isolated per user; not in the logs. `api.test.ts`, `isolation.test.ts`,
+      `http.test.ts`, `repository.contract.ts`
+- [x] Export downloads everything; delete needs the password and removes the account
+      (all rows checked on PostgreSQL). `web-app.spec.ts`
+- [x] No CV, passport, statement or contact value reached the browser console or the
+      API log during the whole run. `web-app.spec.ts`
+
 **Extension**
 
 - [x] The popup has a sign-in form and a configurable API address, stores the user's
@@ -89,10 +111,15 @@ Every item here is open. None has a workaround in the code.
 
 ### The product is not complete
 
-- [ ] **No web app for candidates.** There is an API and a Chrome extension only. A
-      person cannot register, accept the terms, enter a CV or a passport, see matches,
-      read a drafted statement, export their data or delete their account without
-      calling the API by hand (curl). The extension popup can sign in; it cannot register.
+- [ ] **The web app is not deployed** and has never been used by a real person or on a
+      real phone (only headless Chromium at a phone-sized viewport). No accessibility
+      audit. No content-security policy is set for it. The production API must list the
+      site's origin in `OPENNJOB_CORS_ORIGINS`; nothing has been configured.
+- [ ] **Next.js 14 has open advisories** (`npm audit --omit=dev`). Most are in server
+      features a static export does not run; they were not reviewed one by one. Decide
+      on a supported major version before deploying.
+- [ ] The web app's "I have submitted it" is the person's own record. Nothing checks it
+      against the employer, and employer replies are not tracked.
 - [ ] **Email verification and password reset do not exist.** Anyone can register with
       an email address they do not own. A person who forgets their password is locked
       out for good; with encryption on, nobody can recover their account for them.
@@ -216,8 +243,8 @@ Every item here is open. None has a workaround in the code.
 
 ### Before the first real user, at minimum
 
-Privacy policy and terms; DPIA; ICO check; a web app, or at least a registration and
-consent screen; email verification and password reset; hosting with TLS, backups that
+Privacy policy and terms; DPIA; ICO check; the web app deployed behind TLS with a
+content-security policy, and tried on real phones; email verification and password reset; hosting with TLS, backups that
 have been restored once, and alerting; key management for `OPENNJOB_DATA_KEY`; an
 independent security test; one real Anthropic call and a confirmed model name; the job
 sources checked against the live APIs and their terms; the extension tried by hand on

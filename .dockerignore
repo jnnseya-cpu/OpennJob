@@ -9,6 +9,9 @@ node_modules
 test-results
 playwright-report
 apps/extension/test
+apps/web/test
+apps/web/.next
+apps/web/out
 apps/api/test
 packages/core/test
 *.md

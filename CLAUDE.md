@@ -20,11 +20,11 @@ All from the repository root. Node 20+ (built on 22), npm workspaces.
 
 ```bash
 npm install                 # install (npm ci in CI)
-npm run build               # packages/core, then apps/api, then apps/extension
-npm run typecheck           # tsc --noEmit for all three, tests included
+npm run build               # packages/core, then apps/api, apps/extension, apps/web (static export to apps/web/out)
+npm run typecheck           # tsc --noEmit for all four, tests included
 npm test                    # vitest: unit + API tests. PostgreSQL tests are SKIPPED without DATABASE_URL
 npm run test:pg             # the same, against a throwaway PostgreSQL it starts itself (needs initdb/pg_ctl)
-npm run test:e2e            # builds, then Playwright: the extension in Chromium + the built API process
+npm run test:e2e            # builds, then Playwright: the extension, the web app, the built API process
 npm run migrate             # apply db/migrations to DATABASE_URL (needs npm run build first)
 npm start                   # run the API: node apps/api/dist/main.js (needs npm run build first)
 docker compose up --build   # postgres + one-shot migrate + api on 127.0.0.1:3000 (needs .env)
@@ -32,6 +32,8 @@ docker compose up --build   # postgres + one-shot migrate + api on 127.0.0.1:300
 npx vitest run apps/api/test/auth.test.ts          # one file
 npx vitest run -t "refuses a second account"       # by test name
 npx playwright test apps/extension/test/e2e/real-extension.spec.ts
+npx playwright test apps/web/test/e2e             # the web app (needs npm run build)
+npm run dev -w @opennjob/web                       # web dev server on :3001 (API needs OPENNJOB_CORS_ORIGINS=http://127.0.0.1:3001)
 DATABASE_URL=postgres://... npm test               # run the PostgreSQL tests against your own database
 npm run test:pg -- npm run test:e2e                # e2e with a throwaway PostgreSQL
 ```
@@ -56,6 +58,7 @@ packages/core/                Pure TypeScript domain logic. No framework, no I/O
   src/usage.ts events.ts llm.ts UsageMeter, EventBus, LlmPort (+ fakes)
   src/sources/                  job-source adapters (response shapes UNVERIFIED against live APIs)
   src/browser.ts                the subset bundled into the extension (policy + fields)
+  src/web.ts                    the subset the web app imports (packs, countries, languages)
 apps/api/                     NestJS REST API
   src/main.ts                   process entry: start, SIGTERM/SIGINT graceful shutdown
   src/server.ts                 startServer(env): start-up checks, migration check, wiring
@@ -71,6 +74,12 @@ apps/api/                     NestJS REST API
   src/migrations.ts migrate-cli.ts   versioned SQL migrations
   src/logging.ts                JSON logger, request log, SafeExceptionFilter
   test/                         vitest (*.test.ts); test/e2e/*.spec.ts runs the built process under Playwright
+apps/web/                     candidate web app: Next.js 14 App Router, static export (out/), all client-side
+  src/app/<screen>/page.tsx     signin register profile matches review tracker interview account
+  src/components/AppShell.tsx   header (pack, mode), tabs, sign-in guard, shared state
+  src/lib/api.ts                the only API client; API address from /opennjob-config.json; token in sessionStorage
+  src/lib/declarations.ts       what the review screen asks the user to confirm (from the pack registry)
+  test/e2e/                     Playwright: built site served statically + built API process (PostgreSQL if DATABASE_URL)
 apps/extension/               Chrome MV3 extension, bundled by esbuild into dist/
   src/agent/                    scan, blockers (CAPTCHA / login wall), fill, apply the policy
   src/popup/                    popup UI: API address, sign-in, mode, scan, fill
@@ -145,10 +154,15 @@ as needing explicit sign-off from the owner.
 - Tests: vitest for unit and API (`supertest` against `createApp`), Playwright for the
   extension and the built process. Add tests with the change. Do not skip or delete a
   test to get green; fix the code or say why the test is wrong.
+- Web app: no `console` calls; no `dangerouslySetInnerHTML`; nothing personal in
+  `localStorage` (mode and pack only). It never submits anything to an employer, never
+  pre-ticks a declaration and offers no "tick all" for them. A new API call goes through
+  `src/lib/api.ts`. Imports from core only via `@core/web` (`packages/core/src/web.ts`).
 - Extension: page-derived text goes into the popup with `textContent` only. Permissions
   stay at `activeTab`, `scripting`, `storage`.
 - Plain British English in docs and messages. No marketing language.
 - Commits: one logical change, imperative subject. Do not push unless asked.
 
 ## Next task
-The candidate web app. Read `docs/WEB-APP-BRIEF.md` and open `docs/prototype/opennjob-demo.html` first.
+None set. `GO-LIVE.md` lists what is open; the web app's own open items are under
+"The product is not complete".

@@ -18,6 +18,7 @@ COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/api/package.json apps/api/
 COPY apps/extension/package.json apps/extension/
+COPY apps/web/package.json apps/web/
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.base.json ./
 COPY packages/core packages/core
@@ -31,6 +32,7 @@ COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/api/package.json apps/api/
 COPY apps/extension/package.json apps/extension/
+COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev --no-audit --no-fund -w @opennjob/core -w @opennjob/api
 
 # ---- runtime -----------------------------------------------------------------------
