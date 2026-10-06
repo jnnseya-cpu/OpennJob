@@ -53,7 +53,14 @@ export interface Job {
   language?: JobLanguage;
   /** Absent means 'discovered'. Matching treats both origins alike. */
   origin?: JobOrigin;
+  /** Permanent or contract, when the source says or the advert makes it clear. Absent = not known. */
+  contractType?: ContractType;
 }
+
+export type ContractType = 'permanent' | 'contract';
+/** What the candidate is looking for. Nothing selected means all three. */
+export type SearchType = 'uk-permanent' | 'uk-contract' | 'international';
+export const SEARCH_TYPES: readonly SearchType[] = ['uk-permanent', 'uk-contract', 'international'];
 
 /**
  * What the candidate asked to see. IF NOTHING IS SELECTED, EVERYTHING IS AVAILABLE:
@@ -66,6 +73,8 @@ export interface Preferences {
   countries: string[];
   /** City names; a city only narrows the country it belongs to. */
   cities: string[];
+  /** UK permanent, UK contract, international. Empty or absent means all three. */
+  searchTypes?: SearchType[];
 }
 
 export interface Profile {
@@ -124,7 +133,61 @@ export interface Passport {
 
 export const EMPTY_PASSPORT: Passport = { rightToWorkConfirmed: false, training: [], referees: [] };
 
-export type ApplicationStatus = 'draft' | 'confirmed' | 'submitted';
+/**
+ * draft      prepared by the agent, waiting for the person (or for the queue)
+ * confirmed  approved by the person, not yet sent
+ * needs_you  held: a declaration to answer, a question with no stored answer, a failed truth
+ *            check, a CAPTCHA or login wall, the daily limit... (holdReasons says which)
+ * submitted  sent, with a receipt
+ * uncertain  submit was pressed but no confirmation was seen; never retried automatically
+ * interview  the person recorded an interview invitation
+ * closed     finished (rejected, withdrawn, filled)
+ */
+export type ApplicationStatus = 'draft' | 'confirmed' | 'needs_you' | 'submitted' | 'uncertain' | 'interview' | 'closed';
+export const APPLICATION_STATUSES: readonly ApplicationStatus[] = ['draft', 'confirmed', 'needs_you', 'submitted', 'uncertain', 'interview', 'closed'];
+
+/** Proof that an application was sent (APP-7). Encrypted at rest. */
+export interface ApplicationReceipt {
+  at: string;
+  pageUrl: string;
+  /** The site's own confirmation text, as shown after submitting. */
+  confirmationText: string;
+  /** SHA-256 of each document sent, as computed where it was sent. */
+  documentsSha256: Record<string, string>;
+  /** true when sent by the agent under standing authorisation. */
+  automatic: boolean;
+}
+
+/** The exact documents an application used (TAI-6). Encrypted at rest. */
+export interface SentDocuments {
+  statement: string;
+  tailoredCv: string;
+  sha256: { statement: string; tailoredCv: string };
+}
+
+/** Ordinary screening answers, stored once and reused (SCR-1). Never declarations (SCR-3). Encrypted at rest. */
+export interface ScreeningAnswers {
+  noticePeriod?: string;
+  salaryExpectation?: string;
+  dayRate?: string;
+  relocation?: boolean;
+  travel?: boolean;
+  yearsExperience?: string;
+  drivingLicence?: boolean;
+  /** Answers the person gave to other ordinary questions, keyed by the normalised question. */
+  custom: Record<string, string>;
+}
+
+/** Standing authorisation (APP-2): explicit, dated, revocable. Scope per OD-1. */
+export interface StandingAuthorisation {
+  enabled: boolean;
+  /** The wording the person agreed to (versioned), and when. */
+  scopeVersion: string;
+  consentAt?: string;
+  revokedAt?: string;
+  /** The person's pause (APP-10). */
+  paused: boolean;
+}
 
 /** One in-app notification. Subject and body name at most a job title, an employer and counts. */
 export interface Notification {
@@ -171,6 +234,18 @@ export interface Application {
   createdAt: string;
   confirmedAt?: string;
   submittedAt?: string;
+  /** Why the application is held for the person (status needs_you). */
+  holdReasons?: string[];
+  /** employer|title|location, normalised: the duplicate check (APP-6). */
+  dedupeKey?: string;
+  /** Sent by the agent under standing authorisation. */
+  automatic?: boolean;
+  /** The tailored CV (TAI-2). Encrypted at rest. */
+  tailoredCv?: string;
+  /** Sentences of the tailored documents that could not be traced to the source (TAI-3). */
+  traceFailures?: string[];
+  sentDocuments?: SentDocuments;
+  receipt?: ApplicationReceipt;
 }
 
 /**
@@ -188,6 +263,8 @@ export interface User {
   acceptedPrivacyVersion: string;
   /** When the two versions above were accepted. */
   consentAt: string;
+  /** When the address was verified (ACC-2). Absent: not verified. */
+  emailVerifiedAt?: string;
 }
 
 /** Events that belong to no account (an employer's posting, an account deletion) carry this user id. */

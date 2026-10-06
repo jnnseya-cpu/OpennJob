@@ -93,7 +93,7 @@ const SAMPLES: RawJob[] = [
 ];
 
 type C = [label: string, essential: 0 | 1, keywords: string[]];
-type Demo = [id: string, pack: PackId, title: string, employer: string, city: string, country: string, criteria: C[], extra?: { language?: JobLanguage; requiredCredential?: string }];
+type Demo = [id: string, pack: PackId, title: string, employer: string, city: string, country: string, criteria: C[], extra?: { language?: JobLanguage; requiredCredential?: string; contractType?: 'permanent' | 'contract' }];
 
 /** Fictional. Employer names are invented; any resemblance to a real organisation is unintended. */
 const PACK_DEMO: Demo[] = [
@@ -117,14 +117,14 @@ const PACK_DEMO: Demo[] = [
     ['Data centre delivery', 1, ['data centre']], ['MEP coordination', 1, ['mep']], ['Commissioning readiness', 1, ['commissioning']], ['HV power systems', 1, ['hv']],
     ['Integrated systems testing (Level 5)', 0, ['integrated systems test', 'level 5']]]],
   ['d2', 'dc', 'Client-side Construction Lead - 120MW Campus', 'Rheinwerk Data Parks', 'Frankfurt', 'DE', [
-    ['Client-side authority', 1, ['client-side']], ['Data centre delivery', 1, ['data centre']], ['Managing Tier 1 contractors', 1, ['tier 1']], ['German language', 0, ['german']], ['Primavera P6 scheduling', 0, ['primavera']]]],
+    ['Client-side authority', 1, ['client-side']], ['Data centre delivery', 1, ['data centre']], ['Managing Tier 1 contractors', 1, ['tier 1']], ['German language', 0, ['german']], ['Primavera P6 scheduling', 0, ['primavera']]], { contractType: 'contract' }],
   ['d4', 'dc', 'Site Lead - Edge Data Centre', 'Lekki Cloud Facilities', 'Lagos', 'NG', [
     ['Data centre delivery', 1, ['data centre']], ['HV/MV power systems', 1, ['hv/mv']], ['QA/QC and compliance', 1, ['qa/qc']], ['West Africa experience', 0, ['nigeria', 'west africa']]]],
   ['d5', 'dc', 'Commissioning Manager - AI Compute Campus', 'Blue Ridge Compute', 'Northern Virginia', 'US', [
     ['Commissioning leadership', 1, ['commissioning']], ['Commissioning authority certification', 1, ['cxa', 'commissioning authority']], ['US work authorisation', 1, ['us work authori']], ['Data centre delivery', 0, ['data centre']]]],
   // Energy and grid
   ['e1', 'en', 'Head of Construction - HVDC Converter Station', 'Tees Grid Connections', 'Teesside', 'GB', [
-    ['Grid and substation delivery', 1, ['substation', 'grid']], ['HV power systems', 1, ['hv']], ['Subcontract governance', 1, ['subcontract']], ['Offshore wind integration', 0, ['offshore wind']], ['CDM 2015 duties', 0, ['cdm']]]],
+    ['Grid and substation delivery', 1, ['substation', 'grid']], ['HV power systems', 1, ['hv']], ['Subcontract governance', 1, ['subcontract']], ['Offshore wind integration', 0, ['offshore wind']], ['CDM 2015 duties', 0, ['cdm']]], { contractType: 'contract' }],
   ['e2', 'en', 'Construction Manager - Offshore Wind Onshore Works', 'Vesterhav Energi', 'Esbjerg', 'DK', [
     ['Offshore wind programmes', 1, ['offshore wind']], ['Multi-country delivery', 1, ['multi-country']], ['HSE leadership', 1, ['hse']], ['GWO training', 0, ['gwo']]]],
   ['e4', 'en', 'Site Manager - 200MW Solar and Storage', 'Karoo Sun Power', 'Northern Cape', 'ZA', [
@@ -135,7 +135,7 @@ const PACK_DEMO: Demo[] = [
   ['r1', 'rail', 'Senior Project Manager - Main Line Electrification', 'Trentside Rail Alliance', 'Derby', 'GB', [
     ['Rail programme delivery', 1, ['rail']], ['Earned value management', 1, ['evm']], ['Schedule and cost control', 1, ['schedule']], ['Personal Track Safety card', 0, ['personal track safety', 'pts card']]]],
   ['r2', 'rail', 'Programme Delivery Lead - Metro Extension', 'Midland Metro Partnership', 'Birmingham', 'GB', [
-    ['Metro or light rail delivery', 1, ['metro']], ['BIM implementation', 1, ['bim']], ['Programmes of £1BN and above', 1, ['£1.3bn', '£1bn']], ['Stakeholder management', 0, ['stakeholder']]]],
+    ['Metro or light rail delivery', 1, ['metro']], ['BIM implementation', 1, ['bim']], ['Programmes of £1BN and above', 1, ['£1.3bn', '£1bn']], ['Stakeholder management', 0, ['stakeholder']]], { contractType: 'contract' }],
   ['r3', 'rail', 'Construction Manager - Metro Line 4', 'Gulf Transit Constructors', 'Doha', 'QA', [
     ['Metro or light rail delivery', 1, ['metro']], ['Multi-contractor leadership', 1, ['multi-contractor']], ['FIDIC contracts', 0, ['fidic']], ['Gulf region experience', 0, ['gcc', 'qatar', 'middle east']]]],
   ['r4', 'rail', 'Responsable BIM - Ligne à grande vitesse', 'Rhône Rail Ingénierie', 'Lyon', 'FR', [
@@ -184,6 +184,8 @@ function demoToRaw([id, pack, title, employer, city, country, criteria, extra]: 
     ].join('\n'),
     criteria: criteria.map(([label, e, keywords]): Criterion => ({ label, essential: e === 1, keywords })),
     ...(extra?.requiredCredential ? { requiredCredential: extra.requiredCredential } : {}),
+    contractType: extra?.contractType ?? 'permanent',
+    employmentType: extra?.contractType === 'contract' ? 'Contract' : 'Permanent',
     origin: 'discovered',
   };
 }

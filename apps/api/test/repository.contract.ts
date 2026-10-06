@@ -376,6 +376,91 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
       });
     });
 
+    describe('applying data', () => {
+      let jobId: string;
+      beforeEach(async () => {
+        const j = job(unique('j'));
+        jobId = j.id;
+        await repo.upsertJobs([j]);
+      });
+
+      it('round-trips the new application fields, including the private block, and every status', async () => {
+        const app = application(unique('app'), a, jobId);
+        const full: Application = {
+          ...app,
+          status: 'needs_you',
+          holdReasons: ['A declaration needs your answer: Criminal convictions'],
+          dedupeKey: 'example ltd|site manager|leeds',
+          tailoredCv: 'Site manager (fictional).\nLed a 40-home scheme.',
+          traceFailures: ['Holds a PhD in physics.'],
+          sentDocuments: { statement: 'I led a scheme. (fictional)', tailoredCv: 'Site manager (fictional).', sha256: { statement: 'a'.repeat(64), tailoredCv: 'b'.repeat(64) } },
+        };
+        await repo.createApplication(full);
+        expect(await repo.getApplication(a, full.id)).toEqual(full);
+        for (const status of ['draft', 'confirmed', 'uncertain', 'interview', 'closed'] as const) {
+          await repo.updateApplication({ ...full, status });
+          expect((await repo.getApplication(a, full.id))?.status).toBe(status);
+        }
+        const sent: Application = { ...full, status: 'submitted', submittedAt: NOW, automatic: true, holdReasons: undefined, receipt: { at: NOW, pageUrl: 'https://jobs.example.org/thanks', confirmationText: 'Application received (fictional)', documentsSha256: { statement: 'a'.repeat(64) }, automatic: true } };
+        await repo.updateApplication(sent);
+        expect(await repo.getApplication(a, full.id)).toEqual(sent);
+        expect(await repo.deleteApplication(b, full.id)).toBe(false); // not B's
+        expect(await repo.deleteApplication(a, full.id)).toBe(true);
+        expect(await repo.getApplication(a, full.id)).toBeUndefined();
+      });
+
+      it('stores screening answers and standing authorisation per user, and removes them with the account', async () => {
+        const answers = { noticePeriod: '4 weeks', relocation: true, custom: { 'years managing teams': '6 (fictional)' } };
+        await repo.saveScreeningAnswers(a, answers);
+        expect(await repo.getScreeningAnswers(a)).toEqual(answers);
+        expect(await repo.getScreeningAnswers(b)).toBeUndefined();
+        const auth = { enabled: true, scopeVersion: 'od1-2026-10-06', consentAt: NOW, paused: false };
+        await repo.saveAuthorisation(a, auth);
+        expect(await repo.getAuthorisation(a)).toEqual(auth);
+        await repo.saveAuthorisation(a, { ...auth, enabled: false, revokedAt: NOW });
+        expect((await repo.getAuthorisation(a))?.revokedAt).toBe(NOW);
+        await repo.deleteUser(a);
+        expect(await repo.getScreeningAnswers(a)).toBeUndefined();
+        expect(await repo.getAuthorisation(a)).toBeUndefined();
+      });
+
+      it('verifies e-mail, changes the password hash, and consumes a token once, only before it expires', async () => {
+        await repo.markEmailVerified(a, NOW);
+        await repo.markEmailVerified(a, '2030-01-01T00:00:00.000Z'); // the first date stays
+        expect((await repo.getUserById(a))?.emailVerifiedAt).toBe(NOW);
+        expect((await repo.getUserById(b))?.emailVerifiedAt).toBeUndefined();
+        await repo.updatePasswordHash(a, '$2b$04$fictionalhashfictionalhashfictionalhashfictiona');
+        expect((await repo.getUserById(a))?.passwordHash).toBe('$2b$04$fictionalhashfictionalhashfictionalhashfictiona');
+        const hash = 'c'.repeat(64);
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'reset-password', tokenHash: hash, expiresAt: '2026-10-06T10:00:00.000Z', createdAt: NOW });
+        expect(await repo.consumeAuthToken('verify-email', hash, NOW)).toBeUndefined(); // wrong kind
+        expect(await repo.consumeAuthToken('reset-password', hash, '2026-10-06T11:00:00.000Z')).toBeUndefined(); // expired
+        expect(await repo.consumeAuthToken('reset-password', hash, NOW)).toBe(a);
+        expect(await repo.consumeAuthToken('reset-password', hash, NOW)).toBeUndefined(); // used
+        expect(await repo.listUserIds()).toEqual(expect.arrayContaining([a, b]));
+      });
+
+      it('platform settings, one-off claims and shared rate-limit windows', async () => {
+        const key = unique('setting');
+        expect(await repo.getPlatformSetting(key)).toBeUndefined();
+        await repo.setPlatformSetting(key, { paused: true });
+        expect(await repo.getPlatformSetting(key)).toEqual({ paused: true });
+        const claim = unique('claim');
+        expect(await repo.claimOnce(claim, NOW)).toBe(true);
+        expect(await repo.claimOnce(claim, NOW)).toBe(false);
+        const rl = unique('rl');
+        expect(await repo.hitRateLimit(rl, NOW)).toBe(1);
+        expect(await repo.hitRateLimit(rl, NOW)).toBe(2);
+        expect(await repo.hitRateLimit(rl, '2026-10-06T09:15:00.000Z')).toBe(1);
+      });
+
+      it('stores the job contract type', async () => {
+        const job = { ...(await repo.getJob(jobId))!, id: unique('sample:ct'), externalId: unique('ct'), contractType: 'contract' as const };
+        await repo.upsertJobs([job]);
+        expect((await repo.getJob(job.id))?.contractType).toBe('contract');
+      });
+    });
+
     describe('usage meter', () => {
       it('records per user and totals to three decimal places', async () => {
         const meter = backend.usageMeter;

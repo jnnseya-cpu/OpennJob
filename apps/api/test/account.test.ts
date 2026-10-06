@@ -108,7 +108,7 @@ for (const backend of BACKENDS) {
       await t.api.delete('/account').send({ password: USER_PASSWORD }).expect(200);
       for (const [table, column] of tables) expect(await count(table, column), table).toBe(0);
       // Nothing anywhere in the database still mentions the id (jobs and the system event included).
-      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs', 'notifications', 'notification_deliveries', 'notification_preferences'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
+      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs', 'notifications', 'notification_deliveries', 'notification_preferences', 'auth_tokens', 'screening_answers', 'standing_authorisations'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
       expect(everything).not.toContain(USER_ID);
       expect(everything).not.toContain(USER_EMAIL);
     });

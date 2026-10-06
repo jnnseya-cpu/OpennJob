@@ -1,4 +1,4 @@
-import type { Application, DomainEvent, Job, Notification, NotificationDelivery, Passport, Profile, User } from './types';
+import type { Application, DomainEvent, Job, Notification, NotificationDelivery, Passport, Profile, ScreeningAnswers, StandingAuthorisation, User } from './types';
 import type { NotificationPreferences } from './notifications';
 
 /** Thrown by createUser when the email address already has an account. */
@@ -58,6 +58,41 @@ export interface Repository {
   listDeliveries(userId: string, limit?: number): Promise<NotificationDelivery[]>;
   getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
   saveNotificationPreferences(userId: string, preferences: NotificationPreferences): Promise<void>;
+
+  // ----- accounts: verification, reset, listing -----
+  markEmailVerified(userId: string, at: string): Promise<void>;
+  updatePasswordHash(userId: string, passwordHash: string): Promise<void>;
+  /** Every account id, oldest first. For the scheduler. */
+  listUserIds(): Promise<string[]>;
+  /** Stores a one-time token. Only its SHA-256 is ever stored. */
+  saveAuthToken(token: AuthToken): Promise<void>;
+  /** Marks an unused, unexpired token of this kind used, atomically. Returns its owner, or undefined. */
+  consumeAuthToken(kind: AuthToken['kind'], tokenHash: string, at: string): Promise<string | undefined>;
+
+  // ----- applying -----
+  deleteApplication(userId: string, id: string): Promise<boolean>;
+  getScreeningAnswers(userId: string): Promise<ScreeningAnswers | undefined>;
+  saveScreeningAnswers(userId: string, answers: ScreeningAnswers): Promise<void>;
+  getAuthorisation(userId: string): Promise<StandingAuthorisation | undefined>;
+  saveAuthorisation(userId: string, authorisation: StandingAuthorisation): Promise<void>;
+
+  // ----- platform (not personal) -----
+  getPlatformSetting<T>(key: string): Promise<T | undefined>;
+  setPlatformSetting(key: string, value: unknown): Promise<void>;
+  /** Records `key` once. true for the first caller, false for every later one (scheduler runs, across instances). */
+  claimOnce(key: string, at: string): Promise<boolean>;
+  /** Adds one hit to a fixed window and returns the window's count (shared rate limit, NFR-2). */
+  hitRateLimit(key: string, windowStart: string): Promise<number>;
+}
+
+export interface AuthToken {
+  id: string;
+  userId: string;
+  kind: 'verify-email' | 'reset-password';
+  /** SHA-256 hex of the token sent by e-mail. */
+  tokenHash: string;
+  expiresAt: string;
+  createdAt: string;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -72,6 +107,12 @@ export class InMemoryRepository implements Repository {
   private readonly notifications: Notification[] = [];
   private readonly deliveries: NotificationDelivery[] = [];
   private readonly notificationPrefs = new Map<string, NotificationPreferences>();
+  private readonly tokens: (AuthToken & { usedAt?: string })[] = [];
+  private readonly screening = new Map<string, ScreeningAnswers>();
+  private readonly authorisations = new Map<string, StandingAuthorisation>();
+  private readonly platform = new Map<string, unknown>();
+  private readonly claims = new Set<string>();
+  private readonly rateWindows = new Map<string, number>();
 
   async createUser(user: User) {
     if (this.users.has(user.id)) throw new Error(`User ${user.id} already exists`);
@@ -95,6 +136,9 @@ export class InMemoryRepository implements Repository {
     for (let i = this.notifications.length - 1; i >= 0; i -= 1) if (this.notifications[i]?.userId === userId) this.notifications.splice(i, 1);
     for (let i = this.deliveries.length - 1; i >= 0; i -= 1) if (this.deliveries[i]?.userId === userId) this.deliveries.splice(i, 1);
     this.notificationPrefs.delete(userId);
+    for (let i = this.tokens.length - 1; i >= 0; i -= 1) if (this.tokens[i]?.userId === userId) this.tokens.splice(i, 1);
+    this.screening.delete(userId);
+    this.authorisations.delete(userId);
     return existed;
   }
   async ping() {
@@ -178,5 +222,61 @@ export class InMemoryRepository implements Repository {
   }
   async saveNotificationPreferences(userId: string, preferences: NotificationPreferences) {
     this.notificationPrefs.set(userId, clone(preferences));
+  }
+  async markEmailVerified(userId: string, at: string) {
+    const u = this.users.get(userId);
+    if (u) this.users.set(userId, { ...u, emailVerifiedAt: u.emailVerifiedAt ?? at });
+  }
+  async updatePasswordHash(userId: string, passwordHash: string) {
+    const u = this.users.get(userId);
+    if (u) this.users.set(userId, { ...u, passwordHash });
+  }
+  async listUserIds() {
+    return [...this.users.values()].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id)).map((u) => u.id);
+  }
+  async saveAuthToken(token: AuthToken) {
+    this.tokens.push(clone(token));
+  }
+  async consumeAuthToken(kind: AuthToken['kind'], tokenHash: string, at: string) {
+    const t = this.tokens.find((x) => x.kind === kind && x.tokenHash === tokenHash && !x.usedAt && x.expiresAt > at);
+    if (!t) return undefined;
+    t.usedAt = at;
+    return t.userId;
+  }
+  async deleteApplication(userId: string, id: string) {
+    const a = this.applications.get(id);
+    if (!a || a.userId !== userId) return false;
+    return this.applications.delete(id);
+  }
+  async getScreeningAnswers(userId: string) {
+    const a = this.screening.get(userId);
+    return a ? clone(a) : undefined;
+  }
+  async saveScreeningAnswers(userId: string, answers: ScreeningAnswers) {
+    this.screening.set(userId, clone(answers));
+  }
+  async getAuthorisation(userId: string) {
+    const a = this.authorisations.get(userId);
+    return a ? clone(a) : undefined;
+  }
+  async saveAuthorisation(userId: string, authorisation: StandingAuthorisation) {
+    this.authorisations.set(userId, clone(authorisation));
+  }
+  async getPlatformSetting<T>(key: string) {
+    return this.platform.has(key) ? clone(this.platform.get(key) as T) : undefined;
+  }
+  async setPlatformSetting(key: string, value: unknown) {
+    this.platform.set(key, clone(value));
+  }
+  async claimOnce(key: string) {
+    if (this.claims.has(key)) return false;
+    this.claims.add(key);
+    return true;
+  }
+  async hitRateLimit(key: string, windowStart: string) {
+    const k = `${key}|${windowStart}`;
+    const n = (this.rateWindows.get(k) ?? 0) + 1;
+    this.rateWindows.set(k, n);
+    return n;
   }
 }

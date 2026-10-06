@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_PREFERENCES, inScope, matchJob, preferencesOf } from '../src';
+import { contractTypeOf } from '../src/sources/common';
 import type { Criterion, Job, Preferences } from '../src';
 
 type Place = Pick<Job, 'country' | 'city' | 'language'>;
@@ -166,14 +167,15 @@ describe('inScope: the three rules together', () => {
 
 describe('preferencesOf', () => {
   it('returns empty lists for a profile with no preferences, and a copy otherwise', () => {
-    expect(preferencesOf(undefined)).toEqual({ languages: [], countries: [], cities: [] });
-    expect(preferencesOf({})).toEqual({ languages: [], countries: [], cities: [] });
+    // searchTypes (PRO-3) was added after this test was written; empty means all three.
+    expect(preferencesOf(undefined)).toEqual({ languages: [], countries: [], cities: [], searchTypes: [] });
+    expect(preferencesOf({})).toEqual({ languages: [], countries: [], cities: [], searchTypes: [] });
     const stored = { languages: ['French'], countries: ['CD'], cities: ['Kinshasa'] };
     const copy = preferencesOf({ preferences: stored });
-    expect(copy).toEqual(stored);
+    expect(copy).toEqual({ ...stored, searchTypes: [] });
     copy.languages.push('German');
     expect(stored.languages).toEqual(['French']);
-    expect(EMPTY_PREFERENCES).toEqual({ languages: [], countries: [], cities: [] });
+    expect(EMPTY_PREFERENCES).toEqual({ languages: [], countries: [], cities: [], searchTypes: [] });
   });
 });
 
@@ -237,5 +239,36 @@ describe('matching: a selected language is evidence for a criterion that asks fo
   it('selecting a language does not make anyone eligible for a job that needs a credential', () => {
     const m = matchJob({ ...job, requiredCredential: 'sc' }, CV, undefined, { languages: ['French', 'German'] });
     expect(m).toMatchObject({ score: 100, eligible: false, missingCredential: 'sc' });
+  });
+});
+
+describe('spec T-02 and T-04: scope by place and by search type', () => {
+  const job = (country: string | undefined, city?: string, contractType?: 'permanent' | 'contract') => ({ country, city, language: 'en' as const, contractType });
+  const prefs = (p: Partial<{ countries: string[]; cities: string[]; searchTypes: ('uk-permanent' | 'uk-contract' | 'international')[] }>) => ({ languages: [], countries: [], cities: [], searchTypes: [], ...p });
+
+  it('T-02: nothing selected excludes nothing; a country excludes others; a city narrows only its own country', () => {
+    const jobs = [job('GB', 'Birmingham'), job('GB', 'Leeds'), job('FR', 'Lyon'), job('CD', 'Kinshasa'), job(undefined)];
+    expect(jobs.filter((j) => inScope(j, prefs({})))).toHaveLength(5);
+    expect(jobs.filter((j) => inScope(j, prefs({ countries: ['GB'] }))).map((j) => j.city)).toEqual(['Birmingham', 'Leeds']);
+    const narrowed = jobs.filter((j) => inScope(j, prefs({ countries: ['GB', 'FR'], cities: ['Birmingham'] })));
+    expect(narrowed.map((j) => j.city)).toEqual(['Birmingham', 'Lyon']); // Leeds out; France untouched
+  });
+
+  it('T-04: no search type returns permanent, contract and international; "UK contract" alone returns only UK contracts', () => {
+    const jobs = [job('GB', 'Leeds', 'permanent'), job('GB', 'Derby', 'contract'), job('GB', 'York'), job('DE', 'Frankfurt', 'contract')];
+    expect(jobs.filter((j) => inScope(j, prefs({})))).toHaveLength(4);
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['uk-contract'] }))).map((j) => j.city)).toEqual(['Derby']);
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['uk-permanent'] }))).map((j) => j.city)).toEqual(['Leeds']);
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['international'] }))).map((j) => j.city)).toEqual(['Frankfurt']);
+    // A UK job of unknown type passes only when both UK types are chosen.
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['uk-permanent', 'uk-contract'] }))).map((j) => j.city)).toEqual(['Leeds', 'Derby', 'York']);
+  });
+
+  it('DIS-3: contract type comes from the employment type, then the wording, and is never guessed', () => {
+    expect(contractTypeOf('Contract', 'Site Manager', '')).toBe('contract');
+    expect(contractTypeOf('Full-time, permanent', 'Site Manager', '')).toBe('permanent');
+    expect(contractTypeOf(undefined, 'Interim Programme Lead', '£500 per day outside IR35')).toBe('contract');
+    expect(contractTypeOf(undefined, 'Site Manager', 'A permanent role.')).toBe('permanent');
+    expect(contractTypeOf(undefined, 'Site Manager', 'Lead the site.')).toBeUndefined();
   });
 });

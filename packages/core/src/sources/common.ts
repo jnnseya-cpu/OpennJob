@@ -1,4 +1,4 @@
-import type { Criterion, Job, JobLanguage, JobOrigin, JobSource, PackId } from '../types';
+import type { ContractType, Criterion, Job, JobLanguage, JobOrigin, JobSource, PackId } from '../types';
 import { extractCriteriaFallback } from '../matching';
 import { inferPlace, normaliseCountryCode, regionOf } from '../geo';
 import { detectLanguage } from '../languages';
@@ -123,6 +123,26 @@ export interface RawJob {
   requiredCredential?: string;
   /** Defaults to 'discovered'. */
   origin?: JobOrigin;
+  /** When absent it is inferred from employmentType and the wording (contractTypeOf). */
+  contractType?: ContractType;
+}
+
+/**
+ * Permanent or contract (DIS-3), from the source's employment type first, then the title and the
+ * advert. Undefined when nothing says: a job is never guessed into a type.
+ */
+export function contractTypeOf(employmentType: string | undefined, title: string, description: string): ContractType | undefined {
+  const t = (employmentType ?? '').toLowerCase();
+  const isContract = /contract|temporary|\btemp\b|interim|freelance|fixed[- ]term|day rate|per day|\bir35\b|\bcdd\b|int[ée]rim/;
+  const isPermanent = /permanent|\bperm\b|\bcdi\b/;
+  if (isContract.test(t)) return 'contract';
+  if (isPermanent.test(t)) return 'permanent';
+  const text = `${title}\n${description}`.toLowerCase();
+  const c = isContract.test(text);
+  const p = isPermanent.test(text);
+  if (c && !p) return 'contract';
+  if (p && !c) return 'permanent';
+  return undefined;
 }
 
 /**
@@ -171,6 +191,8 @@ export function normaliseJob(raw: RawJob): Job | undefined {
   if (raw.salaryMax !== undefined) job.salaryMax = raw.salaryMax;
   if (raw.employmentType) job.employmentType = raw.employmentType;
   if (raw.postedAt) job.postedAt = raw.postedAt;
+  const contractType = raw.contractType ?? contractTypeOf(raw.employmentType, raw.title, raw.description);
+  if (contractType) job.contractType = contractType;
   return job;
 }
 
