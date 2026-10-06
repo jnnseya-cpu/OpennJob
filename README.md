@@ -25,6 +25,7 @@ promising anything to anyone.
 | `GO-LIVE.md` | The checklist: done and tested / not done |
 | `CLAUDE.md` | Working on the code with Claude Code: commands, map, rules |
 | `deploy/gcp-cloud-run.md` | Cloud Run + Cloud SQL + Secret Manager steps (from memory, not executed) |
+| `career-agent/README.md` | A separate single-user Python tool (NSEYA Career Agent personal trial); not part of OpennJob |
 
 ## What it does
 

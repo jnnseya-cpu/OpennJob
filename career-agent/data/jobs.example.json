@@ -1,0 +1,89 @@
+[
+  {
+    "id": "EXAMPLE-1",
+    "title": "Construction Manager (fictional)",
+    "company": "Example Infrastructure Ltd",
+    "location": "Birmingham",
+    "url": "https://example.org/jobs/1",
+    "country": "United Kingdom",
+    "status": "discovered",
+    "live_verified": false,
+    "description": "Essential: chartered status. Contractor governance on rail projects. Primavera P6 planning. Desirable: CDM 2015.",
+    "description_full": true,
+    "requirements": [
+      {
+        "text": "Chartered status",
+        "jd_quote": "chartered status",
+        "weight": 30,
+        "state": "met",
+        "evidence_ids": [
+          "E01"
+        ],
+        "hard": true
+      },
+      {
+        "text": "Contractor governance on rail projects",
+        "jd_quote": "Contractor governance on rail projects",
+        "weight": 40,
+        "state": "met",
+        "evidence_ids": [
+          "E02"
+        ],
+        "hard": true
+      },
+      {
+        "text": "Primavera P6 planning",
+        "jd_quote": "Primavera P6 planning",
+        "weight": 20,
+        "state": "met",
+        "evidence_ids": [
+          "E03"
+        ],
+        "hard": false
+      },
+      {
+        "text": "CDM 2015",
+        "jd_quote": "CDM 2015",
+        "weight": 10,
+        "state": "unknown",
+        "evidence_ids": [],
+        "hard": false
+      }
+    ]
+  },
+  {
+    "id": "EXAMPLE-2",
+    "title": "Project Director (fictional)",
+    "company": "Example Energy SA",
+    "location": "Lyon",
+    "url": "https://example.org/jobs/2",
+    "country": "France",
+    "status": "discovered",
+    "live_verified": false,
+    "description": "Essential: French, fluent. Grid programme leadership.",
+    "description_full": true,
+    "required_languages": [
+      "French"
+    ],
+    "requirements": [
+      {
+        "text": "French, fluent",
+        "jd_quote": "French, fluent",
+        "weight": 50,
+        "state": "unknown",
+        "evidence_ids": [],
+        "hard": true
+      },
+      {
+        "text": "Grid programme leadership",
+        "jd_quote": "Grid programme leadership",
+        "weight": 50,
+        "state": "partial",
+        "evidence_ids": [
+          "E02"
+        ],
+        "hard": true
+      }
+    ]
+  }
+]

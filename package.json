@@ -17,7 +17,8 @@
     "test:pg": "bash scripts/test-with-postgres.sh",
     "test:e2e": "npm run build && playwright test",
     "migrate": "node apps/api/dist/migrate-cli.js",
-    "start": "node apps/api/dist/main.js"
+    "start": "node apps/api/dist/main.js",
+    "test:agent": "cd career-agent && $( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 ) -m unittest discover -s tests"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

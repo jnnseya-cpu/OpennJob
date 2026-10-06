@@ -1,0 +1,284 @@
+{
+ "profile": {
+  "name": "Alex Example",
+  "email": "alex.example@example.org",
+  "phone": "07700 900123",
+  "location": "Birmingham, UK",
+  "right_to_work": true,
+  "ge_end_date": "2025-12",
+  "confirmed": false,
+  "evidence": [
+   {
+    "id": "E01",
+    "text": "Chartered construction manager with ten years on infrastructure projects. (fictional)",
+    "source": "Example CV",
+    "verified": true
+   },
+   {
+    "id": "E02",
+    "text": "Led contractor governance on a £40M rail depot upgrade. (fictional)",
+    "source": "Example CV",
+    "verified": true
+   },
+   {
+    "id": "E03",
+    "text": "Planned and controlled delivery in Primavera P6 with earned value reporting. (fictional)",
+    "source": "Example CV",
+    "verified": true
+   },
+   {
+    "id": "E04",
+    "text": "Managed CDM 2015 duties as principal contractor representative. (fictional)",
+    "source": "Example CV",
+    "verified": false
+   }
+  ],
+  "employment": [
+   {
+    "employer": "Example Rail Ltd (fictional)",
+    "title": "Construction Manager",
+    "start": "2019-01",
+    "end": "2025-12"
+   }
+  ],
+  "work_authorisation_by_country": {},
+  "languages": {},
+  "relocation": false,
+  "work_types": [
+   "permanent",
+   "contract"
+  ],
+  "issues": [
+   "Fictional example profile: replace every value with your own confirmed details in data/local/profile.json."
+  ],
+  "targets": [
+   "Construction Manager"
+  ],
+  "report_email": "alex.example@example.org"
+ },
+ "jobs": [
+  {
+   "id": "EXAMPLE-1",
+   "title": "Construction Manager (fictional)",
+   "company": "Example Infrastructure Ltd",
+   "location": "Birmingham",
+   "url": "https://example.org/jobs/1",
+   "country": "United Kingdom",
+   "status": "discovered",
+   "live_verified": false,
+   "description": "Essential: chartered status. Contractor governance on rail projects. Primavera P6 planning. Desirable: CDM 2015.",
+   "description_full": true,
+   "requirements": [
+    {
+     "text": "Chartered status",
+     "jd_quote": "chartered status",
+     "weight": 30,
+     "state": "met",
+     "evidence_ids": [
+      "E01"
+     ],
+     "hard": true
+    },
+    {
+     "text": "Contractor governance on rail projects",
+     "jd_quote": "Contractor governance on rail projects",
+     "weight": 40,
+     "state": "met",
+     "evidence_ids": [
+      "E02"
+     ],
+     "hard": true
+    },
+    {
+     "text": "Primavera P6 planning",
+     "jd_quote": "Primavera P6 planning",
+     "weight": 20,
+     "state": "met",
+     "evidence_ids": [
+      "E03"
+     ],
+     "hard": false
+    },
+    {
+     "text": "CDM 2015",
+     "jd_quote": "CDM 2015",
+     "weight": 10,
+     "state": "unknown",
+     "evidence_ids": [],
+     "hard": false
+    }
+   ]
+  },
+  {
+   "id": "EXAMPLE-2",
+   "title": "Project Director (fictional)",
+   "company": "Example Energy SA",
+   "location": "Lyon",
+   "url": "https://example.org/jobs/2",
+   "country": "France",
+   "status": "discovered",
+   "live_verified": false,
+   "description": "Essential: French, fluent. Grid programme leadership.",
+   "description_full": true,
+   "required_languages": [
+    "French"
+   ],
+   "requirements": [
+    {
+     "text": "French, fluent",
+     "jd_quote": "French, fluent",
+     "weight": 50,
+     "state": "unknown",
+     "evidence_ids": [],
+     "hard": true
+    },
+    {
+     "text": "Grid programme leadership",
+     "jd_quote": "Grid programme leadership",
+     "weight": 50,
+     "state": "partial",
+     "evidence_ids": [
+      "E02"
+     ],
+     "hard": true
+    }
+   ]
+  }
+ ],
+ "search_profiles": [
+  {
+   "id": "uk-permanent",
+   "label": "UK permanent",
+   "countries": [
+    "United Kingdom"
+   ],
+   "work_types": [
+    "permanent"
+   ],
+   "titles": [
+    "Senior Construction Manager",
+    "Construction Subcontract Manager",
+    "Senior Project Manager – Infrastructure",
+    "EPC Project Manager",
+    "Client-side Construction Manager",
+    "Construction Package Manager",
+    "Programme Delivery Lead",
+    "Project Recovery Manager",
+    "Site Manager – Energy",
+    "Data Centre Construction Manager"
+   ],
+   "target_salary": null,
+   "previous_salary": null
+  },
+  {
+   "id": "uk-contract",
+   "label": "UK contract",
+   "countries": [
+    "United Kingdom"
+   ],
+   "work_types": [
+    "contract"
+   ],
+   "titles": [
+    "Senior Construction Manager",
+    "Construction Subcontract Manager",
+    "Senior Project Manager – Infrastructure",
+    "EPC Project Manager",
+    "Client-side Construction Manager",
+    "Construction Package Manager",
+    "Programme Delivery Lead",
+    "Project Recovery Manager",
+    "Site Manager – Energy",
+    "Data Centre Construction Manager"
+   ],
+   "target_day_rate": null,
+   "rate_is_hard_floor": false
+  },
+  {
+   "id": "international",
+   "label": "International opportunities",
+   "countries": [
+    "ANY_NON_UK"
+   ],
+   "work_types": [
+    "permanent",
+    "contract"
+   ],
+   "titles": [
+    "Senior Construction Manager",
+    "Construction Subcontract Manager",
+    "Senior Project Manager – Infrastructure",
+    "EPC Project Manager",
+    "Client-side Construction Manager",
+    "Construction Package Manager",
+    "Programme Delivery Lead",
+    "Project Recovery Manager",
+    "Site Manager – Energy",
+    "Data Centre Construction Manager"
+   ],
+   "relocation": true,
+   "require_sponsorship_or_confirmed_country_right": true
+  }
+ ],
+ "answer_library": {
+  "schema_version": 1,
+  "answers": {
+   "name": {
+    "value": "Alex Example",
+    "confirmed": true,
+    "kind": "fact"
+   },
+   "email": {
+    "value": "alex.example@example.org",
+    "confirmed": true,
+    "kind": "fact"
+   },
+   "phone": {
+    "value": "07700 900123",
+    "confirmed": true,
+    "kind": "fact"
+   },
+   "location": {
+    "value": "Birmingham, UK",
+    "confirmed": true,
+    "kind": "fact"
+   },
+   "uk_right_to_work": {
+    "value": true,
+    "confirmed": true,
+    "kind": "declaration"
+   },
+   "notice_period": {
+    "value": null,
+    "confirmed": false,
+    "kind": "fact"
+   },
+   "expected_permanent_salary": {
+    "value": null,
+    "confirmed": false,
+    "kind": "preference"
+   }
+  },
+  "rules": [
+   "Never substitute last salary for expected salary.",
+   "Declarations (work rights, sponsorship, clearance, convictions, consent) are recorded for matching only and are never filled into a form: you answer them yourself."
+  ]
+ },
+ "policy": {
+  "enabled": true,
+  "minimum_match": 80,
+  "daily_submission_limit": 20,
+  "excluded_employers": [],
+  "excluded_job_ids": [],
+  "source_interval_seconds": 7200,
+  "worker_poll_seconds": 30,
+  "trial_review_date": "2026-10-09",
+  "evaluation_extension_date": "2026-10-16",
+  "timezone": "Europe/London",
+  "mode": "applicant_initiated",
+  "commercial_enabled": false,
+  "require_reviewed_matching": true,
+  "require_exact_jd_check": true,
+  "applicant_wait_seconds": 900
+ }
+}

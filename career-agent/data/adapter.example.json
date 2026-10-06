@@ -1,0 +1,41 @@
+{
+  "id": "REPLACE_WITH_ROUTE_ID",
+  "exact_url": "https://employer.example/REPLACE_WITH_REVIEWED_APPLICATION_PAGE",
+  "reviewed": false,
+  "route_tested": false,
+  "document_reviewed": false,
+  "jd_selector": "REPLACE_WITH_FULL_DESCRIPTION_SELECTOR",
+  "form_selector": "REPLACE_WITH_VERIFIED_SELECTOR",
+  "fields": [
+    {
+      "selector": "REPLACE_WITH_VERIFIED_NAME_SELECTOR",
+      "key": "name"
+    },
+    {
+      "selector": "REPLACE_WITH_VERIFIED_EMAIL_SELECTOR",
+      "key": "email"
+    },
+    {
+      "selector": "REPLACE_WITH_VERIFIED_PHONE_SELECTOR",
+      "key": "phone"
+    },
+    {
+      "selector": "REPLACE_WITH_RIGHT_TO_WORK_SELECTOR",
+      "key": "uk_right_to_work",
+      "declaration": true
+    }
+  ],
+  "uploads": [
+    {
+      "selector": "REPLACE_WITH_CV_UPLOAD_SELECTOR",
+      "document": "cv"
+    }
+  ],
+  "submit_selector": "REPLACE_WITH_VERIFIED_SUBMIT_SELECTOR",
+  "receipt_selector": "REPLACE_WITH_UNAMBIGUOUS_SUCCESS_REFERENCE_SELECTOR",
+  "receipt_pattern": "REPLACE_WITH_JOB_SPECIFIC_SUCCESS_PATTERN",
+  "blocking_selectors": [
+    "iframe[src*=\"recaptcha\"]",
+    "iframe[src*=\"hcaptcha\"]"
+  ]
+}

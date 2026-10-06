@@ -1,0 +1,53 @@
+{
+  "name": "Alex Example",
+  "email": "alex.example@example.org",
+  "phone": "07700 900123",
+  "location": "Birmingham, UK",
+  "right_to_work": true,
+  "ge_end_date": "2025-12",
+  "confirmed": false,
+  "evidence": [
+    {
+      "id": "E01",
+      "text": "Chartered construction manager with ten years on infrastructure projects. (fictional)",
+      "source": "Example CV",
+      "verified": true
+    },
+    {
+      "id": "E02",
+      "text": "Led contractor governance on a £40M rail depot upgrade. (fictional)",
+      "source": "Example CV",
+      "verified": true
+    },
+    {
+      "id": "E03",
+      "text": "Planned and controlled delivery in Primavera P6 with earned value reporting. (fictional)",
+      "source": "Example CV",
+      "verified": true
+    },
+    {
+      "id": "E04",
+      "text": "Managed CDM 2015 duties as principal contractor representative. (fictional)",
+      "source": "Example CV",
+      "verified": false
+    }
+  ],
+  "employment": [
+    {
+      "employer": "Example Rail Ltd (fictional)",
+      "title": "Construction Manager",
+      "start": "2019-01",
+      "end": "2025-12"
+    }
+  ],
+  "work_authorisation_by_country": {},
+  "languages": {},
+  "relocation": false,
+  "work_types": [
+    "permanent",
+    "contract"
+  ],
+  "issues": [
+    "Fictional example profile: replace every value with your own confirmed details in data/local/profile.json."
+  ]
+}

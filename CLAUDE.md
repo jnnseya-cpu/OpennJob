@@ -36,7 +36,11 @@ npx playwright test apps/web/test/e2e             # the web app (needs npm run b
 npm run dev -w @opennjob/web                       # web dev server on :3001 (API needs OPENNJOB_CORS_ORIGINS=http://127.0.0.1:3001)
 DATABASE_URL=postgres://... npm test               # run the PostgreSQL tests against your own database
 npm run test:pg -- npm run test:e2e                # e2e with a throwaway PostgreSQL
+npm run test:agent                                 # career-agent/ Python tests (uses career-agent/.venv if present)
 ```
+
+`career-agent/` follows the same non-negotiable rules: it never fills a declaration, never clicks
+submit (the applicant does), and never commits personal data (`career-agent/data/local/` is git-ignored).
 
 - Do not run `playwright install` where Chromium is pre-installed
   (`PLAYWRIGHT_BROWSERS_PATH`); `@playwright/test` is pinned to match that browser.
@@ -85,6 +89,11 @@ apps/extension/               Chrome MV3 extension, bundled by esbuild into dist
   src/popup/                    popup UI: API address, sign-in, mode, scan, fill
   test/fixtures/                fictional application forms
   test/e2e/                     Playwright tests
+career-agent/                 SEPARATE single-user Python tool (personal trial), not part of OpennJob. See its README.
+  agent/                        stdlib core (core, policy, answers, sources, discovery, llm, report, review, server)
+                                + documents (reportlab, python-docx) + worker (Playwright). You submit; it never clicks submit.
+  data/*.example.json           fictional; personal data only in data/local/ (git-ignored, CAREER_DATA overrides)
+  tests/                        unittest, fictional data; `npm run test:agent`
 db/migrations/                NNN_name.sql, applied in order, tracked in schema_migrations
 deploy/gcp-cloud-run.md       Cloud Run + Cloud SQL + Secret Manager steps (from memory, not executed)
 Dockerfile docker-compose.yml .github/workflows/ci.yml .env.example

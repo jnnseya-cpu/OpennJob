@@ -22,3 +22,10 @@ playwright/.cache/
 # Next.js (apps/web)
 .next/
 out/
+
+# career-agent (Python): personal data, local state, generated packs
+career-agent/data/local/
+career-agent/dashboard/data.json
+career-agent/.venv/
+**/__pycache__/
+*.sqlite3
