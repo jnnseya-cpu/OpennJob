@@ -33,7 +33,8 @@ describe('French labels for the basic fields', () => {
   it('does not mistake "nom" inside other labels for the surname', () => {
     expect(classify("Nom de l'entreprise actuelle").key).toBeNull();
     expect(classify('Nom complet').key).toBe('fullName');
-    expect(classify('Nombre d\'années d\'expérience').key).toBeNull();
+    // Not the surname. Since SCR-1 it is the ordinary "years of experience" screening question.
+    expect(classify('Nombre d\'années d\'expérience').key).toBe('yearsExperience');
   });
 });
 

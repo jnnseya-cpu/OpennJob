@@ -222,3 +222,67 @@ export type CreateApplicationInput = z.infer<typeof createApplicationSchema>;
 export type ConfirmApplicationInput = z.infer<typeof confirmApplicationSchema>;
 export type StatementInput = z.infer<typeof statementSchema>;
 export type InterviewFeedbackInput = z.infer<typeof interviewFeedbackSchema>;
+
+// ----- applying on the person's behalf (P3) -------------------------------------------
+
+const httpUrl = z.string().trim().url().max(2000).refine((v) => /^https?:\/\//i.test(v), 'must be an http(s) URL');
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, 'must be a SHA-256 hex digest');
+
+/** APP-7: what proves an application was sent. The site's own confirmation text is required. */
+export const receiptSchema = z
+  .object({
+    pageUrl: httpUrl,
+    confirmationText: z.string().trim().min(3).max(2000),
+    documentsSha256: z.record(z.string().max(40), sha256Hex).refine((r) => Object.keys(r).length <= 10, 'at most 10 documents').default({}),
+  })
+  .strict();
+
+/** "I have submitted it": the person records the confirmation page they saw. */
+export const submittedSchema = z.object({ pageUrl: httpUrl, confirmationText: z.string().trim().min(3).max(2000) }).strict();
+
+export const authorisationSchema = z
+  .object({ enabled: z.boolean(), scopeVersion: z.string().trim().max(60).optional() })
+  .strict();
+
+export const pauseSchema = z.object({ paused: z.boolean() }).strict();
+
+/** What the extension reports after working on one queued application. */
+export const queueResultSchema = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('submitted'), receipt: receiptSchema }).strict(),
+  z.object({ outcome: z.literal('held'), reasons: z.array(z.string().trim().min(1).max(300)).min(1).max(30) }).strict(),
+  z.object({ outcome: z.literal('uncertain'), pageUrl: httpUrl.optional() }).strict(),
+]);
+
+const shortAnswer = z.string().trim().min(1).max(500);
+export const screeningSchema = z
+  .object({
+    noticePeriod: shortAnswer.optional(),
+    salaryExpectation: shortAnswer.optional(),
+    dayRate: shortAnswer.optional(),
+    yearsExperience: shortAnswer.optional(),
+    relocation: z.boolean().optional(),
+    travel: z.boolean().optional(),
+    drivingLicence: z.boolean().optional(),
+    custom: z.record(z.string().trim().min(1).max(300), z.string().trim().min(1).max(2000)).refine((r) => Object.keys(r).length <= 200, 'at most 200 answers').default({}),
+  })
+  .strict();
+
+export const questionAnswerSchema = z.object({ question: z.string().trim().min(1).max(300), answer: z.string().trim().min(1).max(2000) }).strict();
+
+export const applicationSystemSchema = z
+  .object({
+    enabled: z.boolean(),
+    termsCheckedAt: z.string().datetime().optional(),
+    supervisedSubmissionAt: z.string().datetime().optional(),
+    note: z.string().trim().max(500).optional(),
+  })
+  .strict();
+
+export type ReceiptInput = z.infer<typeof receiptSchema>;
+export type SubmittedInput = z.infer<typeof submittedSchema>;
+export type AuthorisationInput = z.infer<typeof authorisationSchema>;
+export type PauseInput = z.infer<typeof pauseSchema>;
+export type QueueResultInput = z.infer<typeof queueResultSchema>;
+export type ScreeningInput = z.infer<typeof screeningSchema>;
+export type QuestionAnswerInput = z.infer<typeof questionAnswerSchema>;
+export type ApplicationSystemInput = z.infer<typeof applicationSystemSchema>;

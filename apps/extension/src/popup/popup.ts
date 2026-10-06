@@ -4,7 +4,9 @@
  */
 import { buildFillValues } from '@opennjob/core/browser';
 import type { Application, FillValues, Mode, Passport, Profile } from '@opennjob/core/browser';
+import type { Confirmation } from '../agent/confirmation';
 import type { FieldReport, RunReport, RunRequest } from '../agent/types';
+import type { QueueState } from '../queue/runner';
 
 interface Settings {
   apiBase: string;
@@ -221,6 +223,7 @@ async function signIn(): Promise<void> {
   await chrome.storage.local.set({ apiBase, accessToken: session.accessToken, tokenExpiresAt: session.expiresAt, accountEmail: session.email });
   showSession();
   await loadData();
+  await loadQueue();
 }
 
 function selectedApplication(): Application | undefined {
@@ -247,6 +250,71 @@ async function sendToPage(request: RunRequest): Promise<RunReport> {
   if (!reply) throw new Error('The page did not answer.');
   if ('error' in reply) throw new Error(reply.error);
   return reply;
+}
+
+/** The site's confirmation on the target tab, if one is showing (APP-7). */
+async function readConfirmation(): Promise<Confirmation | undefined> {
+  const tabId = await targetTabId();
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  const reply = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_CONFIRMATION' })) as { confirmation: Confirmation | null } | undefined;
+  const c = reply?.confirmation;
+  return c && /^https?:\/\//.test(c.pageUrl) ? c : undefined;
+}
+
+async function awaitConfirmation(timeoutMs = 5_000): Promise<Confirmation | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = await readConfirmation().catch(() => undefined);
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return undefined;
+}
+
+// ----- the queue (standing authorisation, OD-4) ----------------------------------------
+
+const queueSection = $<HTMLElement>('queue');
+const queueStatus = $<HTMLParagraphElement>('queue-status');
+const allowSiteButton = $<HTMLButtonElement>('allow-site');
+let siteToAllow: string | undefined;
+
+function showQueueState(state: QueueState | undefined): void {
+  if (!state) return;
+  const counts = `Sent ${state.sent}, held for you ${state.held}, unconfirmed ${state.uncertain}.`;
+  queueStatus.textContent = state.running ? `Working… ${counts}` : `${state.message} ${counts}`.trim();
+  if (state.needsSite) offerSite(state.needsSite);
+}
+
+function offerSite(host: string): void {
+  siteToAllow = host;
+  allowSiteButton.textContent = `Allow OpennJob on ${host}`;
+  allowSiteButton.hidden = false;
+}
+
+interface AgentStatus {
+  authorisation: { enabled: boolean };
+  queue: { ready: number; waitingForSystem: number; needsYou: number };
+  message?: string;
+}
+
+async function loadQueue(): Promise<void> {
+  // Only while signed in: an ended session already told the person why.
+  if (!session) return;
+  await withSession(
+    async () => {
+      const status = await api<AgentStatus>('/agent/status');
+      if (!status) return;
+      queueSection.hidden = false;
+      queueStatus.textContent = status.message ?? `${status.queue.ready} ready to send, ${status.queue.needsYou} waiting for you.`;
+      const next = await api<{ application?: { applyUrl: string } }>('/agent/queue/next');
+      if (next?.application) {
+        const url = new URL(next.application.applyUrl);
+        if (!(await chrome.permissions.contains({ origins: [`${url.protocol}//${url.hostname}/*`] }))) offerSite(url.hostname);
+      }
+      showQueueState((await chrome.storage.local.get('queueState')).queueState as QueueState | undefined);
+    },
+    () => undefined,
+  );
 }
 
 function needsTick(field: FieldReport, mode: Mode): boolean {
@@ -329,8 +397,14 @@ async function recordOutcome(report: RunReport): Promise<void> {
     async () => {
       if (confirmedSensitive.length > 0) await api(`/applications/${application.id}/confirm`, { method: 'POST', body: { confirmedFields: confirmedSensitive } });
       if (report.submitted) {
-        await api(`/applications/${application.id}/submitted`, { method: 'POST' });
-        markSubmittedButton.hidden = true;
+        // APP-7: recorded as submitted only with the site's own confirmation.
+        const confirmation = await awaitConfirmation();
+        if (confirmation) {
+          await api(`/applications/${application.id}/submitted`, { method: 'POST', body: { pageUrl: confirmation.pageUrl, confirmationText: confirmation.text.slice(0, 2000) } });
+          markSubmittedButton.hidden = true;
+        } else {
+          setStatus(`${report.message} No confirmation from the site was seen, so OpennJob has not recorded it as sent. When the site confirms it, press "I have submitted this application" on that page.`, 'warn');
+        }
       }
     },
     (message) => setStatus(`${report.message} (Could not update OpennJob: ${message})`, 'warn'),
@@ -347,6 +421,7 @@ async function init(): Promise<void> {
   else if (session) {
     showSession();
     await loadData();
+    await loadQueue();
   } else {
     showSession();
     setStatus(SIGNED_OUT);
@@ -396,6 +471,22 @@ async function init(): Promise<void> {
     void run(true);
   });
   fillButton.addEventListener('click', () => void run(false));
+  $('queue-start').addEventListener('click', () => {
+    queueStatus.textContent = 'Starting…';
+    void chrome.runtime.sendMessage({ type: 'OPENNJOB_QUEUE_START' });
+  });
+  // Per-site permission, asked one site at a time and only when the person presses this (OD-4).
+  allowSiteButton.addEventListener('click', async () => {
+    if (!siteToAllow) return;
+    const granted = await chrome.permissions.request({ origins: [`https://${siteToAllow}/*`] });
+    if (granted) {
+      allowSiteButton.hidden = true;
+      queueStatus.textContent = `OpennJob may now work on ${siteToAllow}. Start the queue again.`;
+    }
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.queueState) showQueueState(changes.queueState.newValue as QueueState | undefined);
+  });
   confirmAllButton.addEventListener('click', () => {
     for (const box of Array.from(fieldsList.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))) {
       if (box.dataset.sensitive !== 'false') continue;
@@ -408,9 +499,14 @@ async function init(): Promise<void> {
     if (!application) return;
     await withSession(
       async () => {
-        await api(`/applications/${application.id}/submitted`, { method: 'POST' });
+        const confirmation = await readConfirmation().catch(() => undefined);
+        if (!confirmation) {
+          setStatus('No confirmation from the site is showing on this page. Open the page where the site confirms your application, then press this again.', 'warn');
+          return;
+        }
+        await api(`/applications/${application.id}/submitted`, { method: 'POST', body: { pageUrl: confirmation.pageUrl, confirmationText: confirmation.text.slice(0, 2000) } });
         markSubmittedButton.hidden = true;
-        setStatus('Marked as submitted in OpennJob.');
+        setStatus('Marked as submitted in OpennJob, with the confirmation shown on this page.');
       },
       (message) => setStatus(`Could not update OpennJob: ${message}`, 'warn'),
     );

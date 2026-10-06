@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSampleSource } from '@opennjob/core';
+import { STANDING_SCOPE_VERSION, createSampleSource } from '@opennjob/core';
 import type { Application } from '@opennjob/core';
 import { BACKENDS } from './backends';
 import { PASSPORT, PROFILE, USER_ID, USER_PASSWORD, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
+
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
 
 /**
  * USER A CANNOT READ OR CHANGE USER B'S DATA, ON ANY ROUTE.
@@ -18,6 +21,9 @@ const ROUTES = [
   'DELETE /account',
   'GET /account',
   'GET /account/export',
+  'GET /agent/authorisation',
+  'GET /agent/queue/next',
+  'GET /agent/status',
   'GET /applications',
   'GET /applications/:id',
   'GET /auth/versions',
@@ -29,11 +35,16 @@ const ROUTES = [
   'GET /notifications/deliveries',
   'GET /notifications/preferences',
   'GET /notifications/preview',
+  'GET /operator/status',
   'GET /passport',
   'GET /profile',
+  'GET /screening',
   'GET /usage',
+  'POST /agent/queue/:id/go',
+  'POST /agent/queue/:id/result',
   'POST /agent/run',
   'POST /applications',
+  'POST /applications/:id/answer',
   'POST /applications/:id/confirm',
   'POST /applications/:id/submitted',
   'POST /auth/login',
@@ -43,13 +54,18 @@ const ROUTES = [
   'POST /jobs/refresh',
   'POST /notifications/read',
   'POST /notifications/test',
+  'PUT /agent/authorisation',
+  'PUT /agent/pause',
   'PUT /applications/:id/statement',
   'PUT /notifications/preferences',
+  'PUT /operator/pause',
+  'PUT /operator/systems/:id',
   'PUT /passport',
   'PUT /profile',
+  'PUT /screening',
 ];
 /** Routes that carry no user data and take no user token. */
-const NOT_USER_SCOPED = ['GET /auth/versions', 'GET /health', 'GET /interview/questions', 'POST /auth/login', 'POST /auth/register', 'POST /employer/jobs'];
+const NOT_USER_SCOPED = ['GET /auth/versions', 'GET /health', 'GET /interview/questions', 'POST /auth/login', 'POST /auth/register', 'POST /employer/jobs', 'GET /operator/status', 'PUT /operator/pause', 'PUT /operator/systems/:id'];
 
 const B_ID = 'user-b';
 /** Fictional. A site manager, so B's matches differ from A's (a nurse). */
@@ -85,12 +101,14 @@ for (const backend of BACKENDS) {
       notifications: (await t.api.get('/notifications').expect(200)).body,
       preferences: (await t.api.get('/notifications/preferences').expect(200)).body,
       deliveries: (await t.api.get('/notifications/deliveries').expect(200)).body,
+      screening: (await t.api.get('/screening').expect(200)).body,
+      authorisation: (await t.api.get('/agent/authorisation').expect(200)).body,
     });
 
     beforeEach(async () => {
       const made = await backend.make();
       close = made.close;
-      t = await createTestApp({ repository: made.repository, usageMeter: made.usageMeter, persistence: backend.persistence, llm: scriptedLlm(), sources: [createSampleSource()], config: testConfig({ employerKey: 'employer-key-for-tests' }) });
+      t = await createTestApp({ repository: made.repository, usageMeter: made.usageMeter, persistence: backend.persistence, llm: scriptedLlm(), sources: [createSampleSource()], config: testConfig({ employerKey: 'employer-key-for-tests', operatorKey: 'operator-key-for-tests' }) });
       await t.api.put('/profile').send(PROFILE).expect(200);
       await t.api.put('/passport').send(PASSPORT).expect(200);
       await t.api.post('/jobs/refresh').expect(200);
@@ -140,7 +158,7 @@ for (const backend of BACKENDS) {
 
     it("POST /applications/:id/confirm and /submitted, PUT /applications/:id/statement: B cannot change A's application", async () => {
       await b.post(`/applications/${aApp.id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(404);
-      await b.post(`/applications/${aApp.id}/submitted`).expect(404);
+      await b.post(`/applications/${aApp.id}/submitted`).send(RECEIPT).expect(404);
       await b.put(`/applications/${aApp.id}/statement`).send({ statement: 'Overwritten by B.' }).expect(404);
       expect((await t.api.get(`/applications/${aApp.id}`).expect(200)).body).toEqual(aApp);
       expect((await t.deps.repository.listEvents(B_ID)).map((e) => e.type)).toEqual([]);
@@ -156,7 +174,7 @@ for (const backend of BACKENDS) {
       expect((await b.get('/applications').expect(200)).body.map((x: Application) => x.id)).toEqual([mine.id]);
       expect((await t.api.get('/applications').expect(200)).body.map((x: Application) => x.id)).toEqual([aApp.id]);
       await t.api.get(`/applications/${mine.id}`).expect(404);
-      await t.api.post(`/applications/${mine.id}/submitted`).expect(404);
+      await t.api.post(`/applications/${mine.id}/submitted`).send(RECEIPT).expect(404);
       // The scripted AI reply claims a nurse's 28 patients, which B's CV does not contain: held, not sent (TAI-3).
       expect((await b.get(`/applications/${mine.id}`).expect(200)).body).toMatchObject({ status: 'needs_you', holdReasons: ['trace-check'] });
     });
@@ -250,6 +268,34 @@ for (const backend of BACKENDS) {
       expect(preview.html).not.toContain(aApp.jobTitle);
     });
 
+    it("applying on A's behalf: B cannot read or change A's authorisation, screening answers or queue, and A's go is not B's", async () => {
+      await t.api.put('/screening').send({ noticePeriod: '4 weeks', custom: { 'Can you work weekends?': 'Yes (fictional)' } }).expect(200);
+      await t.api.put('/agent/authorisation').send({ enabled: true, scopeVersion: STANDING_SCOPE_VERSION }).expect(200);
+      expect((await b.get('/screening').expect(200)).body).toEqual({ custom: {} });
+      expect((await b.get('/agent/authorisation').expect(200)).body.enabled).toBe(false);
+      expect((await b.get('/agent/status').expect(200)).body).toMatchObject({ authorisation: { enabled: false }, queue: { ready: 0, needsYou: 0 } });
+      expect((await b.get('/agent/queue/next').expect(200)).body).toMatchObject({ wait: 'not-authorised' });
+      await b.put('/agent/authorisation').send({ enabled: false }).expect(200);
+      await b.put('/agent/pause').send({ paused: true }).expect(200);
+      expect((await t.api.get('/agent/authorisation').expect(200)).body).toMatchObject({ enabled: true, paused: false });
+      await b.post(`/agent/queue/${aApp.id}/go`).expect(404);
+      await b.post(`/agent/queue/${aApp.id}/result`).send({ outcome: 'held', reasons: ['captcha'] }).expect(404);
+      await b.post(`/applications/${aApp.id}/answer`).send({ question: 'Can you work nights?', answer: 'No' }).expect(404);
+      expect((await t.api.get(`/applications/${aApp.id}`).expect(200)).body).toEqual(aApp);
+      // A's stored answers are not B's.
+      expect(JSON.stringify((await b.get('/screening').expect(200)).body)).not.toContain('weekends');
+    });
+
+    it('the operator routes: only the operator key opens them, and it opens no user route', async () => {
+      await b.get('/operator/status').expect(401);
+      await t.api.put('/operator/pause').send({ paused: true }).expect(401);
+      const operator = t.as('operator-key-for-tests');
+      const status = (await operator.get('/operator/status').expect(200)).body;
+      expect(JSON.stringify(status)).not.toContain(USER_ID);
+      for (const path of ['/profile', '/screening', '/agent/status', '/applications', '/account']) await operator.get(path).expect(401);
+      await t.as('employer-key-for-tests').get('/operator/status').expect(401);
+    });
+
     it("after everything B can do on every route, A's data is exactly as it was", async () => {
       const before = await snapshotOfA();
       await b.put('/profile').send(B_PROFILE).expect(200);
@@ -260,9 +306,17 @@ for (const backend of BACKENDS) {
       for (const id of [aApp.id, `${aApp.id}%00`, '../' + aApp.id, 'id-1', '*']) {
         await b.get(`/applications/${encodeURIComponent(id)}`).expect((r) => expect([400, 404]).toContain(r.status));
         await b.post(`/applications/${encodeURIComponent(id)}/confirm`).send({ confirmedFields: ['x'] }).expect((r) => expect([400, 404]).toContain(r.status));
-        await b.post(`/applications/${encodeURIComponent(id)}/submitted`).expect((r) => expect([400, 404]).toContain(r.status));
+        await b.post(`/applications/${encodeURIComponent(id)}/submitted`).send(RECEIPT).expect((r) => expect([400, 404]).toContain(r.status));
         await b.put(`/applications/${encodeURIComponent(id)}/statement`).send({ statement: 'Overwritten by B.' }).expect((r) => expect([400, 404]).toContain(r.status));
+        await b.post(`/applications/${encodeURIComponent(id)}/answer`).send({ question: 'Can you work nights?', answer: 'No' }).expect((r) => expect([400, 404]).toContain(r.status));
+        await b.post(`/agent/queue/${encodeURIComponent(id)}/go`).expect((r) => expect([400, 404]).toContain(r.status));
+        await b.post(`/agent/queue/${encodeURIComponent(id)}/result`).send({ outcome: 'uncertain' }).expect((r) => expect([400, 404]).toContain(r.status));
       }
+      await b.put('/screening').send({ custom: { 'Can you work nights?': 'No' } }).expect(200);
+      await b.put('/agent/authorisation').send({ enabled: true, scopeVersion: STANDING_SCOPE_VERSION }).expect(200);
+      await b.put('/agent/pause').send({ paused: true }).expect(200);
+      await b.get('/agent/status').expect(200);
+      await b.get('/agent/queue/next').expect(200);
       await b.get('/usage').expect(200);
       await b.get('/notifications').expect(200);
       await b.post('/notifications/read').send({}).expect(200);

@@ -18,6 +18,10 @@ const IS_EMPLOYER = 'opennjob:employer';
  */
 export const EmployerRoute = () => SetMetadata(IS_EMPLOYER, true);
 
+const IS_OPERATOR = 'opennjob:operator';
+/** Opened by OPENNJOB_OPERATOR_KEY only. No user token opens it, and the operator key opens no user route. */
+export const OperatorRoute = () => SetMetadata(IS_OPERATOR, true);
+
 interface AuthedRequest {
   headers: Record<string, string | string[] | undefined>;
   ip?: string;
@@ -65,6 +69,13 @@ export class AccessTokenGuard implements CanActivate {
     if (this.reflector.getAllAndOverride<boolean>(IS_EMPLOYER, targets) === true) {
       const expected = this.deps.config.employerKey ?? '';
       if (!expected) throw new UnauthorizedException('OPENNJOB_EMPLOYER_KEY is not configured on the server');
+      if (!token || !timingSafeEqual(digest(token), digest(expected))) throw new UnauthorizedException('Missing or invalid bearer token');
+      return true;
+    }
+
+    if (this.reflector.getAllAndOverride<boolean>(IS_OPERATOR, targets) === true) {
+      const expected = this.deps.config.operatorKey ?? '';
+      if (!expected) throw new UnauthorizedException('OPENNJOB_OPERATOR_KEY is not configured on the server');
       if (!token || !timingSafeEqual(digest(token), digest(expected))) throw new UnauthorizedException('Missing or invalid bearer token');
       return true;
     }

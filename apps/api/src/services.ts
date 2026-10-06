@@ -29,7 +29,7 @@ import {
   zonedDayStart,
   nextZonedDayStart,
 } from '@opennjob/core';
-import type { Application, HealthcareRole, HoldReason, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory } from '@opennjob/core';
+import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory } from '@opennjob/core';
 import { DEPS, applyThresholdOf, limitsOf } from './deps';
 import type { OpennJobDeps } from './deps';
 import type {
@@ -42,6 +42,7 @@ import type {
   PassportInput,
   ProfileInput,
   StatementInput,
+  SubmittedInput,
 } from './schemas';
 
 /** zod leaves `undefined` on absent optional keys; drop them so stored objects are clean. */
@@ -52,6 +53,20 @@ function compact<T extends object>(value: T): T {
 export const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 const DAY_MS = 86_400_000;
+
+/** Adds and removes hold reasons, moving the status to needs_you and back to draft as they come and go. */
+export function withHolds(application: Application, add: string[], remove: (h: string) => boolean = () => false): Application {
+  const holds = [...new Set([...(application.holdReasons ?? []).filter((h) => !remove(h)), ...add])];
+  const held = holds.length > 0;
+  let status = application.status;
+  if (held && (status === 'draft' || status === 'confirmed')) status = 'needs_you';
+  if (!held && status === 'needs_you') status = 'draft';
+  const next: Application = { ...application, status };
+  if (held) next.holdReasons = holds;
+  else delete next.holdReasons;
+  return next;
+}
+
 
 @Injectable()
 export class OpennJobService {
@@ -277,18 +292,6 @@ export class OpennJobService {
     return failures.map(describeTraceFailure);
   }
 
-  private static withHolds(application: Application, add: HoldReason[], remove: HoldReason[] = []): Application {
-    const holds = [...new Set([...(application.holdReasons ?? []).filter((h) => !remove.includes(h as HoldReason)), ...add])];
-    const held = holds.length > 0;
-    let status = application.status;
-    if (held && (status === 'draft' || status === 'confirmed')) status = 'needs_you';
-    if (!held && status === 'needs_you') status = 'draft';
-    const next: Application = { ...application, status };
-    if (held) next.holdReasons = holds;
-    else delete next.holdReasons;
-    return next;
-  }
-
   /**
    * Drafts and stores one application. The caller has already checked eligibility and
    * duplicates. The statement and the tailored CV are traced to the source before the
@@ -300,7 +303,7 @@ export class OpennJobService {
     const draft = ceiling ? draftStatementFallback(input) : await draftStatement(input, this.llmFor(userId, 'supporting-statement'));
     const tailoredCv = tailorCv(profile.cvText, match);
     const traceFailures = OpennJobService.traceOf(draft.statement, tailoredCv, job, profile, passport);
-    const holds: HoldReason[] = [];
+    const holds: string[] = [];
     if (ceiling) holds.push('llm-ceiling');
     if (traceFailures.length > 0) holds.push('trace-check');
     const base: Application = {
@@ -323,7 +326,7 @@ export class OpennJobService {
       tailoredCv,
       ...(traceFailures.length > 0 ? { traceFailures } : {}),
     };
-    const application = OpennJobService.withHolds(base, holds);
+    const application = withHolds(base, holds);
     await this.deps.repository.createApplication(application);
     await this.emit(userId, 'application.drafted', { applicationId: application.id, jobId: job.id, mode: application.mode, statementSource: draft.source, score: match.score, gaps: draft.gaps.length, traceFailures: traceFailures.length, held: holds.length > 0 });
     if (ceiling) await this.emit(userId, 'agent.llm_ceiling', { applicationId: application.id });
@@ -344,7 +347,7 @@ export class OpennJobService {
   }
 
   /**
-   * APP-8: automatic submissions today (London) against the owner's daily limit. The
+   * APP-8: automatic submission attempts today (London) against the owner's daily limit. The
    * queue asks this before handing out the next application; at the limit it waits for
    * the next London day.
    */
@@ -352,7 +355,8 @@ export class OpennJobService {
     const now = this.deps.clock();
     const since = zonedDayStart(now).getTime();
     const limit = limitsOf(this.deps.config).dailyApplicationLimit;
-    const used = (await this.deps.repository.listApplications(userId)).filter((a) => a.automatic === true && a.submittedAt !== undefined && Date.parse(a.submittedAt) >= since).length;
+    // Every attempt counts, including one whose confirmation was never seen (uncertain).
+    const used = (await this.deps.repository.listApplications(userId)).filter((a) => a.automatic === true && a.attemptedAt !== undefined && Date.parse(a.attemptedAt) >= since).length;
     return { limit, used, remaining: Math.max(0, limit - used), resetsAt: nextZonedDayStart(now).toISOString() };
   }
 
@@ -440,7 +444,7 @@ export class OpennJobService {
     const edited: Application = { ...application, statement: input.statement };
     if (traceFailures.length > 0) edited.traceFailures = traceFailures;
     else delete edited.traceFailures;
-    const updated = traceFailures.length > 0 ? OpennJobService.withHolds(edited, ['trace-check']) : OpennJobService.withHolds(edited, [], ['trace-check']);
+    const updated = traceFailures.length > 0 ? withHolds(edited, ['trace-check']) : withHolds(edited, [], (h) => h === 'trace-check');
     await this.deps.repository.updateApplication(updated);
     await this.emit(userId, 'application.statement.edited', { applicationId: id, statementCharacters: input.statement.length });
     return updated;
@@ -452,10 +456,10 @@ export class OpennJobService {
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
     // Confirming is the person reading the documents and taking them as their own, so the
     // truth-check and AI-ceiling holds end here. The failures stay recorded on the application.
-    const updated: Application = OpennJobService.withHolds(
+    const updated: Application = withHolds(
       { ...application, status: 'confirmed', confirmedFields: [...new Set([...application.confirmedFields, ...input.confirmedFields])], confirmedAt: this.now() },
       [],
-      ['trace-check', 'llm-ceiling'],
+      (h) => h === 'trace-check' || h === 'llm-ceiling',
     );
     if (updated.status === 'draft') updated.status = 'confirmed';
     await this.deps.repository.updateApplication(updated);
@@ -464,16 +468,28 @@ export class OpennJobService {
   }
 
   /** Records that the form was submitted (by the user, or by the agent in auto mode on a form with no sensitive fields). */
-  async markSubmitted(userId: string, id: string): Promise<Application> {
+  async markSubmitted(userId: string, id: string, input: SubmittedInput): Promise<Application> {
     const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
+    return this.recordSubmission(application, { ...input, documentsSha256: {} }, false);
+  }
+
+  /**
+   * APP-7: an application becomes submitted only with a receipt: when, the page address,
+   * the site's own confirmation text, and the documents sent (TAI-6).
+   */
+  async recordSubmission(application: Application, input: { pageUrl: string; confirmationText: string; documentsSha256: Record<string, string> }, automatic: boolean): Promise<Application> {
+    const userId = application.userId;
+    const id = application.id;
     // TAI-6: the exact documents, as they stand at submission, kept with the application (encrypted at rest).
     const tailoredCv = application.tailoredCv ?? '';
     const sentDocuments = { statement: application.statement, tailoredCv, sha256: { statement: sha256(application.statement), tailoredCv: sha256(tailoredCv) } };
-    const updated: Application = { ...application, status: 'submitted', submittedAt: this.now(), sentDocuments };
+    const at = this.now();
+    const receipt = { at, pageUrl: input.pageUrl, confirmationText: input.confirmationText, documentsSha256: Object.keys(input.documentsSha256).length > 0 ? input.documentsSha256 : sentDocuments.sha256, automatic };
+    const updated: Application = { ...application, status: 'submitted', submittedAt: at, sentDocuments, receipt, ...(automatic ? { automatic: true } : {}) };
     delete updated.holdReasons;
     await this.deps.repository.updateApplication(updated);
-    await this.emit(userId, 'application.submitted', { applicationId: id, mode: application.mode, wasConfirmed: application.status === 'confirmed' });
+    await this.emit(userId, 'application.submitted', { applicationId: id, mode: application.mode, wasConfirmed: application.status === 'confirmed', automatic });
     return updated;
   }
 

@@ -6,6 +6,9 @@ import type { FetchLike } from '@opennjob/core';
 import { CV_TEXT, NOW, PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
+
 let t: TestApp;
 afterEach(async () => {
   await t?.app.close();
@@ -307,16 +310,22 @@ describe('applications', () => {
     await t.api.post(`/applications/${id}/confirm`).send({}).expect(400);
     await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: [] }).expect(400);
     await t.api.post('/applications/unknown/confirm').send({ confirmedFields: ['nmcPin'] }).expect(404);
-    await t.api.post('/applications/unknown/submitted').expect(404);
+    await t.api.post('/applications/unknown/submitted').send(RECEIPT).expect(404);
+    // APP-7: "submitted" needs the confirmation page's address and the site's own confirmation text.
+    await t.api.post(`/applications/${id}/submitted`).send({}).expect(400);
+    await t.api.post(`/applications/${id}/submitted`).send({ pageUrl: RECEIPT.pageUrl }).expect(400);
+    await t.api.post(`/applications/${id}/submitted`).send({ ...RECEIPT, confirmationText: '  ' }).expect(400);
+    await t.api.post(`/applications/${id}/submitted`).send({ ...RECEIPT, pageUrl: 'javascript:alert(1)' }).expect(400);
 
     const first = await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['nmcPin', 'rightToWork'] }).expect(200);
     expect(first.body).toMatchObject({ status: 'confirmed', confirmedFields: ['nmcPin', 'rightToWork'], confirmedAt: NOW });
     const second = await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['rightToWork', 'referee1.email'] }).expect(200);
     expect(second.body.confirmedFields).toEqual(['nmcPin', 'rightToWork', 'referee1.email']);
 
-    const done = await t.api.post(`/applications/${id}/submitted`).expect(200);
-    expect(done.body).toMatchObject({ status: 'submitted', submittedAt: NOW });
-    await t.api.post(`/applications/${id}/submitted`).expect(409);
+    const done = await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(200);
+    expect(done.body).toMatchObject({ status: 'submitted', submittedAt: NOW, receipt: { at: NOW, ...RECEIPT, automatic: false } });
+    expect(done.body.receipt.documentsSha256).toEqual(done.body.sentDocuments.sha256);
+    await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(409);
     await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['x'] }).expect(409);
 
     const one = await t.api.get(`/applications/${id}`).expect(200);
@@ -346,7 +355,7 @@ describe('applications', () => {
     expect(event?.payload).toEqual({ applicationId: id, statementCharacters: edited.length });
     expect(JSON.stringify(events)).not.toContain('SBAR');
 
-    await t.api.post(`/applications/${id}/submitted`).expect(200);
+    await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(200);
     await t.api.put(`/applications/${id}/statement`).send({ statement: 'changed after sending' }).expect(409);
     expect((await t.api.get(`/applications/${id}`).expect(200)).body.statement).toBe(edited);
   });
@@ -364,7 +373,7 @@ describe('applications', () => {
     await seeded({ llm: scriptedLlm() });
     const id = (await t.api.post('/applications').send({ jobId: NURSE_JOB }).expect(201)).body.id as string;
     await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(200);
-    await t.api.post(`/applications/${id}/submitted`).expect(200);
+    await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(200);
     const events = await t.deps.repository.listEvents('dev-user');
     expect(events.map((e) => e.type)).toEqual(['profile.updated', 'passport.updated', 'jobs.refreshed', 'application.drafted', 'application.confirmed', 'application.submitted']);
     expect(events[3]?.payload).toMatchObject({ applicationId: id, jobId: NURSE_JOB, mode: 'hybrid', statementSource: 'llm' });

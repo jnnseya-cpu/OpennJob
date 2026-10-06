@@ -240,6 +240,8 @@ export interface Application {
   dedupeKey?: string;
   /** Sent by the agent under standing authorisation. */
   automatic?: boolean;
+  /** When the queue was given the go to submit it (counts towards the daily limit). */
+  attemptedAt?: string;
   /** The tailored CV (TAI-2). Encrypted at rest. */
   tailoredCv?: string;
   /** Sentences of the tailored documents that could not be traced to the source (TAI-3). */

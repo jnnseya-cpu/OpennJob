@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import { AccountService } from './account.service';
-import { AuthRateLimitGuard, CurrentUser, EmployerRoute, Public } from './auth.guard';
+import { ApplyingService } from './applying.service';
+import { AuthRateLimitGuard, CurrentUser, EmployerRoute, OperatorRoute, Public } from './auth.guard';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
 import { OpennJobService } from './services';
@@ -20,7 +21,15 @@ import {
   profileSchema,
   questionQuerySchema,
   statementSchema,
+  applicationSystemSchema,
+  authorisationSchema,
+  pauseSchema,
+  questionAnswerSchema,
+  queueResultSchema,
+  screeningSchema,
+  submittedSchema,
 } from './schemas';
+import type { ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput } from './schemas';
 import type { DeleteAccountInput, LoginInput, RegisterInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
@@ -142,7 +151,50 @@ export class JobsController {
 
 @Controller('agent')
 export class AgentController {
-  constructor(@Inject(OpennJobService) private readonly service: OpennJobService) {}
+  constructor(
+    @Inject(OpennJobService) private readonly service: OpennJobService,
+    @Inject(ApplyingService) private readonly applying: ApplyingService,
+  ) {}
+
+  /** Standing authorisation (APP-2): the wording, whether it is on, since when. */
+  @Get('authorisation')
+  authorisation(@CurrentUser() userId: string) {
+    return this.applying.getAuthorisation(userId);
+  }
+
+  @Put('authorisation')
+  setAuthorisation(@CurrentUser() userId: string, @Body(new ZodPipe(authorisationSchema)) body: AuthorisationInput) {
+    return this.applying.setAuthorisation(userId, body);
+  }
+
+  /** The person's pause (APP-10). */
+  @Put('pause')
+  pause(@CurrentUser() userId: string, @Body(new ZodPipe(pauseSchema)) body: PauseInput) {
+    return this.applying.setPause(userId, body);
+  }
+
+  @Get('status')
+  status(@CurrentUser() userId: string) {
+    return this.applying.status(userId);
+  }
+
+  /** The queue in the person's browser (APP-3, OD-4). */
+  @Get('queue/next')
+  next(@CurrentUser() userId: string) {
+    return this.applying.next(userId);
+  }
+
+  @Post('queue/:id/go')
+  @HttpCode(200)
+  go(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.applying.go(userId, id);
+  }
+
+  @Post('queue/:id/result')
+  @HttpCode(200)
+  result(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(queueResultSchema)) body: QueueResultInput) {
+    return this.applying.result(userId, id, body);
+  }
 
   /** The 80% rule. Prepares drafts only; it never fills or submits a form. */
   @Post('run')
@@ -166,7 +218,10 @@ export class EmployerController {
 
 @Controller('applications')
 export class ApplicationsController {
-  constructor(@Inject(OpennJobService) private readonly service: OpennJobService) {}
+  constructor(
+    @Inject(OpennJobService) private readonly service: OpennJobService,
+    @Inject(ApplyingService) private readonly applying: ApplyingService,
+  ) {}
 
   @Post()
   create(@CurrentUser() userId: string, @Body(new ZodPipe(createApplicationSchema)) body: CreateApplicationInput) {
@@ -195,10 +250,58 @@ export class ApplicationsController {
     return this.service.confirmApplication(userId, id, body);
   }
 
+  /** "I have submitted it": needs the confirmation page's address and text (APP-7). */
   @Post(':id/submitted')
   @HttpCode(200)
-  submitted(@CurrentUser() userId: string, @Param('id') id: string) {
-    return this.service.markSubmitted(userId, id);
+  submitted(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(submittedSchema)) body: SubmittedInput) {
+    return this.service.markSubmitted(userId, id, body);
+  }
+
+  /** SCR-2: answer the question that held this application; the answer is kept for next time. */
+  @Post(':id/answer')
+  @HttpCode(200)
+  answer(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(questionAnswerSchema)) body: QuestionAnswerInput) {
+    return this.applying.answerQuestion(userId, id, body);
+  }
+}
+
+/** Ordinary screening answers, stored once and reused (SCR-1). Never declarations (SCR-3). */
+@Controller('screening')
+export class ScreeningController {
+  constructor(@Inject(ApplyingService) private readonly applying: ApplyingService) {}
+
+  @Get()
+  get(@CurrentUser() userId: string) {
+    return this.applying.getScreening(userId);
+  }
+
+  @Put()
+  save(@CurrentUser() userId: string, @Body(new ZodPipe(screeningSchema)) body: ScreeningInput) {
+    return this.applying.saveScreening(userId, body);
+  }
+}
+
+/** The operator's controls. Opened only by OPENNJOB_OPERATOR_KEY; they hold no user data. */
+@Controller('operator')
+export class OperatorController {
+  constructor(@Inject(ApplyingService) private readonly applying: ApplyingService) {}
+
+  @OperatorRoute()
+  @Get('status')
+  status() {
+    return this.applying.operatorStatus();
+  }
+
+  @OperatorRoute()
+  @Put('pause')
+  pause(@Body(new ZodPipe(pauseSchema)) body: PauseInput) {
+    return this.applying.setOperatorPause(body);
+  }
+
+  @OperatorRoute()
+  @Put('systems/:id')
+  system(@Param('id') id: string, @Body(new ZodPipe(applicationSystemSchema)) body: ApplicationSystemInput) {
+    return this.applying.setSystem(id, body);
   }
 }
 

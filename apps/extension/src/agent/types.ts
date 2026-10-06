@@ -50,6 +50,16 @@ export interface RunRequest {
   confirmedFieldIds: string[];
   /** true = report what would happen and mark sensitive fields, but write nothing and never submit. */
   dryRun?: boolean;
+  /**
+   * The person's own answers to other ordinary questions, keyed by screeningKey(question).
+   * Used only for fields that are NOT sensitive (SCR-3).
+   */
+  custom?: Record<string, string>;
+  /**
+   * The queue's two-step submit: fill, report whether the form may be submitted, and stop.
+   * The queue asks the API for the go, then sends OPENNJOB_SUBMIT.
+   */
+  holdSubmit?: boolean;
 }
 
 export interface RunReport {
@@ -59,6 +69,16 @@ export interface RunReport {
   dryRun: boolean;
   decision: PolicyDecision | null;
   submitted: boolean;
+  /** With holdSubmit: the policy allows submitting and there is exactly one submit button. */
+  readyToSubmit?: boolean;
+  /** File inputs (CV upload). The agent never sets a file, so a required one holds the form. */
+  fileInputs?: { required: number; total: number };
   fields: FieldReport[];
+  message: string;
+}
+
+/** The answer to OPENNJOB_SUBMIT. */
+export interface SubmitReport {
+  submitted: boolean;
   message: string;
 }

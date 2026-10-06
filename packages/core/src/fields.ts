@@ -57,6 +57,14 @@ export type FieldKey =
   | 'dbsIssueDate'
   | 'dbsUpdateService'
   | 'rightToWork'
+  // Ordinary screening questions, answered from the person's stored screening answers (SCR-1).
+  | 'noticePeriod'
+  | 'salaryExpectation'
+  | 'dayRate'
+  | 'yearsExperience'
+  | 'relocation'
+  | 'travel'
+  | 'drivingLicence'
   | `referee${1 | 2 | 3}.${'name' | 'email' | 'phone' | 'organisation' | 'relationship'}`;
 
 export interface FieldClassification {
@@ -198,6 +206,14 @@ function plainKey(own: string, d: FieldDescriptor): FieldKey | null {
   if (/address (line )?2|addr(ess)? ?2|compl[ée]ment d.adresse|adresse (ligne )?2/.test(own)) return 'addressLine2';
   if (/\btown\b|\bcity\b|\bville\b|\bcommune\b/.test(own)) return 'city';
   if (/address (line )?1|addr(ess)? ?1|street|house (number|name)|(^|\| )address( \||$)|home address|(^|\| )adresse( \||$)|adresse (postale|ligne 1|1)|\brue\b/.test(own)) return 'addressLine1';
+  // Ordinary screening questions (SCR-1). Only reached when nothing sensitive matched first.
+  if (/notice period|period of notice|pr[ée]avis/.test(own)) return 'noticePeriod';
+  if (/(expected|desired|target) (salary|pay)|salary expectations?|salary required|pr[ée]tentions? salariales?/.test(own)) return 'salaryExpectation';
+  if (/day rate|daily rate|taux journalier|tjm/.test(own)) return 'dayRate';
+  if (/years? (of )?(relevant )?experience|how many years|ann[ée]es d.exp[ée]rience/.test(own)) return 'yearsExperience';
+  if (/relocat|willing to move|d[ée]m[ée]nag|mobilit[ée] g[ée]ographique/.test(own)) return 'relocation';
+  if (/willing to travel|able to travel|travel (required|as required)|d[ée]placements?/.test(own)) return 'travel';
+  if (/driving licen[cs]e|driver.?s licen[cs]e|full (uk )?licen[cs]e|permis de conduire/.test(own)) return 'drivingLicence';
   // Languages spoken: an ordinary field, filled from the passport's "Languages" line or the selected languages.
   if (/\blanguages?( you)? (spoken|speak)|(^|\| )languages( \||$)|langues? parl[ée]es?|(^|\| )langues( \||$)/.test(own)) return 'languages';
   return null;

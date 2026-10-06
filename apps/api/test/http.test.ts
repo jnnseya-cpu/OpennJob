@@ -4,6 +4,9 @@ import { memoryLogger } from '../src/logging';
 import { CV_TEXT, PASSPORT, PROFILE, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
+
 let t: TestApp;
 afterEach(async () => {
   await t?.app.close();
@@ -120,7 +123,7 @@ describe('structured request logging', () => {
     await t.api.get(`/applications/${application.id}`).expect(200);
     await t.api.put(`/applications/${application.id}/statement`).send({ statement: 'My edited statement about medication rounds and SBAR handovers.' }).expect(200);
     await t.api.post(`/applications/${application.id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(200);
-    await t.api.post(`/applications/${application.id}/submitted`).expect(200);
+    await t.api.post(`/applications/${application.id}/submitted`).send(RECEIPT).expect(200);
     await t.api.post('/interview/feedback').send({ question: 'Tell me about a time you escalated a concern.', answer: 'A patient deteriorated and I escalated using NEWS2 and SBAR.' }).expect(200);
     await t.api.get('/usage').expect(200);
     await t.api.get('/account/export').expect(200);

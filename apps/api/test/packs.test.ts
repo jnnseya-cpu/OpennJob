@@ -6,6 +6,9 @@ import type { OpennJobDeps } from '../src/deps';
 import { PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
+
 let t: TestApp;
 afterEach(async () => {
   await t?.app.close();
@@ -444,7 +447,7 @@ describe('POST /employer/jobs: optional, never required', () => {
     expect((await t.api.post('/agent/run').send({}).expect(200)).body.prepared).toHaveLength(4);
     const application = (await t.api.post('/applications').send({ jobId: 'sample:c4', mode: 'review' }).expect(201)).body;
     await t.api.post(`/applications/${application.id}/confirm`).send({ confirmedFields: ['rightToWork'] }).expect(200);
-    await t.api.post(`/applications/${application.id}/submitted`).expect(200);
+    await t.api.post(`/applications/${application.id}/submitted`).send(RECEIPT).expect(200);
     await t.api.get('/interview/questions?pack=con').expect(200);
     // The route is closed, not broken, when no key is configured: the user's token does not open it either.
     const closed = await employerPost(EMPLOYER_JOB, TOKEN).expect(401);

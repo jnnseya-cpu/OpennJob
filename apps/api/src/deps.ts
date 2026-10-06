@@ -65,6 +65,13 @@ export interface OpennJobConfig {
    * route is closed. Employer posting is optional; nothing else depends on it.
    */
   employerKey?: string;
+  /**
+   * Bearer key for the operator routes (OPENNJOB_OPERATOR_KEY): pause the agent for
+   * everyone, enable an application system after its supervised test. Absent = closed.
+   */
+  operatorKey?: string;
+  /** NODE_ENV=production. Test-only application systems cannot be enabled then. */
+  production?: boolean;
   /** APP-6: an application to the same employer, title and location within this many days is a duplicate (OPENNJOB_DUPLICATE_DAYS, default 30). */
   duplicateDays?: number;
   /** APP-8: automatic submissions per person per London day (OPENNJOB_DAILY_APPLICATION_LIMIT, default 20). */
@@ -184,6 +191,9 @@ export function loadConfig(env: Env): OpennJobConfig {
   config.dailyApplicationLimit = int(env.OPENNJOB_DAILY_APPLICATION_LIMIT, DEFAULT_DAILY_APPLICATION_LIMIT, 0, 1000);
   config.llmDailyAcuPerUser = int(env.OPENNJOB_LLM_DAILY_ACU_PER_USER, DEFAULT_LLM_DAILY_ACU_PER_USER, 0, 1_000_000);
   config.llmDailyAcuTotal = int(env.OPENNJOB_LLM_DAILY_ACU_TOTAL, DEFAULT_LLM_DAILY_ACU_TOTAL, 0, 100_000_000);
+  const operatorKey = (env.OPENNJOB_OPERATOR_KEY ?? '').trim();
+  if (operatorKey) config.operatorKey = operatorKey;
+  if (isProduction(env)) config.production = true;
   const employerKey = (env.OPENNJOB_EMPLOYER_KEY ?? '').trim();
   if (employerKey) config.employerKey = employerKey;
   return config;

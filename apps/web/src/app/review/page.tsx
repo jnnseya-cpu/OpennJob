@@ -24,6 +24,9 @@ function Review() {
   const [app, setApp] = useState<Application>();
   const [loaded, setLoaded] = useState(false);
   const [statement, setStatement] = useState('');
+  // APP-7: "I have submitted it" records the site's confirmation page and what it said.
+  const [receiptUrl, setReceiptUrl] = useState('');
+  const [receiptText, setReceiptText] = useState('');
   // Nothing here starts ticked, except what this user already confirmed and the API recorded.
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
@@ -114,7 +117,7 @@ function Review() {
     setBusy(true);
     setError('');
     try {
-      showApp(await api<Application>(`/applications/${encodeURIComponent(app.id)}/submitted`, { method: 'POST' }));
+      showApp(await api<Application>(`/applications/${encodeURIComponent(app.id)}/submitted`, { method: 'POST', body: { pageUrl: receiptUrl.trim(), confirmationText: receiptText.trim() } }));
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -311,10 +314,19 @@ function Review() {
                 <a className="btn" href={app.applyUrl} target="_blank" rel="noopener noreferrer">
                   Open the employer’s form
                 </a>
-                <button className="btn primary" type="button" onClick={markSubmitted} disabled={busy}>
-                  I have submitted it
-                </button>
               </div>
+              <label className="label" htmlFor="receipt-url">
+                Address of the confirmation page
+              </label>
+              <input id="receipt-url" type="url" inputMode="url" placeholder="https://" value={receiptUrl} onChange={(e) => setReceiptUrl(e.target.value)} />
+              <label className="label" htmlFor="receipt-text">
+                What the site said when you submitted
+              </label>
+              <textarea id="receipt-text" rows={2} value={receiptText} onChange={(e) => setReceiptText(e.target.value)} />
+              <button className="btn primary" type="button" onClick={markSubmitted} disabled={busy || !/^https?:\/\/\S+/.test(receiptUrl.trim()) || receiptText.trim().length < 3}>
+                I have submitted it
+              </button>
+              <p className="small muted">OpennJob records an application as sent only with the site’s own confirmation.</p>
             </section>
           ) : null}
 

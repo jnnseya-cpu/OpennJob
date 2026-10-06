@@ -171,7 +171,10 @@ as needing explicit sign-off from the owner.
   pre-ticks a declaration and offers no "tick all" for them. A new API call goes through
   `src/lib/api.ts`. Imports from core only via `@core/web` (`packages/core/src/web.ts`).
 - Extension: page-derived text goes into the popup with `textContent` only. Permissions
-  stay at `activeTab`, `scripting`, `storage`.
+  stay at `activeTab`, `scripting`, `storage`. The one addition (owner decision OD-4,
+  6 October 2026) is `optional_host_permissions: ["https://*/*"]` for the queue: it is
+  requested one site at a time, only when the person presses "Allow OpennJob on <site>".
+  No host permission is granted at install.
 - Plain British English in docs and messages. No marketing language.
 - Commits: one logical change, imperative subject. Do not push unless asked.
 

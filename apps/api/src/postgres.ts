@@ -239,13 +239,14 @@ export class PostgresRepository implements Repository {
     ];
   }
 
-  /** The tailored CV, trace failures, sent documents and receipt: one encrypted value. */
+  /** The tailored CV, trace failures, sent documents, receipt and attempt time: one encrypted value. */
   private privateDataOf(a: Application): string | null {
     const p: Partial<Application> = {};
     if (a.tailoredCv !== undefined) p.tailoredCv = a.tailoredCv;
     if (a.traceFailures !== undefined) p.traceFailures = a.traceFailures;
     if (a.sentDocuments !== undefined) p.sentDocuments = a.sentDocuments;
     if (a.receipt !== undefined) p.receipt = a.receipt;
+    if (a.attemptedAt !== undefined) p.attemptedAt = a.attemptedAt;
     return Object.keys(p).length ? this.cipher.encrypt(JSON.stringify(p), `application.private:${a.userId}:${a.id}`) : null;
   }
 

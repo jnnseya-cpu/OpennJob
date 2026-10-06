@@ -8,6 +8,9 @@ import { OpennJobService } from '../src/services';
 import { JWT_SECRET, NOW, PASSPORT, PROFILE, USER_ID, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
+
 /**
  * The spec's required cases for drafting and duplicates (OpennJob Build and Test
  * Requirements, section 7.2): T-01, T-05 (API level), T-06, T-10, T-12, T-21.
@@ -130,7 +133,7 @@ describe('spec T-06: the stored documents are byte-identical to what was sent', 
     const statement = 'Wrote and reviewed care plans and kept accurate records.\r\nCompleted medication rounds for 28 patients and acted as second checker for controlled drugs.  ';
     await t.api.put(`/applications/${app.id}/statement`).send({ statement }).expect(200);
     const before = (await t.api.get(`/applications/${app.id}`).expect(200)).body as Application;
-    const sent = (await t.api.post(`/applications/${app.id}/submitted`).expect(200)).body as Application;
+    const sent = (await t.api.post(`/applications/${app.id}/submitted`).send(RECEIPT).expect(200)).body as Application;
 
     expect(sent.sentDocuments).toEqual({
       statement: before.statement,
@@ -217,7 +220,7 @@ describe('spec T-12: the daily limit', () => {
     await seeded({ clock: clock.clock, config: testConfig({ employerKey: EMPLOYER_KEY, dailyApplicationLimit: 2 }) });
     const service = t.app.get(OpennJobService);
     const base = (await t.api.post('/applications').send({ jobId: NURSE_JOB, mode: 'auto' }).expect(201)).body as Application;
-    const sentAt = async (id: string, at: string, automatic: boolean) => t.deps.repository.createApplication({ ...base, id, jobId: `${base.jobId}-${id}`, status: 'submitted', submittedAt: at, automatic });
+    const sentAt = async (id: string, at: string, automatic: boolean) => t.deps.repository.createApplication({ ...base, id, jobId: `${base.jobId}-${id}`, status: 'submitted', submittedAt: at, attemptedAt: automatic ? at : undefined, automatic });
 
     await sentAt('x1', '2026-07-15T08:00:00.000Z', true);
     await sentAt('x2', '2026-07-14T22:30:00.000Z', true); // 23:30 on the 14th in London: yesterday

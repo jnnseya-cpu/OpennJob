@@ -7,3 +7,4 @@ export type { Mode, Profile, Passport, Referee, TrainingRecord, DbsDetails, Appl
 export { MODES } from './types';
 export * from './policy';
 export * from './fields';
+export { screeningKey } from './screening';

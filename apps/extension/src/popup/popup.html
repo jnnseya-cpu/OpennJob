@@ -60,6 +60,16 @@
 
     <button id="mark-submitted" type="button" class="secondary" hidden>I have submitted this application</button>
 
+    <section id="queue" aria-label="Queue" hidden>
+      <h2>Queue</h2>
+      <p id="queue-status" class="help"></p>
+      <div class="actions">
+        <button id="queue-start" type="button">Start the queue</button>
+        <button id="allow-site" type="button" class="secondary" hidden>Allow</button>
+      </div>
+      <p class="help">The queue sends only forms with no declaration and no sensitive question, under the standing authorisation you gave in OpennJob. Everything else waits for you.</p>
+    </section>
+
     <script src="popup.js"></script>
   </body>
 </html>

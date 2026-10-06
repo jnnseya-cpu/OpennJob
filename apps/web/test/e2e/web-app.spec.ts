@@ -300,9 +300,16 @@ test('review: requirements with evidence, editable statement, every declaration 
   expect(confirmed.status).toBe('confirmed');
   expect(confirmed.confirmedFields.sort()).toEqual(['declaration:conv', 'declaration:dbs', 'declaration:declare', 'declaration:rtw', 'statement']);
 
-  await page.getByRole('button', { name: 'I have submitted it' }).click();
+  // APP-7: recorded as sent only with the site's confirmation page and text.
+  const sentButton = page.getByRole('button', { name: 'I have submitted it' });
+  await expect(sentButton).toBeDisabled();
+  await page.getByLabel('Address of the confirmation page').fill('https://example.org/jobs/hca-elderly-care/thanks');
+  await expect(sentButton).toBeDisabled();
+  await page.getByLabel('What the site said when you submitted').fill('Thank you, your application has been received. (fictional)');
+  await sentButton.click();
   await expect(page.getByText('You recorded this application as sent')).toBeVisible();
-  expect((await call<{ status: string }>('GET', `/applications/${draft?.id}`)).status).toBe('submitted');
+  const sent = await call<{ status: string; receipt: { pageUrl: string; confirmationText: string; automatic: boolean } }>('GET', `/applications/${draft?.id}`);
+  expect(sent).toMatchObject({ status: 'submitted', receipt: { pageUrl: 'https://example.org/jobs/hca-elderly-care/thanks', confirmationText: 'Thank you, your application has been received. (fictional)', automatic: false } });
   await noSideScroll();
 });
 

@@ -1,9 +1,9 @@
-import { decide, fieldsAllowedToFill, maySubmit } from '@opennjob/core/browser';
+import { decide, fieldsAllowedToFill, maySubmit, screeningKey } from '@opennjob/core/browser';
 import type { FillValue, PolicyField } from '@opennjob/core/browser';
 import { blockerMessage, detectBlockers } from './blockers';
 import { fillField } from './fill';
 import { hasValue, scanFields } from './scan';
-import type { DetectedField, FieldReport, FieldState, RunReport, RunRequest } from './types';
+import type { DetectedField, FieldReport, FieldState, RunReport, RunRequest, SubmitReport } from './types';
 
 const SENSITIVE_OUTLINE = '3px solid #b45309';
 
@@ -60,7 +60,8 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
   const allowed = new Set(fieldsAllowedToFill({ mode: request.mode, fields: toPolicy(), confirmedFieldIds }));
 
   const reports: FieldReport[] = fields.map((field) => {
-    const value = field.key ? request.values[field.key] : undefined;
+    // A stored custom answer is only ever looked at for a field that is not sensitive (SCR-3).
+    const value = field.key ? request.values[field.key] : !field.sensitive && request.custom ? request.custom[screeningKey(field.label)] : undefined;
     let state: FieldState;
     let reason: string | undefined;
 
@@ -97,8 +98,15 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
   let submitted = false;
   let message: string;
 
+  const fileInputs = countFileInputs(doc);
+  let readyToSubmit: boolean | undefined;
+
   if (dryRun) {
     message = 'Preview only. Nothing has been filled.';
+  } else if (request.holdSubmit) {
+    // The queue: never submits here. It reports, asks the API for the go, then sends OPENNJOB_SUBMIT.
+    readyToSubmit = maySubmit(decision) && request.mode === 'auto' && !fields.some((f) => f.sensitive) && fileInputs.required === 0 && findSubmitControl(fields) !== null;
+    message = readyToSubmit ? 'Filled. Waiting for the go to submit.' : 'Filled as far as allowed. This form waits for you.';
   } else if (maySubmit(decision) && request.mode === 'auto' && !fields.some((f) => f.sensitive)) {
     // The second and third conditions repeat what the policy already guarantees. Deliberate belt and braces.
     const control = findSubmitControl(fields);
@@ -121,5 +129,28 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
         : 'Filled. Check every field, then press submit on the page yourself. OpennJob never presses submit in this mode.';
   }
 
-  return { ...base, status: 'ok', blockers: [], decision, submitted, fields: reports, message };
+  return { ...base, status: 'ok', blockers: [], decision, submitted, fields: reports, message, fileInputs, ...(readyToSubmit !== undefined ? { readyToSubmit } : {}) };
+}
+
+function countFileInputs(doc: Document): { required: number; total: number } {
+  const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="file"]'));
+  return { required: inputs.filter((i) => i.required || i.getAttribute('aria-required') === 'true').length, total: inputs.length };
+}
+
+/**
+ * The queue's second step, after the API gave the go. Everything is checked again on the
+ * page as it is now: no blocker, no sensitive field, every required field filled, no
+ * required file, exactly one submit button. Only then is submit pressed. Auto mode only;
+ * the same policy function as every other path (packages/core/src/policy.ts).
+ */
+export function submitNow(doc: Document): SubmitReport {
+  if (detectBlockers(doc).length > 0) return { submitted: false, message: 'A CAPTCHA or sign-in appeared. Not submitted.' };
+  const fields = scanFields(doc);
+  const policyFields: PolicyField[] = fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f) }));
+  const decision = decide({ mode: 'auto', fields: policyFields, confirmedFieldIds: [] });
+  if (!maySubmit(decision) || fields.some((f) => f.sensitive) || countFileInputs(doc).required > 0) return { submitted: false, message: 'The form changed and now waits for you. Not submitted.' };
+  const control = findSubmitControl(fields);
+  if (!control) return { submitted: false, message: 'No single submit button. Not submitted.' };
+  control.click();
+  return { submitted: true, message: 'Submitted.' };
 }
