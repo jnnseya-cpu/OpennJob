@@ -36,3 +36,7 @@ career-agent/.venv/
 /.env.production
 /.auto-update.lock
 /.auto-update.rejected
+
+# Research notes and reports written during sessions (not part of the product)
+/research_notes/
+/reports/
