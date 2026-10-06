@@ -9,6 +9,18 @@ nightly database backup.
 written (no Docker daemon). `docker compose config` validates the file. Follow each step and check
 its result; report anything that differs.
 
+## Quick path: one command
+
+On a fresh Ubuntu 24.04 VPS, as root, after the domain's A record points at the server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jnnseya-cpu/OpennJob/claude/busy-fermat-9hhn11/deploy/install-hostinger.sh -o install.sh
+bash install.sh
+```
+
+It asks for the domain, a certificate e-mail and the invited address(es), then does steps 2 (firewall
+only, not SSH settings), 3, 4 and 5 below. Written and syntax-checked; not yet run on a real server.
+
 ## 1. Server and domain
 
 - A Hostinger **KVM VPS** with Ubuntu 24.04. 2 vCPU / 8 GB (KVM 2) is a comfortable start; KVM 1

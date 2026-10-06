@@ -58,6 +58,10 @@ services:
       OPENNJOB_EMAIL_FROM: ${OPENNJOB_EMAIL_FROM:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENNJOB_MODEL: ${OPENNJOB_MODEL:-}
+      # Daily jobs on London time: 06:00 discovery, 09:00 report, 03:00 retention (if set).
+      OPENNJOB_SCHEDULER: ${OPENNJOB_SCHEDULER:-true}
+      OPENNJOB_OPERATOR_EMAIL: ${OPENNJOB_OPERATOR_EMAIL:-}
+      OPENNJOB_RETENTION_DAYS: ${OPENNJOB_RETENTION_DAYS:-}
     expose:
       - "8080"
     depends_on:
