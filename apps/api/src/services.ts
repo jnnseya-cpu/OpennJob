@@ -6,6 +6,7 @@ import {
   collectJobs,
   credentialLabel,
   dedupeKey,
+  recruiterEmailIn,
   describeTraceFailure,
   draftStatement,
   draftStatementFallback,
@@ -262,6 +263,8 @@ export class OpennJobService {
       eligible: match.eligible,
       missingCredential: match.missingCredential,
       unmetEssential: match.unmetEssential,
+      // The advert names a recruiter's e-mail address: the application can be sent by e-mail (no form).
+      emailApply: recruiterEmailIn(job.description) !== undefined,
       // The job title checked against the CV: otherField means the CV does not show this kind of post.
       ...(match.role && !match.role.fits ? { otherField: { role: match.role.role, missing: match.role.missing } } : {}),
       hits: match.hits.map((h) => ({ label: h.criterion.label, essential: h.criterion.essential, matched: h.matched, evidence: h.evidence, statedLanguage: h.statedLanguage })),

@@ -5,8 +5,12 @@ import {
   EMPTY_SCREENING,
   STANDING_SCOPE_TEXT,
   STANDING_SCOPE_VERSION,
+  applicationEmail,
   applicationSystemFor,
   buildFillValues,
+  cvPdf,
+  escapeHtml,
+  recruiterEmailIn,
   customAnswers,
   inferPlace,
   screeningFillValues,
@@ -188,6 +192,64 @@ export class ApplyingService {
       ...(block ? { wait: block.wait, message: WAIT_MESSAGE[block.wait], ...(block.resetsAt ? { resetsAt: block.resetsAt } : {}) } : {}),
       systems: (await this.systems()).map((s) => ({ id: s.id, label: s.label, enabled: s.enabled })),
     };
+  }
+
+  /**
+   * Applications by e-mail, under standing authorisation (wording od5-email): for every queued
+   * auto-mode application whose advert gives a recruiter's e-mail address, the tailored CV (as a
+   * PDF) and the statement are e-mailed there in the person's name, with replies to their own
+   * address. The same checks as the queue come first and are made again before each message:
+   * authorisation, verified address, pauses, the daily limit. Each application is claimed once,
+   * so a message is never sent twice. A message the mail server did not accept is held for the
+   * person, never retried. No form is involved, so no declaration is answered.
+   */
+  async sendByEmail(userId: string): Promise<{ sent: number; failed: number; wait?: QueueWait }> {
+    const sender = this.deps.emailSender;
+    let sent = 0;
+    let failed = 0;
+    if (!sender?.live) return { sent, failed };
+    const first = await this.blocked(userId);
+    if (first) return { sent, failed, wait: first.wait };
+    const candidates = (await this.deps.repository.listApplications(userId)).filter(ApplyingService.queueable).sort((x, y) => y.score - x.score || x.createdAt.localeCompare(y.createdAt));
+    for (const candidate of candidates) {
+      const block = await this.blocked(userId);
+      if (block) return { sent, failed, wait: block.wait };
+      const job = await this.deps.repository.getJob(candidate.jobId);
+      const to = job ? recruiterEmailIn(job.description) : undefined;
+      if (!job || !to) continue;
+      // Read again just before sending: the person may have edited, paused or approved it meanwhile.
+      const application = await this.deps.repository.getApplication(userId, candidate.id);
+      if (!application || !ApplyingService.queueable(application)) continue;
+      if (!(await this.deps.repository.claimOnce(`submit:${userId}:${application.id}`, this.now()))) continue;
+      const attempted: Application = { ...application, automatic: true, attemptedAt: this.now() };
+      await this.deps.repository.updateApplication(attempted);
+      await this.emit(userId, 'agent.submitting', { applicationId: application.id, channel: 'email' });
+
+      const profile = await this.service.getProfile(userId);
+      const message = applicationEmail(job, profile, application.statement);
+      const outcome = await sender.send({
+        to,
+        subject: message.subject,
+        text: message.text,
+        html: `<pre style="font-family:inherit;white-space:pre-wrap">${escapeHtml(message.text)}</pre>`,
+        fromName: `${profile.firstName} ${profile.lastName}`.trim(),
+        replyTo: profile.email,
+        attachments: [{ filename: message.cvFileName, content: cvPdf(application.tailoredCv || profile.cvText), contentType: 'application/pdf' }],
+      });
+      if (outcome === 'sent') {
+        await this.service.recordSubmission(
+          attempted,
+          { pageUrl: `mailto:${to}`, confirmationText: `E-mailed to ${to}: accepted by the mail server for delivery. Replies go to your own e-mail address.`, documentsSha256: {} },
+          true,
+        );
+        sent += 1;
+      } else {
+        await this.deps.repository.updateApplication(withHolds(attempted, ['email-not-sent']));
+        await this.emit(userId, 'application.needs_you', { applicationId: application.id, reasons: 1 });
+        failed += 1;
+      }
+    }
+    return { sent, failed };
   }
 
   /** The next application for the extension to work on, with everything it may fill. */

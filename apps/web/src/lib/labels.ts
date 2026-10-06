@@ -17,6 +17,7 @@ export const HOLD_LABEL: Record<string, string> = {
   'trace-check': 'A sentence in the documents could not be traced to your CV. Read it and correct it.',
   'llm-ceiling': 'The daily AI spending limit was reached, so this was drafted without AI. Read it before use.',
   'daily-limit': "Today's application limit was reached. It goes out tomorrow.",
+  'email-not-sent': 'The e-mail to the recruiter was not accepted by the mail server. It is not retried: send it yourself or open the advert.',
 };
 
 export function placeOf(job: { city?: string; country?: string; location: string }): string {

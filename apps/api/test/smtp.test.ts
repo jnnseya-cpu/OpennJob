@@ -88,6 +88,19 @@ describe('smtpEmail: sending through a mailbox over SMTP', () => {
     expect(raw).toContain('text/html');
   });
 
+  it('an application by e-mail: the applicant as display name, replies to the applicant, the CV attached', async () => {
+    const { port, got } = await start({ secure: true });
+    const sender = smtpEmail({ host: '127.0.0.1', port, user: USER, password: PASSWORD, from: FROM, secure: true, allowSelfSignedForTests: true });
+    const pdf = new TextEncoder().encode('%PDF-1.4\n%%EOF\n');
+    expect(await sender.send({ ...message, fromName: 'Kemi Adebayo', replyTo: TO, attachments: [{ filename: 'Kemi_Adebayo_CV.pdf', content: pdf, contentType: 'application/pdf' }] })).toBe('sent');
+    expect(got.mailFrom).toEqual([USER]); // still sent from the configured mailbox
+    const raw = got.raw[0] ?? '';
+    expect(raw).toMatch(/^From: Kemi Adebayo <support@example\.org>/m);
+    expect(raw).toMatch(/^Reply-To: kemi\.adebayo@example\.org/m);
+    expect(raw).toContain('filename=Kemi_Adebayo_CV.pdf');
+    expect(raw).toContain('application/pdf');
+  });
+
   it('port 587 style: upgrades with STARTTLS before logging in', async () => {
     const { port, got } = await start({ secure: false });
     const sender = smtpEmail({ host: '127.0.0.1', port, user: USER, password: PASSWORD, from: FROM, secure: false, allowSelfSignedForTests: true });

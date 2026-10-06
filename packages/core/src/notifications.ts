@@ -160,7 +160,7 @@ export function routeChannels(event: NotificationEventDef, prefs: NotificationPr
   return { send, skipped: event.channels.filter((c) => !send.includes(c)) };
 }
 
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 
 export interface Brand {
   name: string;

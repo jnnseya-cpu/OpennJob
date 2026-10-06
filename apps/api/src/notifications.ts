@@ -19,12 +19,27 @@ import type { OpennJobDeps } from './deps';
  * caused it. The log line carries the event key, channel and status only.
  */
 
+export interface EmailAttachment {
+  filename: string;
+  content: Uint8Array;
+  contentType: string;
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
   html: string;
+  /** Applications by e-mail: the sender's display name ("Sam Example via OpennJob"); the address stays the configured one. */
+  fromName?: string;
+  /** Applications by e-mail: replies go to the applicant, not to OpennJob. */
+  replyTo?: string;
+  attachments?: EmailAttachment[];
 }
+
+/** "OpennJob <support@example.org>" -> "support@example.org". */
+export const addressOf = (from: string): string => /<([^>]+)>/.exec(from)?.[1]?.trim() ?? from.trim();
+const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64');
 
 export interface EmailSender {
   readonly name: string;
@@ -49,7 +64,8 @@ export function fileMailbox(dir: string): EmailSender {
       const { join } = await import('node:path');
       const { randomUUID } = await import('node:crypto');
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, `${Date.now()}-${randomUUID()}.json`), JSON.stringify(m), { mode: 0o600 });
+      const stored = { ...m, ...(m.attachments ? { attachments: m.attachments.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: base64(a.content) })) } : {}) };
+      writeFileSync(join(dir, `${Date.now()}-${randomUUID()}.json`), JSON.stringify(stored), { mode: 0o600 });
       return 'sent';
     },
   };
@@ -69,7 +85,15 @@ export function resendEmail(apiKey: string, from: string, fetchFn: PostFn = (url
       const res = await fetchFn('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to: [m.to], subject: m.subject, text: m.text, html: m.html }),
+        body: JSON.stringify({
+          from: m.fromName ? `${m.fromName.replace(/[<>"]/g, '')} <${addressOf(from)}>` : from,
+          to: [m.to],
+          subject: m.subject,
+          text: m.text,
+          html: m.html,
+          ...(m.replyTo ? { reply_to: m.replyTo } : {}),
+          ...(m.attachments?.length ? { attachments: m.attachments.map((a) => ({ filename: a.filename, content: base64(a.content) })) } : {}),
+        }),
       });
       return res.ok ? 'sent' : 'failed';
     },
@@ -112,7 +136,15 @@ export function smtpEmail(settings: SmtpSettings): EmailSender {
     live: true,
     async send(m) {
       try {
-        await transport.sendMail({ from: settings.from, to: m.to, subject: m.subject, text: m.text, html: m.html });
+        await transport.sendMail({
+          from: m.fromName ? { name: m.fromName, address: addressOf(settings.from) } : settings.from,
+          to: m.to,
+          subject: m.subject,
+          text: m.text,
+          html: m.html,
+          ...(m.replyTo ? { replyTo: m.replyTo } : {}),
+          ...(m.attachments?.length ? { attachments: m.attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType })) } : {}),
+        });
         return 'sent';
       } catch {
         return 'failed';

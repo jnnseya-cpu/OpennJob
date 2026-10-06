@@ -255,11 +255,17 @@ export class AgentController {
     return this.applying.result(userId, id, body);
   }
 
-  /** The 80% rule. Prepares drafts only; it never fills or submits a form. */
+  /**
+   * The 80% rule: prepares drafts; it never fills or submits a form. In auto mode it then sends,
+   * by e-mail, the applications whose advert names a recruiter's address, but only under standing
+   * authorisation and the same checks as the queue (ApplyingService.sendByEmail).
+   */
   @Post('run')
   @HttpCode(200)
-  run(@CurrentUser() userId: string, @Body(new ZodPipe(agentRunSchema)) body: AgentRunInput) {
-    return this.service.runAgent(userId, body);
+  async run(@CurrentUser() userId: string, @Body(new ZodPipe(agentRunSchema)) body: AgentRunInput) {
+    const result = await this.service.runAgent(userId, body);
+    if (body.mode !== 'auto') return result;
+    return { ...result, emailed: await this.applying.sendByEmail(userId) };
   }
 }
 

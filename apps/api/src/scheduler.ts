@@ -95,6 +95,8 @@ export class Scheduler implements OnApplicationShutdown {
       try {
         const auth = await this.applying.getAuthorisation(userId);
         await this.service.runAgent(userId, { mode: auth.enabled ? 'auto' : 'hybrid' });
+        // Applications by e-mail go out under the same authorisation and checks as the queue.
+        if (auth.enabled) await this.applying.sendByEmail(userId);
       } catch (err) {
         await this.alert(`agent-run:${userId}`, 'Agent run failed', `The daily agent run failed for one account: ${err instanceof Error ? err.name : 'Error'}.`);
       }

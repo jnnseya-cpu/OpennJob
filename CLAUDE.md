@@ -140,6 +140,12 @@ hold them, whatever a task seems to ask. If a request conflicts with one, stop a
    OD-5 a right-to-work or sponsorship field answered from a valid record
    (`fromWorkRights` in `policy.ts`) does not count as stopping auto mode; any other
    sensitive field still does. Review mode still asks for it.
+   **Applications by e-mail** (owner request, 6 October 2026): when an advert names a
+   recruiter's e-mail address, `ApplyingService.sendByEmail` may e-mail the tailored CV (PDF)
+   and the statement there, in the person's name, replies to them. Only in auto mode, under
+   standing authorisation whose wording names this route, with a verified address, no pause
+   and within the daily limit; each application is claimed once and a refused message is held,
+   never retried. No form is involved, so no declaration is answered.
 4. **No CAPTCHA solving and no bot-evasion.** On a CAPTCHA or a login wall the agent
    stops and says why. No proxy rotation, fingerprint spoofing, stealth plugins, headless
    detection workarounds, or anything meant to get past a site's defences.

@@ -43,14 +43,14 @@ export function applicationSystemFor(url: string): ApplicationSystem | undefined
  * The wording a person agrees to when they turn on standing authorisation (APP-2, scope per OD-1,
  * right to work per OD-5). A new version means consent to the old one no longer counts.
  */
-export const STANDING_SCOPE_VERSION = 'od5-2026-10-06';
+export const STANDING_SCOPE_VERSION = 'od5-email-2026-10-06';
 export const STANDING_SCOPE_TEXT = [
   'OpennJob may send applications for me, without asking each time, when all of these are true:',
   'the job is inside my preferences and scores at least 80% against my CV;',
   'every sentence of the documents traces to my CV;',
-  'the form has no declaration and no other sensitive question, except "Do you have the right to work in this country?" and "Will you need visa sponsorship?", which OpennJob answers from the right-to-work record I keep in my Profile for that country;',
-  'every required question has an answer I stored myself;',
-  "the site's application system has been enabled by the operator after a supervised test;",
-  "today's limit has not been reached.",
+  "today's limit has not been reached;",
+  'and either (by e-mail) the advert gives a recruiter\'s e-mail address, and OpennJob e-mails my tailored CV as a PDF and my supporting statement there, in my name, with replies coming to my own e-mail address;',
+  'or (on a form) the form has no declaration and no other sensitive question, except "Do you have the right to work in this country?" and "Will you need visa sponsorship?", which OpennJob answers from the right-to-work record I keep in my Profile for that country;',
+  "every required question has an answer I stored myself; and the site's application system has been enabled by the operator after a supervised test.",
   'Anything else waits for me. I can pause or turn this off at any time, and it stops before the next submission.',
 ].join(' ');

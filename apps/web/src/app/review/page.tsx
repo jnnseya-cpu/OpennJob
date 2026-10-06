@@ -297,7 +297,7 @@ function Review() {
             })}
           </section>
 
-          {appMode === 'auto' && status !== 'submitted' ? <AutoChecklist agent={agent} verified={verified} declarations={declarations.map((d) => d.label)} rightToWork={record ? describeWorkRights(record) : null} /> : null}
+          {appMode === 'auto' && status !== 'submitted' ? <AutoChecklist agent={agent} verified={verified} declarations={declarations.map((d) => d.label)} rightToWork={record ? describeWorkRights(record) : null} emailApply={match?.emailApply === true} /> : null}
 
           {error ? <div className="note bad" role="alert">{error}</div> : null}
           {notice ? <div className="note ok" role="status">{notice}</div> : null}
@@ -374,10 +374,10 @@ export default function ReviewPage() {
  * What stands between this application and OpennJob sending it without the person: each line is
  * met or not, read from the account and the agent status. Declarations on the form always stop it.
  */
-function AutoChecklist({ agent, verified, declarations, rightToWork }: { agent?: AgentStatus; verified?: boolean; declarations: string[]; rightToWork: string | null }) {
+function AutoChecklist({ agent, verified, declarations, rightToWork, emailApply }: { agent?: AgentStatus; verified?: boolean; declarations: string[]; rightToWork: string | null; emailApply: boolean }) {
   const enabledSystems = (agent?.systems ?? []).filter((s) => s.enabled).map((s) => s.label);
   const on = agent ? agent.authorisation.enabled && !agent.authorisation.paused : undefined;
-  const rows: { ok: boolean | undefined; text: string; fix?: { href: string; label: string } }[] = [
+  const all: { ok: boolean | undefined; text: string; fix?: { href: string; label: string }; formOnly?: true }[] = [
     { ok: verified, text: verified ? 'Your e-mail address is confirmed.' : 'Your e-mail address is not confirmed.', ...(verified === false ? { fix: { href: '/verify-email/', label: 'Confirm it' } } : {}) },
     {
       ok: on,
@@ -385,22 +385,30 @@ function AutoChecklist({ agent, verified, declarations, rightToWork }: { agent?:
       ...(on === false ? { fix: { href: '/account/', label: 'Turn them on in Account' } } : {}),
     },
     {
+      formOnly: true,
       ok: enabledSystems.length > 0 ? undefined : agent ? false : undefined,
       text:
         enabledSystems.length > 0
           ? `OpennJob can send only on: ${enabledSystems.join(', ')}. Another site waits for you.`
           : 'No employer application system is enabled yet: each needs one supervised test submission first.',
     },
+    ...(emailApply
+      ? [{ ok: true as const, text: 'The advert gives a recruiter’s e-mail address: OpennJob can e-mail your tailored CV and statement there, in your name, with replies to you. No form, so no declarations.' }]
+      : []),
     {
+      formOnly: true,
       ok: rightToWork !== null,
       text: rightToWork ? `Right to work and sponsorship are answered from your record: ${rightToWork}.` : 'No right-to-work record for this job’s country, so those questions wait for you.',
       ...(rightToWork ? {} : { fix: { href: '/profile/', label: 'Add one in Profile' } }),
     },
     {
+      formOnly: true,
       ok: declarations.length === 0,
       text: declarations.length ? `This job’s form asks for things only you answer (${declarations.join('; ')}). A form with any of them waits for you.` : 'No declaration expected.',
     },
   ];
+  // By e-mail there is no form: the form-only lines do not apply.
+  const rows = all.filter((row) => !(emailApply && row.formOnly));
   if (agent && agent.dailyLimit.remaining === 0) rows.push({ ok: false, text: `Today’s limit of ${agent.dailyLimit.limit} automatic applications is reached.` });
   return (
     <section className="card" aria-label="What stops automatic sending" data-testid="auto-checklist">

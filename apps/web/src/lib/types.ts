@@ -28,6 +28,8 @@ export interface MatchView {
   eligible: boolean;
   missingCredential?: string;
   unmetEssential: string[];
+  /** The advert names a recruiter's e-mail address, so the application can go by e-mail. */
+  emailApply?: boolean;
   /** The CV does not show this kind of post: the score is capped. */
   otherField?: { role: string; missing: string[] };
   hits: { label: string; essential: boolean; matched: boolean; evidence?: string; statedLanguage?: string }[];

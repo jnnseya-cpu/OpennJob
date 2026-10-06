@@ -21,5 +21,6 @@ export * from './tailoring';
 export * from './time';
 export * from './screening';
 export * from './adapters';
+export * from './email-apply';
 export * from './notifications';
 export * from './sources';
