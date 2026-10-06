@@ -7,9 +7,10 @@ export const metadata: Metadata = {
   title: 'OpennJob',
   description: 'Find jobs that fit your CV, review each application, and stay in control of what is sent.',
   referrer: 'no-referrer',
+  icons: { icon: '/brand/opennjob-logo-192.png', apple: '/apple-touch-icon.png' },
 };
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#1a3c8a' };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

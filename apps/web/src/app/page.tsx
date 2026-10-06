@@ -33,8 +33,9 @@ export default function Landing() {
       <div className="lp-grain" aria-hidden="true" />
       <div className="lp-wrap">
         <nav className="lp-nav" aria-label="Site">
-          <Link href="/" className="mark">
-            Openn<i>Job</i>
+          <Link href="/" className="mark" aria-label="OpennJob home">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
+            <img src="/brand/opennjob-logo-192.png" alt="OpennJob" width={84} height={84} />
           </Link>
           <span className="sp" />
           <a className="quiet hide-sm" href="#how">How it works</a>
@@ -43,6 +44,8 @@ export default function Landing() {
         </nav>
 
         <header className="lp-hero">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
+          <img className="lp-logo-hero lp-reveal" src="/brand/opennjob-logo-512.png" alt="" width={260} height={260} />
           <p className="lp-eyebrow lp-reveal">Private pilot · by invitation</p>
           <h1 className="lp-reveal">
             The applications are drafted. <em>The signature is yours.</em>

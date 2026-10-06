@@ -121,7 +121,7 @@ export function smtpEmail(settings: SmtpSettings): EmailSender {
   };
 }
 
-export const DEFAULT_BRAND: Brand = { name: 'OpennJob', colour: '#1BA996', footer: 'OpennJob · test build · messages about your own account only' };
+export const DEFAULT_BRAND: Brand = { name: 'OpennJob', colour: '#1A3C8A', footer: 'OpennJob · test build · messages about your own account only' };
 
 /** Channels that can really deliver today. */
 export function wiredChannels(sender: EmailSender): Record<Channel, boolean> {

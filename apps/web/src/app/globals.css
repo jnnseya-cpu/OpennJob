@@ -2,8 +2,10 @@
    pack and mode bar on top, the tab bar fixed at the bottom. System fonts only: no font is
    fetched from a third party. */
 :root {
-  --bg: #f2f6f5; --surface: #ffffff; --ink: #12211e; --muted: #566964; --line: #d7e1de;
-  --accent: #1ba996; --accent-ink: #0a6558; --accent-soft: #dcf3ee; --on-accent: #04201b;
+  /* Brand: OpennJob blue #1A3C8A and black #000000, from the logo (public/brand/opennjob-logo.png). */
+  --brand-blue: #1a3c8a; --brand-black: #000000;
+  --bg: #f4f6fb; --surface: #ffffff; --ink: #000000; --muted: #4a5468; --line: #d6dcea;
+  --accent: #1a3c8a; --accent-ink: #1a3c8a; --accent-soft: #e4eaf7; --on-accent: #ffffff;
   --warn: #8f4e00; --warn-soft: #fbebd2; --bad: #a8231b; --bad-soft: #faddda;
   --display: "Trebuchet MS", system-ui, sans-serif;
   --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -11,14 +13,14 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c1412; --surface: #141f1c; --ink: #e5eeeb; --muted: #93a7a1; --line: #25352f;
-    --accent: #2cc4ae; --accent-ink: #74e2d0; --accent-soft: #132f29; --on-accent: #04201b;
+    --bg: #0a0f1d; --surface: #121a2e; --ink: #e9edf6; --muted: #9ba7c0; --line: #26314d;
+    --accent: #7e9de6; --accent-ink: #a9bff2; --accent-soft: #1a2a52; --on-accent: #0a1430;
     --warn: #f2b75e; --warn-soft: #33260e; --bad: #ff9288; --bad-soft: #3a1613; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0c1412; --surface: #141f1c; --ink: #e5eeeb; --muted: #93a7a1; --line: #25352f;
-  --accent: #2cc4ae; --accent-ink: #74e2d0; --accent-soft: #132f29; --on-accent: #04201b;
+  --bg: #0a0f1d; --surface: #121a2e; --ink: #e9edf6; --muted: #9ba7c0; --line: #26314d;
+  --accent: #7e9de6; --accent-ink: #a9bff2; --accent-soft: #1a2a52; --on-accent: #0a1430;
   --warn: #f2b75e; --warn-soft: #33260e; --bad: #ff9288; --bad-soft: #3a1613; color-scheme: dark;
 }
 
@@ -145,3 +147,11 @@ nav.tabs .count { font-family: var(--mono); font-size: 11px; background: var(--a
 .viz-rule { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--viz-mark); pointer-events: none; }
 .viz-rule em { position: absolute; top: -2px; right: 6px; white-space: nowrap; font: normal 11px var(--body); color: var(--viz-muted); }
 .viz-axis { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; font-size: 11px; color: var(--viz-muted); text-align: center; font-variant-numeric: tabular-nums; }
+
+/* The logo, unchanged. Its lettering is black, so on a dark background it sits on a white tile. */
+.logo { display: block; height: auto; }
+.brand .logo { width: 52px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .logo { background: #ffffff; border-radius: 10px; } }
+:root[data-theme="dark"] .logo { background: #ffffff; border-radius: 10px; }
+.brand { align-items: center; }
+.brand b { color: var(--ink); }

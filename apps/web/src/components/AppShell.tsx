@@ -163,9 +163,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="wrap">
         <header className="top">
           <div className="brand">
-            <b>
-              Openn<i>Job</i>
-            </b>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
+            <img className="logo" src="/brand/opennjob-logo-192.png" alt="" width={52} height={52} />
+            <b>OpennJob</b>
             <span className="muted small grow">Six industry packs · UK and worldwide</span>
             {signedIn && !isPublic ? (
               <span className="row" style={{ gap: 4 }}>
