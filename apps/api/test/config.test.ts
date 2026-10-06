@@ -22,10 +22,19 @@ describe('loadConfig', () => {
       bodyLimit: '256kb',
       llmCriteria: false,
       llmCriteriaMaxJobs: 25,
+      duplicateDays: 30,
+      dailyApplicationLimit: 20,
+      llmDailyAcuPerUser: 50,
+      llmDailyAcuTotal: 500,
     };
     expect(loadConfig({})).toEqual(defaults);
     expect(loadConfig({ OPENNJOB_JWT_SECRET: ' abc ', OPENNJOB_LLM_CRITERIA: 'true', OPENNJOB_LLM_CRITERIA_MAX_JOBS: '3' })).toEqual({ ...defaults, jwtSecret: 'abc', llmCriteria: true, llmCriteriaMaxJobs: 3 });
     expect(loadConfig({ OPENNJOB_LLM_CRITERIA: 'maybe', OPENNJOB_LLM_CRITERIA_MAX_JOBS: 'lots' })).toMatchObject({ llmCriteria: false, llmCriteriaMaxJobs: 25 });
+  });
+
+  it('reads the owner limits (APP-6, APP-8, NFR-5) and ignores values out of range', () => {
+    expect(loadConfig({ OPENNJOB_DUPLICATE_DAYS: '14', OPENNJOB_DAILY_APPLICATION_LIMIT: '5', OPENNJOB_LLM_DAILY_ACU_PER_USER: '10', OPENNJOB_LLM_DAILY_ACU_TOTAL: '0' })).toMatchObject({ duplicateDays: 14, dailyApplicationLimit: 5, llmDailyAcuPerUser: 10, llmDailyAcuTotal: 0 });
+    expect(loadConfig({ OPENNJOB_DUPLICATE_DAYS: '0', OPENNJOB_DAILY_APPLICATION_LIMIT: 'many', OPENNJOB_LLM_DAILY_ACU_PER_USER: '-1' })).toMatchObject({ duplicateDays: 30, dailyApplicationLimit: 20, llmDailyAcuPerUser: 50 });
   });
 });
 

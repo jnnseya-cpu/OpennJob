@@ -6,7 +6,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useApp } from '../../components/AppShell';
 import { api, errorText } from '../../lib/api';
 import { ALL_FIELDS_CHECKED, STATEMENT_FIELD, declarationField, declarationsFor } from '../../lib/declarations';
-import { STATUS_LABEL, needsLabel, placeOf } from '../../lib/labels';
+import { HOLD_LABEL, STATUS_LABEL, needsLabel, placeOf } from '../../lib/labels';
 import type { Application, MatchView } from '../../lib/types';
 
 const FILLED: [string, string][] = [
@@ -144,7 +144,8 @@ function Review() {
   }
 
   const status = app?.status;
-  const editable = status === 'draft';
+  // A held application (needs_you) is still the person's to correct and approve.
+  const editable = status === 'draft' || status === 'needs_you';
   const appMode = app?.mode ?? mode;
   const allDeclared = declarations.every((d) => ticked.has(declarationField(d.id)));
   const reviewed = appMode !== 'review' || ticked.has(ALL_FIELDS_CHECKED);
@@ -192,6 +193,19 @@ function Review() {
         </>
       ) : (
         <>
+          {status === 'needs_you' ? (
+            <section className="card" aria-label="Held for you">
+              <span className="label">Held for you</span>
+              <ul className="plain small">
+                {(app.holdReasons ?? []).map((r) => (
+                  <li key={`h-${r}`}>{HOLD_LABEL[r] ?? r}</li>
+                ))}
+                {(app.traceFailures ?? []).map((f) => (
+                  <li key={`t-${f}`}>{f}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {app.gaps.length || app.warnings.length ? (
             <section className="card">
               <span className="label">Before you approve</span>
@@ -269,7 +283,7 @@ function Review() {
           {error ? <div className="note bad" role="alert">{error}</div> : null}
           {notice ? <div className="note ok" role="status">{notice}</div> : null}
 
-          {status === 'draft' ? (
+          {editable ? (
             <>
               <button className="btn primary" type="button" onClick={approve} disabled={!canApprove}>
                 Approve

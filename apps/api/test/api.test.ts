@@ -336,7 +336,9 @@ describe('applications', () => {
     await t.api.put('/applications/unknown/statement').send({ statement: edited }).expect(404);
 
     const saved = await t.api.put(`/applications/${id}/statement`).send({ statement: `  ${edited}  ` }).expect(200);
-    expect(saved.body).toMatchObject({ id, statement: edited, status: 'draft' });
+    // TAI-3: the edit is traced like a draft. The CV says 28 patients, the edit says eight, so it is held for the person.
+    expect(saved.body).toMatchObject({ id, statement: edited, status: 'needs_you', holdReasons: ['trace-check'] });
+    expect(saved.body.traceFailures).toEqual(['Statement: "I give medication rounds for eight patients a shift and escalate with SBAR." mentions eight, which your CV does not contain.']);
     expect((await t.api.get(`/applications/${id}`).expect(200)).body.statement).toBe(edited);
 
     const events = await t.deps.repository.listEvents('dev-user');

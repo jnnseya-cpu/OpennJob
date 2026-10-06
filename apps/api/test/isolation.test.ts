@@ -157,7 +157,8 @@ for (const backend of BACKENDS) {
       expect((await t.api.get('/applications').expect(200)).body.map((x: Application) => x.id)).toEqual([aApp.id]);
       await t.api.get(`/applications/${mine.id}`).expect(404);
       await t.api.post(`/applications/${mine.id}/submitted`).expect(404);
-      expect((await b.get(`/applications/${mine.id}`).expect(200)).body.status).toBe('draft');
+      // The scripted AI reply claims a nurse's 28 patients, which B's CV does not contain: held, not sent (TAI-3).
+      expect((await b.get(`/applications/${mine.id}`).expect(200)).body).toMatchObject({ status: 'needs_you', holdReasons: ['trace-check'] });
     });
 
     it("GET /jobs/matches: scored against the caller's own CV and passport", async () => {

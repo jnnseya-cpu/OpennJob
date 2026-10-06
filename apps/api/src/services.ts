@@ -1,10 +1,14 @@
+import { createHash } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import {
   EMPTY_PASSPORT,
   checkTraining,
   collectJobs,
   credentialLabel,
+  dedupeKey,
+  describeTraceFailure,
   draftStatement,
+  draftStatementFallback,
   extractCriteria,
   SYSTEM_USER_ID,
   findPackQuestion,
@@ -19,10 +23,14 @@ import {
   questionsForPack,
   requiredCredentialOf,
   scoreAnswer,
+  tailorCv,
+  traceCheck,
   trainingWarnings,
+  zonedDayStart,
+  nextZonedDayStart,
 } from '@opennjob/core';
-import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory } from '@opennjob/core';
-import { DEPS, applyThresholdOf } from './deps';
+import type { Application, HealthcareRole, HoldReason, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory } from '@opennjob/core';
+import { DEPS, applyThresholdOf, limitsOf } from './deps';
 import type { OpennJobDeps } from './deps';
 import type {
   AgentRunInput,
@@ -40,6 +48,10 @@ import type {
 function compact<T extends object>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
+
+export const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+
+const DAY_MS = 86_400_000;
 
 @Injectable()
 export class OpennJobService {
@@ -243,10 +255,55 @@ export class OpennJobService {
       : `This role requires a credential that is not stored in the passport: ${credentialLabel(match.missingCredential)}.`;
   }
 
-  /** Drafts and stores one application. The caller has already checked eligibility. */
+  /**
+   * NFR-5: the daily LLM ceiling, per person and in total, counted over the London day.
+   * Returns true when either is reached. A ceiling of 0 means no LLM use at all.
+   */
+  private async llmCeilingReached(userId: string): Promise<boolean> {
+    if (!this.deps.llm) return false;
+    const { llmDailyAcuPerUser, llmDailyAcuTotal } = limitsOf(this.deps.config);
+    const since = zonedDayStart(this.deps.clock()).toISOString();
+    const mine = await this.deps.usageMeter.acuSince(userId, since);
+    const everyone = await this.deps.usageMeter.acuSince(null, since);
+    return mine >= llmDailyAcuPerUser || everyone >= llmDailyAcuTotal;
+  }
+
+  /** TAI-3: runs the trace check and returns the failures as the person will read them. */
+  private static traceOf(statement: string, tailoredCv: string, job: Pick<Job, 'title' | 'employer' | 'location'>, profile: Profile, passport: Passport): string[] {
+    const failures = traceCheck(
+      { statement, tailoredCv },
+      { cvText: profile.cvText, passport, languages: preferencesOf(profile).languages, job, personName: `${profile.firstName} ${profile.lastName}` },
+    );
+    return failures.map(describeTraceFailure);
+  }
+
+  private static withHolds(application: Application, add: HoldReason[], remove: HoldReason[] = []): Application {
+    const holds = [...new Set([...(application.holdReasons ?? []).filter((h) => !remove.includes(h as HoldReason)), ...add])];
+    const held = holds.length > 0;
+    let status = application.status;
+    if (held && (status === 'draft' || status === 'confirmed')) status = 'needs_you';
+    if (!held && status === 'needs_you') status = 'draft';
+    const next: Application = { ...application, status };
+    if (held) next.holdReasons = holds;
+    else delete next.holdReasons;
+    return next;
+  }
+
+  /**
+   * Drafts and stores one application. The caller has already checked eligibility and
+   * duplicates. The statement and the tailored CV are traced to the source before the
+   * application is stored; anything that does not trace holds it for the person.
+   */
   private async draftFor(userId: string, job: Job, profile: Profile, passport: Passport, match: MatchResult, mode: Mode): Promise<Application> {
-    const draft = await draftStatement({ job, cvText: profile.cvText, match }, this.llmFor(userId, 'supporting-statement'));
-    const application: Application = {
+    const ceiling = await this.llmCeilingReached(userId);
+    const input = { job, cvText: profile.cvText, match };
+    const draft = ceiling ? draftStatementFallback(input) : await draftStatement(input, this.llmFor(userId, 'supporting-statement'));
+    const tailoredCv = tailorCv(profile.cvText, match);
+    const traceFailures = OpennJobService.traceOf(draft.statement, tailoredCv, job, profile, passport);
+    const holds: HoldReason[] = [];
+    if (ceiling) holds.push('llm-ceiling');
+    if (traceFailures.length > 0) holds.push('trace-check');
+    const base: Application = {
       id: this.deps.newId(),
       userId,
       jobId: job.id,
@@ -262,10 +319,41 @@ export class OpennJobService {
       score: match.score,
       confirmedFields: [],
       createdAt: this.now(),
+      dedupeKey: dedupeKey(job),
+      tailoredCv,
+      ...(traceFailures.length > 0 ? { traceFailures } : {}),
     };
+    const application = OpennJobService.withHolds(base, holds);
     await this.deps.repository.createApplication(application);
-    await this.emit(userId, 'application.drafted', { applicationId: application.id, jobId: job.id, mode: application.mode, statementSource: draft.source, score: match.score, gaps: draft.gaps.length });
+    await this.emit(userId, 'application.drafted', { applicationId: application.id, jobId: job.id, mode: application.mode, statementSource: draft.source, score: match.score, gaps: draft.gaps.length, traceFailures: traceFailures.length, held: holds.length > 0 });
+    if (ceiling) await this.emit(userId, 'agent.llm_ceiling', { applicationId: application.id });
     return application;
+  }
+
+  /**
+   * APP-6: an existing application for this job, or for the same employer, title and
+   * location within the duplicate period. Every status counts, closed included.
+   */
+  private duplicateOf(existing: readonly Application[], job: Job): Application | undefined {
+    const key = dedupeKey(job);
+    const since = this.deps.clock().getTime() - limitsOf(this.deps.config).duplicateDays * DAY_MS;
+    return (
+      existing.find((a) => a.jobId === job.id) ??
+      existing.find((a) => (a.dedupeKey ?? '') === key && Date.parse(a.createdAt) >= since)
+    );
+  }
+
+  /**
+   * APP-8: automatic submissions today (London) against the owner's daily limit. The
+   * queue asks this before handing out the next application; at the limit it waits for
+   * the next London day.
+   */
+  async dailyLimit(userId: string) {
+    const now = this.deps.clock();
+    const since = zonedDayStart(now).getTime();
+    const limit = limitsOf(this.deps.config).dailyApplicationLimit;
+    const used = (await this.deps.repository.listApplications(userId)).filter((a) => a.automatic === true && a.submittedAt !== undefined && Date.parse(a.submittedAt) >= since).length;
+    return { limit, used, remaining: Math.max(0, limit - used), resetsAt: nextZonedDayStart(now).toISOString() };
   }
 
   async createApplication(userId: string, input: CreateApplicationInput): Promise<Application> {
@@ -275,6 +363,9 @@ export class OpennJobService {
     const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
     const match = matchJob(job, profile.cvText, passport, preferencesOf(profile));
     if (!match.eligible) throw new UnprocessableEntityException(OpennJobService.ineligibleMessage(match));
+    // Never two applications for one vacancy: the existing one is returned.
+    const duplicate = this.duplicateOf(await this.deps.repository.listApplications(userId), job);
+    if (duplicate) return duplicate;
     return this.draftFor(userId, job, profile, passport, match, input.mode);
   }
 
@@ -295,7 +386,7 @@ export class OpennJobService {
     const preferences = preferencesOf(profile);
     const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
     const threshold = applyThresholdOf(this.deps.config);
-    const already = new Set((await this.deps.repository.listApplications(userId)).map((a) => a.jobId));
+    const existing = await this.deps.repository.listApplications(userId);
     const jobs = await this.deps.repository.listJobs();
 
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
@@ -308,13 +399,20 @@ export class OpennJobService {
       const match = matchJob(job, profile.cvText, passport, preferences);
       if (match.score < threshold) skipped.belowThreshold += 1;
       else if (!match.eligible) skipped.ineligible += 1;
-      else if (already.has(job.id)) skipped.alreadyPrepared += 1;
+      else if (this.duplicateOf(existing, job)) skipped.alreadyPrepared += 1;
       else candidates.push({ job, match });
     }
     candidates.sort((a, b) => b.match.score - a.match.score || a.job.id.localeCompare(b.job.id));
 
     const prepared: Application[] = [];
-    for (const { job, match } of candidates) prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
+    for (const { job, match } of candidates) {
+      // The same vacancy can arrive twice in one run (two sources): the second is a duplicate.
+      if (this.duplicateOf([...existing, ...prepared], job)) {
+        skipped.alreadyPrepared += 1;
+        continue;
+      }
+      prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
+    }
 
     await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped });
     return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped };
@@ -334,7 +432,15 @@ export class OpennJobService {
   async editStatement(userId: string, id: string, input: StatementInput): Promise<Application> {
     const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
-    const updated: Application = { ...application, statement: input.statement };
+    // The edit is traced like a draft: the agent never sends a sentence the CV cannot support.
+    const profile = await this.getProfile(userId);
+    const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
+    const job = (await this.deps.repository.getJob(application.jobId)) ?? { title: application.jobTitle, employer: application.employer, location: '' };
+    const traceFailures = OpennJobService.traceOf(input.statement, application.tailoredCv ?? '', job, profile, passport);
+    const edited: Application = { ...application, statement: input.statement };
+    if (traceFailures.length > 0) edited.traceFailures = traceFailures;
+    else delete edited.traceFailures;
+    const updated = traceFailures.length > 0 ? OpennJobService.withHolds(edited, ['trace-check']) : OpennJobService.withHolds(edited, [], ['trace-check']);
     await this.deps.repository.updateApplication(updated);
     await this.emit(userId, 'application.statement.edited', { applicationId: id, statementCharacters: input.statement.length });
     return updated;
@@ -344,12 +450,14 @@ export class OpennJobService {
   async confirmApplication(userId: string, id: string, input: ConfirmApplicationInput): Promise<Application> {
     const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
-    const updated: Application = {
-      ...application,
-      status: 'confirmed',
-      confirmedFields: [...new Set([...application.confirmedFields, ...input.confirmedFields])],
-      confirmedAt: this.now(),
-    };
+    // Confirming is the person reading the documents and taking them as their own, so the
+    // truth-check and AI-ceiling holds end here. The failures stay recorded on the application.
+    const updated: Application = OpennJobService.withHolds(
+      { ...application, status: 'confirmed', confirmedFields: [...new Set([...application.confirmedFields, ...input.confirmedFields])], confirmedAt: this.now() },
+      [],
+      ['trace-check', 'llm-ceiling'],
+    );
+    if (updated.status === 'draft') updated.status = 'confirmed';
     await this.deps.repository.updateApplication(updated);
     await this.emit(userId, 'application.confirmed', { applicationId: id, confirmedFieldCount: updated.confirmedFields.length });
     return updated;
@@ -359,7 +467,11 @@ export class OpennJobService {
   async markSubmitted(userId: string, id: string): Promise<Application> {
     const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted') throw new ConflictException('Application has already been submitted');
-    const updated: Application = { ...application, status: 'submitted', submittedAt: this.now() };
+    // TAI-6: the exact documents, as they stand at submission, kept with the application (encrypted at rest).
+    const tailoredCv = application.tailoredCv ?? '';
+    const sentDocuments = { statement: application.statement, tailoredCv, sha256: { statement: sha256(application.statement), tailoredCv: sha256(tailoredCv) } };
+    const updated: Application = { ...application, status: 'submitted', submittedAt: this.now(), sentDocuments };
+    delete updated.holdReasons;
     await this.deps.repository.updateApplication(updated);
     await this.emit(userId, 'application.submitted', { applicationId: id, mode: application.mode, wasConfirmed: application.status === 'confirmed' });
     return updated;

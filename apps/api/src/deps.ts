@@ -65,6 +65,13 @@ export interface OpennJobConfig {
    * route is closed. Employer posting is optional; nothing else depends on it.
    */
   employerKey?: string;
+  /** APP-6: an application to the same employer, title and location within this many days is a duplicate (OPENNJOB_DUPLICATE_DAYS, default 30). */
+  duplicateDays?: number;
+  /** APP-8: automatic submissions per person per London day (OPENNJOB_DAILY_APPLICATION_LIMIT, default 20). */
+  dailyApplicationLimit?: number;
+  /** NFR-5: ACU of LLM use per person, and in total, per London day (OPENNJOB_LLM_DAILY_ACU_PER_USER, default 50; _TOTAL, default 500). */
+  llmDailyAcuPerUser?: number;
+  llmDailyAcuTotal?: number;
   /** Branding on outbound e-mail (OPENNJOB_BRAND_NAME, _COLOUR, _FOOTER, OPENNJOB_APP_URL). Default: OpennJob. */
   brand?: Brand;
 }
@@ -77,6 +84,21 @@ export const DEFAULT_APPLY_THRESHOLD = 80;
 export function applyThresholdOf(config: OpennJobConfig): number {
   const t = config.applyThreshold;
   return typeof t === 'number' && Number.isFinite(t) && t >= 0 && t <= 100 ? t : DEFAULT_APPLY_THRESHOLD;
+}
+
+export const DEFAULT_DUPLICATE_DAYS = 30;
+export const DEFAULT_DAILY_APPLICATION_LIMIT = 20;
+export const DEFAULT_LLM_DAILY_ACU_PER_USER = 50;
+export const DEFAULT_LLM_DAILY_ACU_TOTAL = 500;
+
+/** The owner's limits, with defaults for anything not set. */
+export function limitsOf(config: OpennJobConfig) {
+  return {
+    duplicateDays: config.duplicateDays ?? DEFAULT_DUPLICATE_DAYS,
+    dailyApplicationLimit: config.dailyApplicationLimit ?? DEFAULT_DAILY_APPLICATION_LIMIT,
+    llmDailyAcuPerUser: config.llmDailyAcuPerUser ?? DEFAULT_LLM_DAILY_ACU_PER_USER,
+    llmDailyAcuTotal: config.llmDailyAcuTotal ?? DEFAULT_LLM_DAILY_ACU_TOTAL,
+  };
 }
 
 export interface OpennJobDeps {
@@ -158,6 +180,10 @@ export function loadConfig(env: Env): OpennJobConfig {
       ...(/^https?:\/\//.test(appUrl) ? { appUrl } : {}),
     };
   }
+  config.duplicateDays = int(env.OPENNJOB_DUPLICATE_DAYS, DEFAULT_DUPLICATE_DAYS, 1, 3650);
+  config.dailyApplicationLimit = int(env.OPENNJOB_DAILY_APPLICATION_LIMIT, DEFAULT_DAILY_APPLICATION_LIMIT, 0, 1000);
+  config.llmDailyAcuPerUser = int(env.OPENNJOB_LLM_DAILY_ACU_PER_USER, DEFAULT_LLM_DAILY_ACU_PER_USER, 0, 1_000_000);
+  config.llmDailyAcuTotal = int(env.OPENNJOB_LLM_DAILY_ACU_TOTAL, DEFAULT_LLM_DAILY_ACU_TOTAL, 0, 100_000_000);
   const employerKey = (env.OPENNJOB_EMPLOYER_KEY ?? '').trim();
   if (employerKey) config.employerKey = employerKey;
   return config;

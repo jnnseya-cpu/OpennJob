@@ -269,7 +269,11 @@ test('review: requirements with evidence, editable statement, every declaration 
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Statement saved.')).toBeVisible();
   const draft = (await call<{ id: string; jobId: string; statement: string; status: string }[]>('GET', '/applications')).find((a) => a.jobId === 'sample:hca-elderly-care');
-  expect(draft).toMatchObject({ statement: EDITED, status: 'draft' });
+  // TAI-3: "28-bed" is not in this CV, so the edit is held for the person; approving below is them taking it as theirs.
+  expect(draft).toMatchObject({ statement: EDITED, status: 'needs_you', holdReasons: ['trace-check'] });
+  const held = page.getByRole('region', { name: 'Held for you' });
+  await expect(held.getByText('A sentence in the documents could not be traced to your CV. Read it and correct it.')).toBeVisible();
+  await expect(held.getByText(/28-bed elderly care ward\." mentions 28, which your CV does not contain/)).toBeVisible();
 
   // Healthcare declarations. A healthcare assistant post asks for no registration, so the
   // registration-dependent declarations are not listed. None starts ticked.

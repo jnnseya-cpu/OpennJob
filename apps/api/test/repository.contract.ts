@@ -409,6 +409,18 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         expect(await repo.getApplication(a, full.id)).toBeUndefined();
       });
 
+      it('spec T-06: the documents sent come back byte for byte (line endings, spaces, accents and symbols kept)', async () => {
+        const statement = 'Première ligne (fictional).\r\n  Indented, with a trailing space \nTabs\tand NBSP\u00a0here — £1,250 · ✓ 🙂';
+        const tailoredCv = 'Ligne une (fictional)\n\nLigne trois\r\n';
+        const sentDocuments = { statement, tailoredCv, sha256: { statement: 'd'.repeat(64), tailoredCv: 'e'.repeat(64) } };
+        const app: Application = { ...application(unique('app'), a, jobId), status: 'submitted', submittedAt: NOW, statement, tailoredCv, sentDocuments };
+        await repo.createApplication(app);
+        const back = await repo.getApplication(a, app.id);
+        expect(Buffer.from(back?.sentDocuments?.statement ?? '', 'utf8').equals(Buffer.from(statement, 'utf8'))).toBe(true);
+        expect(Buffer.from(back?.sentDocuments?.tailoredCv ?? '', 'utf8').equals(Buffer.from(tailoredCv, 'utf8'))).toBe(true);
+        expect(back?.sentDocuments).toEqual(sentDocuments);
+      });
+
       it('stores screening answers and standing authorisation per user, and removes them with the account', async () => {
         const answers = { noticePeriod: '4 weeks', relocation: true, custom: { 'years managing teams': '6 (fictional)' } };
         await repo.saveScreeningAnswers(a, answers);
