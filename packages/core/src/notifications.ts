@@ -28,6 +28,11 @@ export interface NotificationEventDef {
   mandatory?: boolean;
   /** The domain event that fires it, or null when the feature is not built yet. */
   trigger: string | null;
+  /**
+   * Sent directly by the code that has the content (a one-time link, the daily report), never by
+   * the event dispatcher and never copied into the in-app inbox, so no token is ever stored.
+   */
+  direct?: boolean;
 }
 
 export const NOTIFICATION_CATEGORIES = [
@@ -43,19 +48,20 @@ export const NOTIFICATION_CATEGORIES = [
   'Platform',
 ] as const;
 
-type Row = [key: string, category: number, name: string, subject: string, body: string, severity: Severity, channels: Channel[], trigger: string | null, mandatory?: boolean];
+type Row = [key: string, category: number, name: string, subject: string, body: string, severity: Severity, channels: Channel[], trigger: string | null, mandatory?: boolean, direct?: boolean];
 
 const ROWS: Row[] = [
   // Account and access
   ['account.registered', 0, 'Account created', 'Welcome to {{app}}', 'Your account is ready. Add your CV and credential passport to see your matches.', 'success', ['email', 'inapp'], 'account.registered'],
   ['account.pilot_invitation', 0, 'Pilot invitation', 'You are invited to the {{app}} pilot', 'You have been invited to try {{app}}. Create your account with this email address.', 'info', ['email'], null],
-  ['account.email_verification_required', 0, 'Email verification required', 'Verify your email address', 'Confirm this address to keep using {{app}}.', 'warning', ['email', 'inapp'], null],
+  ['account.email_verification_required', 0, 'Email verification required', 'Verify your email address', 'Confirm this address before {{app}} sends any application for you. The link expires in 24 hours.', 'warning', ['email'], 'auth.verification_sent', true, true],
+  ['account.email_verified', 0, 'Email verified', 'Email address verified', 'Your email address is confirmed.', 'success', ['inapp'], 'account.email_verified'],
   ['account.signed_in', 0, 'New sign-in', 'New sign-in to your {{app}} account', 'Your account was signed in to. If this was not you, change your password and contact support.', 'info', ['inapp'], 'account.signed_in'],
   ['account.test', 0, 'Test message', 'Test message from {{app}}', 'This is a test of your notification channels. No action is needed.', 'info', ['email', 'inapp', 'sms', 'push', 'whatsapp'], 'notification.test'],
   // Sign-in and security
   ['security.too_many_attempts', 1, 'Too many sign-in attempts', 'Too many sign-in attempts on your account', 'Sign-in was paused after repeated failed attempts.', 'warning', ['email', 'inapp'], null, true],
-  ['security.password_reset_link', 1, 'Password reset link', 'Reset your {{app}} password', 'Use the link to choose a new password. It expires soon.', 'info', ['email'], null, true],
-  ['security.password_changed', 1, 'Password changed', 'Your password was changed', 'If you did not change it, contact support at once.', 'warning', ['email', 'inapp', 'sms'], null, true],
+  ['security.password_reset_link', 1, 'Password reset link', 'Reset your {{app}} password', 'Use the link to choose a new password. It expires in one hour. If you did not ask for it, ignore this message.', 'info', ['email'], 'auth.password_reset_requested', true, true],
+  ['security.password_changed', 1, 'Password changed', 'Your password was changed', 'Every other session was signed out. If you did not change it, contact support at once.', 'warning', ['email', 'inapp', 'sms'], 'account.password_changed', true],
   ['security.mfa_code', 1, 'Verification code', 'Your {{app}} verification code', 'Enter the code to finish signing in.', 'info', ['sms', 'email'], null, true],
   // Profile and passport
   ['profile.saved', 2, 'Profile saved', 'Profile saved', 'Your matches now use your updated profile.', 'success', ['inapp'], 'profile.updated'],
@@ -69,7 +75,9 @@ const ROWS: Row[] = [
   // AI agent
   ['agent.run_completed', 4, 'Agent run finished', 'Agent run finished: {{count}} applications prepared', 'Every prepared application waits for your review. Nothing has been sent to any employer.', 'success', ['email', 'inapp', 'push'], 'agent.run'],
   ['agent.review_needed', 4, 'Your review is needed', 'Action needed: review {{jobTitle}}', 'A draft for {{jobTitle}} at {{employer}} waits for you. Only you confirm the declarations.', 'warning', ['inapp', 'push'], 'application.drafted'],
-  ['agent.uncertain_attempt', 4, 'Uncertain attempt', 'Check whether {{jobTitle}} was submitted', 'The page changed before a receipt appeared. Check with the employer before trying again.', 'critical', ['email', 'inapp', 'sms'], null, true],
+  ['agent.uncertain_attempt', 4, 'Uncertain attempt', 'Check whether {{jobTitle}} was submitted', 'The page changed before a receipt appeared. Check with the employer before trying again.', 'critical', ['email', 'inapp', 'sms'], 'application.uncertain', true],
+  ['agent.held_for_you', 4, 'Held for you', '{{jobTitle}} needs you', 'The agent filled what it may for {{employer}}. A declaration, a question or a check is yours to do.', 'warning', ['email', 'inapp', 'push'], 'application.needs_you'],
+  ['agent.daily_report', 4, 'Daily report', 'Your {{app}} report', 'What was sent, what is held for you and why, new matches and any failures, since the last report.', 'info', ['email'], 'report.daily', false, true],
   // Applications
   ['application.approved', 5, 'Application approved', 'Approved: {{jobTitle}}', 'Nothing has been sent yet. Fill the form with the extension and submit it yourself.', 'success', ['inapp'], 'application.confirmed'],
   ['application.submitted', 5, 'Application submitted', 'Recorded as submitted: {{jobTitle}}', 'You recorded the application to {{employer}} as submitted.', 'success', ['email', 'inapp'], 'application.submitted'],
@@ -94,7 +102,7 @@ const ROWS: Row[] = [
   ['platform.service_restored', 9, 'Service restored', 'Service restored', '{{app}} is working normally again.', 'success', ['email', 'inapp'], null],
 ];
 
-export const NOTIFICATION_CATALOGUE: readonly NotificationEventDef[] = ROWS.map(([key, category, name, subject, body, severity, channels, trigger, mandatory]) => ({
+export const NOTIFICATION_CATALOGUE: readonly NotificationEventDef[] = ROWS.map(([key, category, name, subject, body, severity, channels, trigger, mandatory, direct]) => ({
   key,
   category: NOTIFICATION_CATEGORIES[category] as string,
   name,
@@ -104,6 +112,7 @@ export const NOTIFICATION_CATALOGUE: readonly NotificationEventDef[] = ROWS.map(
   channels: channels.includes('inapp') || channels.length === 0 ? channels : ['inapp', ...channels],
   trigger,
   ...(mandatory ? { mandatory: true } : {}),
+  ...(direct ? { direct: true } : {}),
 }));
 
 export function notificationEvent(key: string): NotificationEventDef | undefined {
@@ -112,7 +121,7 @@ export function notificationEvent(key: string): NotificationEventDef | undefined
 
 /** The catalogue entries fired by one domain event type. */
 export function eventsForTrigger(type: string): NotificationEventDef[] {
-  return NOTIFICATION_CATALOGUE.filter((e) => e.trigger === type);
+  return NOTIFICATION_CATALOGUE.filter((e) => e.trigger === type && !e.direct);
 }
 
 /** Only these placeholders exist. Anything else in a template renders as nothing. */

@@ -51,3 +51,9 @@ export function nextZonedDayStart(instant: Date, timeZone: string = LONDON): Dat
   const next = new Date(Date.UTC(w.y, w.m - 1, w.d + 1));
   return zonedTime(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 0, 0, timeZone);
 }
+
+/** The wall-clock date, hour and minute of an instant in the zone. */
+export function zonedClock(instant: Date, timeZone: string = LONDON): { date: string; hour: number; minute: number } {
+  const w = wallClock(instant, timeZone);
+  return { date: `${w.y}-${String(w.m).padStart(2, '0')}-${String(w.d).padStart(2, '0')}`, hour: w.h, minute: w.min };
+}

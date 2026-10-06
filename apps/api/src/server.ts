@@ -4,6 +4,7 @@ import { createDefaultDeps, isProduction, startupProblems } from './deps';
 import type { OpennJobDeps } from './deps';
 import { createApp } from './http';
 import { consoleJsonLogger } from './logging';
+import { Scheduler } from './scheduler';
 import type { Logger } from './logging';
 import { defaultMigrationsDir, loadMigrations, pendingMigrations } from './migrations';
 
@@ -69,6 +70,12 @@ export async function startServer(env: Env = process.env, logger: Logger = conso
   if (!(env.OPENNJOB_DATA_KEY ?? '').trim()) logger.warn({ msg: 'OPENNJOB_DATA_KEY is not set: CV text, passports and statements are stored unencrypted.' });
   logger.info({ msg: 'llm', configured: Boolean(deps.llm) });
   logger.info({ msg: 'job sources', count: deps.sources.length, labels: deps.sources.map((s) => s.label).join(', ') });
+  if (deps.config.scheduler) {
+    app.get(Scheduler).start();
+    logger.info({ msg: 'scheduler', running: true, retentionDays: deps.config.retentionDays ?? 0 });
+  } else {
+    logger.info({ msg: 'scheduler', running: false });
+  }
 
   let closing: Promise<void> | undefined;
   const close = (): Promise<void> => {

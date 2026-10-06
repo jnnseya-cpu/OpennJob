@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -48,21 +49,29 @@ export interface AccessToken {
 }
 
 /** Signs a short-lived access token (HS256). The only claim that matters is `sub`, the user id. */
-export function signAccessToken(userId: string, secret: string, ttlSeconds: number, now: Date): AccessToken {
+/**
+ * A short fingerprint of the password hash, carried in the token. Changing the password changes
+ * it, so every token issued before a reset stops working at once (ACC-3).
+ */
+export function passwordVersion(passwordHash: string): string {
+  return createHash('sha256').update(passwordHash).digest('hex').slice(0, 12);
+}
+
+export function signAccessToken(userId: string, secret: string, ttlSeconds: number, now: Date, pwv?: string): AccessToken {
   if (!secret) throw new Error('OPENNJOB_JWT_SECRET is not configured on the server');
   const iat = Math.floor(now.getTime() / 1000);
-  const accessToken = jwt.sign({ sub: userId, iat, exp: iat + ttlSeconds }, secret, { algorithm: 'HS256', issuer: ISSUER, audience: AUDIENCE });
+  const accessToken = jwt.sign({ sub: userId, iat, exp: iat + ttlSeconds, ...(pwv ? { pwv } : {}) }, secret, { algorithm: 'HS256', issuer: ISSUER, audience: AUDIENCE });
   return { accessToken, tokenType: 'Bearer', expiresIn: ttlSeconds, expiresAt: new Date((iat + ttlSeconds) * 1000).toISOString() };
 }
 
-export type TokenCheck = { ok: true; userId: string } | { ok: false; reason: 'expired' | 'invalid' };
+export type TokenCheck = { ok: true; userId: string; pwv?: string } | { ok: false; reason: 'expired' | 'invalid' };
 
 /** Verifies signature, algorithm, issuer, audience and expiry. Only HS256 is accepted. */
 export function verifyAccessToken(token: string, secret: string, now: Date): TokenCheck {
   try {
     const payload = jwt.verify(token, secret, { algorithms: ['HS256'], issuer: ISSUER, audience: AUDIENCE, clockTimestamp: Math.floor(now.getTime() / 1000) });
     if (typeof payload === 'string' || typeof payload.sub !== 'string' || !payload.sub) return { ok: false, reason: 'invalid' };
-    return { ok: true, userId: payload.sub };
+    return { ok: true, userId: payload.sub, ...(typeof payload.pwv === 'string' ? { pwv: payload.pwv } : {}) };
   } catch (err) {
     return { ok: false, reason: err instanceof jwt.TokenExpiredError ? 'expired' : 'invalid' };
   }
@@ -70,12 +79,36 @@ export function verifyAccessToken(token: string, secret: string, now: Date): Tok
 
 // ----- rate limiting -----------------------------------------------------------------
 
+export interface Limiter {
+  take(key: string): { allowed: boolean; retryAfterSeconds: number } | Promise<{ allowed: boolean; retryAfterSeconds: number }>;
+}
+
+/**
+ * Fixed-window counter kept in the repository (rate_limit_windows in PostgreSQL), so every API
+ * instance counts against the same limit (NFR-2).
+ */
+export class SharedRateLimiter implements Limiter {
+  constructor(
+    private readonly repository: { hitRateLimit(key: string, windowStart: string): Promise<number> },
+    private readonly max: number,
+    private readonly windowMs: number,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  async take(key: string): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+    const t = this.now();
+    const start = Math.floor(t / this.windowMs) * this.windowMs;
+    const hits = await this.repository.hitRateLimit(key, new Date(start).toISOString());
+    return { allowed: hits <= this.max, retryAfterSeconds: Math.max(1, Math.ceil((start + this.windowMs - t) / 1000)) };
+  }
+}
+
 /**
  * Fixed-window counter, in this process's memory. Enough to slow password guessing on
  * one instance. With more than one API instance each has its own counters: put a shared
  * limiter (or the load balancer's) in front before scaling out. See GO-LIVE.md.
  */
-export class RateLimiter {
+export class RateLimiter implements Limiter {
   private readonly hits = new Map<string, { count: number; resetAt: number }>();
 
   constructor(

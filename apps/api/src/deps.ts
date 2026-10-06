@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Brand } from '@opennjob/core';
-import { DEFAULT_BRAND, resendEmail } from './notifications';
+import { DEFAULT_BRAND, fileMailbox, resendEmail } from './notifications';
 import type { EmailSender, Notifier } from './notifications';
 import {
   AnthropicLlm,
@@ -72,6 +72,14 @@ export interface OpennJobConfig {
   operatorKey?: string;
   /** NODE_ENV=production. Test-only application systems cannot be enabled then. */
   production?: boolean;
+  /** NFR-4: where operator alerts go (OPENNJOB_OPERATOR_EMAIL). Absent: alerts are logged only. */
+  operatorEmail?: string;
+  /** Development only: write e-mails as files here (OPENNJOB_DEV_MAILBOX_DIR). Refused in production. */
+  devMailboxDir?: string;
+  /** DP-5: delete application records, events and notifications older than this (OPENNJOB_RETENTION_DAYS). Absent: kept. */
+  retentionDays?: number;
+  /** Run the daily discovery and 09:00 report in this process (OPENNJOB_SCHEDULER=on). One instance only needs it; claims stop doubles. */
+  scheduler?: boolean;
   /** APP-6: an application to the same employer, title and location within this many days is a duplicate (OPENNJOB_DUPLICATE_DAYS, default 30). */
   duplicateDays?: number;
   /** APP-8: automatic submissions per person per London day (OPENNJOB_DAILY_APPLICATION_LIMIT, default 20). */
@@ -191,6 +199,13 @@ export function loadConfig(env: Env): OpennJobConfig {
   config.dailyApplicationLimit = int(env.OPENNJOB_DAILY_APPLICATION_LIMIT, DEFAULT_DAILY_APPLICATION_LIMIT, 0, 1000);
   config.llmDailyAcuPerUser = int(env.OPENNJOB_LLM_DAILY_ACU_PER_USER, DEFAULT_LLM_DAILY_ACU_PER_USER, 0, 1_000_000);
   config.llmDailyAcuTotal = int(env.OPENNJOB_LLM_DAILY_ACU_TOTAL, DEFAULT_LLM_DAILY_ACU_TOTAL, 0, 100_000_000);
+  const operatorEmail = (env.OPENNJOB_OPERATOR_EMAIL ?? '').trim().toLowerCase();
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(operatorEmail)) config.operatorEmail = operatorEmail;
+  const mailbox = (env.OPENNJOB_DEV_MAILBOX_DIR ?? '').trim();
+  if (mailbox) config.devMailboxDir = mailbox;
+  const retention = (env.OPENNJOB_RETENTION_DAYS ?? '').trim();
+  if (/^\d{1,5}$/.test(retention) && Number(retention) >= 30) config.retentionDays = Number(retention);
+  if (flag(env.OPENNJOB_SCHEDULER)) config.scheduler = true;
   const operatorKey = (env.OPENNJOB_OPERATOR_KEY ?? '').trim();
   if (operatorKey) config.operatorKey = operatorKey;
   if (isProduction(env)) config.production = true;
@@ -222,6 +237,9 @@ export function startupProblems(env: Env): string[] {
     return problems;
   }
   if (production && !key) problems.push('OPENNJOB_DATA_KEY is not set. It is required when NODE_ENV=production (32 random bytes, base64).');
+  if (production && (env.OPENNJOB_DEV_MAILBOX_DIR ?? '').trim()) problems.push('OPENNJOB_DEV_MAILBOX_DIR writes e-mails to files and is for development only. Unset it in production.');
+  const retention = (env.OPENNJOB_RETENTION_DAYS ?? '').trim();
+  if (retention && !(/^\d{1,5}$/.test(retention) && Number(retention) >= 30)) problems.push('OPENNJOB_RETENTION_DAYS must be a whole number of days, 30 or more.');
   return problems;
 }
 
@@ -283,6 +301,7 @@ export function createDefaultDeps(env: Env = process.env, fetchFn: FetchLike = f
   const resendKey = (env.RESEND_API_KEY ?? '').trim();
   const emailFrom = (env.OPENNJOB_EMAIL_FROM ?? '').trim();
   if (resendKey && emailFrom) deps.emailSender = resendEmail(resendKey, emailFrom);
+  else if (config.devMailboxDir && !isProduction(env)) deps.emailSender = fileMailbox(config.devMailboxDir);
   if ((env.ANTHROPIC_API_KEY ?? '').trim()) {
     deps.llm = new AnthropicLlm({ apiKey: env.ANTHROPIC_API_KEY as string, ...(env.OPENNJOB_MODEL ? { model: env.OPENNJOB_MODEL } : {}) });
   }

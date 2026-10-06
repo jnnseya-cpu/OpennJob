@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -115,8 +115,8 @@ test.beforeAll(async () => {
 
   const apiPort = await freePort();
   apiBase = `http://127.0.0.1:${apiPort}`;
-  const env: NodeJS.ProcessEnv = { ...process.env, PORT: String(apiPort), HOST: '127.0.0.1', OPENNJOB_JWT_SECRET: JWT_SECRET, OPENNJOB_BCRYPT_ROUNDS: '4', OPENNJOB_OPERATOR_KEY: OPERATOR_KEY, OPENNJOB_EMPLOYER_KEY: EMPLOYER_KEY };
-  for (const key of ['DATABASE_URL', 'OPENNJOB_DATA_KEY', 'NODE_ENV', 'OPENNJOB_CORS_ORIGINS', 'OPENNJOB_CORS_ALLOW_ANY_EXTENSION', 'ANTHROPIC_API_KEY', 'OPENNJOB_DEMO_JOBS', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY', 'REED_API_KEY', 'OPENNJOB_GREENHOUSE_BOARDS', 'OPENNJOB_LEVER_COMPANIES', 'OPENNJOB_ASHBY_BOARDS', 'OPENNJOB_REGISTRATION_ALLOWLIST']) delete env[key];
+  const env: NodeJS.ProcessEnv = { ...process.env, PORT: String(apiPort), HOST: '127.0.0.1', OPENNJOB_JWT_SECRET: JWT_SECRET, OPENNJOB_BCRYPT_ROUNDS: '4', OPENNJOB_OPERATOR_KEY: OPERATOR_KEY, OPENNJOB_EMPLOYER_KEY: EMPLOYER_KEY, OPENNJOB_DEV_MAILBOX_DIR: path.join(workDir, 'mailbox') };
+  for (const key of ['DATABASE_URL', 'OPENNJOB_DATA_KEY', 'NODE_ENV', 'OPENNJOB_CORS_ORIGINS', 'OPENNJOB_CORS_ALLOW_ANY_EXTENSION', 'ANTHROPIC_API_KEY', 'OPENNJOB_DEMO_JOBS', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY', 'REED_API_KEY', 'OPENNJOB_GREENHOUSE_BOARDS', 'OPENNJOB_LEVER_COMPANIES', 'OPENNJOB_ASHBY_BOARDS', 'OPENNJOB_REGISTRATION_ALLOWLIST', 'RESEND_API_KEY', 'OPENNJOB_APP_URL']) delete env[key];
   api = spawn(process.execPath, [API_ENTRY], { cwd: workDir, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let apiLog = '';
   api.stdout?.on('data', (d) => (apiLog += d));
@@ -131,6 +131,11 @@ test.beforeAll(async () => {
 
   const consent = await call<{ termsVersion: string; privacyVersion: string }>('GET', '/auth/versions', undefined, '');
   token = (await call<{ accessToken: string }>('POST', '/auth/register', { email: EMAIL, password: PASSWORD, acceptedTermsVersion: consent.termsVersion, acceptedPrivacyVersion: consent.privacyVersion }, '')).accessToken;
+  // ACC-2: nothing is submitted for an unverified address. Verify with the code from the dev mailbox.
+  const mails = readdirSync(path.join(workDir, 'mailbox')).map((f) => JSON.parse(readFileSync(path.join(workDir, 'mailbox', f), 'utf8')) as { to: string; text: string });
+  const code = mails.filter((m) => m.to === EMAIL).map((m) => /code: ([A-Za-z0-9_-]{32,128})/.exec(m.text)?.[1]).find(Boolean);
+  if (!code) throw new Error('No verification code in the dev mailbox');
+  await call('POST', '/auth/verify-email', { token: code }, '');
   await call('PUT', '/profile', PROFILE);
   await call('PUT', '/passport', { rightToWorkConfirmed: false, training: [], referees: [] });
   await call('PUT', '/screening', { noticePeriod: 'Four weeks', custom: { 'Can you work weekends?': 'Yes, one in three' } });

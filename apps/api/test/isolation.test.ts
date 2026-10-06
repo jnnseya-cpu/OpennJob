@@ -26,6 +26,7 @@ const ROUTES = [
   'GET /agent/status',
   'GET /applications',
   'GET /applications/:id',
+  'GET /applications/:id/interview',
   'GET /auth/versions',
   'GET /health',
   'GET /interview/questions',
@@ -40,20 +41,26 @@ const ROUTES = [
   'GET /profile',
   'GET /screening',
   'GET /usage',
+  'POST /account/verification',
   'POST /agent/queue/:id/go',
   'POST /agent/queue/:id/result',
   'POST /agent/run',
   'POST /applications',
   'POST /applications/:id/answer',
   'POST /applications/:id/confirm',
+  'POST /applications/:id/interview/feedback',
   'POST /applications/:id/submitted',
   'POST /auth/login',
+  'POST /auth/password/forgot',
+  'POST /auth/password/reset',
   'POST /auth/register',
+  'POST /auth/verify-email',
   'POST /employer/jobs',
   'POST /interview/feedback',
   'POST /jobs/refresh',
   'POST /notifications/read',
   'POST /notifications/test',
+  'POST /profile/cv',
   'PUT /agent/authorisation',
   'PUT /agent/pause',
   'PUT /applications/:id/statement',
@@ -65,7 +72,8 @@ const ROUTES = [
   'PUT /screening',
 ];
 /** Routes that carry no user data and take no user token. */
-const NOT_USER_SCOPED = ['GET /auth/versions', 'GET /health', 'GET /interview/questions', 'POST /auth/login', 'POST /auth/register', 'POST /employer/jobs', 'GET /operator/status', 'PUT /operator/pause', 'PUT /operator/systems/:id'];
+const NOT_USER_SCOPED = ['GET /auth/versions', 'GET /health', 'GET /interview/questions', 'POST /auth/login', 'POST /auth/register', 'POST /employer/jobs',
+  'POST /auth/verify-email', 'POST /auth/password/forgot', 'POST /auth/password/reset', 'GET /operator/status', 'PUT /operator/pause', 'PUT /operator/systems/:id'];
 
 const B_ID = 'user-b';
 /** Fictional. A site manager, so B's matches differ from A's (a nurse). */
@@ -160,6 +168,8 @@ for (const backend of BACKENDS) {
       await b.post(`/applications/${aApp.id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(404);
       await b.post(`/applications/${aApp.id}/submitted`).send(RECEIPT).expect(404);
       await b.put(`/applications/${aApp.id}/statement`).send({ statement: 'Overwritten by B.' }).expect(404);
+      await b.get(`/applications/${aApp.id}/interview`).expect(404);
+      await b.post(`/applications/${aApp.id}/interview/feedback`).send({ questionId: 'doc-1', answer: 'An answer by B.' }).expect(404);
       expect((await t.api.get(`/applications/${aApp.id}`).expect(200)).body).toEqual(aApp);
       expect((await t.deps.repository.listEvents(B_ID)).map((e) => e.type)).toEqual([]);
     });
@@ -313,6 +323,8 @@ for (const backend of BACKENDS) {
         await b.post(`/agent/queue/${encodeURIComponent(id)}/result`).send({ outcome: 'uncertain' }).expect((r) => expect([400, 404]).toContain(r.status));
       }
       await b.put('/screening').send({ custom: { 'Can you work nights?': 'No' } }).expect(200);
+      await b.post('/account/verification').expect(200);
+      await b.post('/profile/cv').set('Content-Type', 'application/pdf').send(Buffer.from('%PDF-1.4 not a real pdf')).expect(400);
       await b.put('/agent/authorisation').send({ enabled: true, scopeVersion: STANDING_SCOPE_VERSION }).expect(200);
       await b.put('/agent/pause').send({ paused: true }).expect(200);
       await b.get('/agent/status').expect(200);

@@ -148,6 +148,8 @@ export class ApplyingService {
   private async blocked(userId: string): Promise<{ wait: QueueWait; resetsAt?: string } | undefined> {
     const a = await this.getAuthorisation(userId);
     if (!a.enabled) return { wait: 'not-authorised' };
+    // ACC-2: nothing is submitted for an account whose e-mail address is not verified.
+    if (!(await this.deps.repository.getUserById(userId))?.emailVerifiedAt) return { wait: 'email-unverified' };
     if (await this.operatorPaused()) return { wait: 'operator-paused' };
     if (a.paused) return { wait: 'paused' };
     const limit = await this.service.dailyLimit(userId);

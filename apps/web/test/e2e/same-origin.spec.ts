@@ -32,9 +32,11 @@ test('same origin behind a proxy: register, see the dashboard, read the notifica
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page).toHaveURL(/\/profile\/$/);
   await page.goto(`${web.url}/dashboard/`);
-  await expect(page.getByTestId('stat-unread').locator('strong')).toHaveText('1'); // "Welcome to OpennJob"
+  await expect(page.getByTestId('stat-unread').locator('strong')).toHaveText('2'); // "Welcome to OpennJob" and "Verify your email address"
   await page.goto(`${web.url}/notifications/`);
   await expect(page.getByTestId('notification').filter({ hasText: 'Welcome to OpennJob' })).toBeVisible();
+  // The in-app notice asks for verification; the one-time link or code is only ever in the e-mail.
+  await expect(page.getByTestId('notification').filter({ hasText: 'Verify your email address' })).toBeVisible();
   expect(calls.length).toBeGreaterThan(3);
   expect(new Set(calls)).toEqual(new Set([web.url]));
 });

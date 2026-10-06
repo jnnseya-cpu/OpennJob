@@ -14,6 +14,7 @@ export * from './statement';
 export * from './policy';
 export * from './fields';
 export * from './interview';
+export * from './interview-docs';
 export * from './tailoring';
 export * from './time';
 export * from './screening';

@@ -144,6 +144,10 @@ export const interviewFeedbackSchema = z
   .strict()
   .refine((v) => Boolean(v.questionId) !== Boolean(v.question), 'provide exactly one of questionId or question');
 
+export const applicationInterviewFeedbackSchema = z
+  .object({ questionId: z.string().regex(/^doc-\d{1,2}$/), answer: z.string().trim().min(1).max(8000) })
+  .strict();
+
 export const minScoreSchema = z
   .union([z.undefined(), z.string().regex(/^\d{1,3}$/, 'min must be a whole number from 0 to 100')])
   .transform((v) => (v === undefined ? 0 : Number(v)))
@@ -209,6 +213,15 @@ export const registerSchema = z
 export const loginSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000) }).strict();
 
 export const deleteAccountSchema = z.object({ password: z.string().min(1).max(1000) }).strict();
+
+/** ACC-2 and ACC-3: the one-time token from the e-mail (base64url, 43 characters). */
+const oneTimeToken = z.string().trim().regex(/^[A-Za-z0-9_-]{32,128}$/, 'not a valid link');
+export const verifyEmailSchema = z.object({ token: oneTimeToken }).strict();
+export const forgotPasswordSchema = z.object({ email: accountEmail }).strict();
+export const resetPasswordSchema = z.object({ token: oneTimeToken, password: z.string().min(1).max(1000) }).strict();
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

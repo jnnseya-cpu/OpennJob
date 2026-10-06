@@ -27,9 +27,13 @@ describe('the catalogue', () => {
       expect(e.channels).toContain('inapp');
     }
     // Every live trigger is an event the API really publishes.
-    const published = ['account.registered', 'account.signed_in', 'account.exported', 'account.deleted', 'notification.test', 'profile.updated', 'passport.updated', 'jobs.refreshed', 'agent.run', 'application.drafted', 'application.confirmed', 'application.submitted', 'application.statement.edited', 'interview.feedback'];
+    const published = ['account.registered', 'account.signed_in', 'account.exported', 'account.deleted', 'notification.test', 'profile.updated', 'passport.updated', 'jobs.refreshed', 'agent.run', 'application.drafted', 'application.confirmed', 'application.submitted', 'application.statement.edited', 'interview.feedback',
+      'auth.verification_sent', 'account.email_verified', 'auth.password_reset_requested', 'account.password_changed', 'application.uncertain', 'application.needs_you', 'report.daily'];
     for (const e of NOTIFICATION_CATALOGUE.filter((x) => x.trigger)) expect(published).toContain(e.trigger);
     expect(eventsForTrigger('application.drafted').map((e) => e.key)).toEqual(['agent.review_needed']);
+    // Messages that carry a one-time link or a report are sent directly, never by the dispatcher.
+    expect(eventsForTrigger('auth.verification_sent')).toEqual([]); expect(eventsForTrigger('report.daily')).toEqual([]);
+    expect(NOTIFICATION_CATALOGUE.filter((e) => e.direct).map((e) => e.key).sort()).toEqual(['account.email_verification_required', 'agent.daily_report', 'security.password_reset_link']);
   });
 
   it('routes by preference; mandatory notices ignore opt-outs; muted events keep in-app only', () => {

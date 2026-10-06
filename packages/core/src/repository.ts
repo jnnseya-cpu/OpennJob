@@ -83,6 +83,11 @@ export interface Repository {
   claimOnce(key: string, at: string): Promise<boolean>;
   /** Adds one hit to a fixed window and returns the window's count (shared rate limit, NFR-2). */
   hitRateLimit(key: string, windowStart: string): Promise<number>;
+  /**
+   * DP-5: deletes application records, events, notifications, delivery records, used or expired
+   * one-time tokens and rate-limit windows from before the cutoff, for every account. Returns counts.
+   */
+  purgeBefore(cutoff: string): Promise<Record<string, number>>;
 }
 
 export interface AuthToken {
@@ -278,5 +283,19 @@ export class InMemoryRepository implements Repository {
     const n = (this.rateWindows.get(k) ?? 0) + 1;
     this.rateWindows.set(k, n);
     return n;
+  }
+  async purgeBefore(cutoff: string) {
+    const out = { applications: 0, events: 0, notifications: 0, deliveries: 0, tokens: 0 };
+    for (const [id, a] of this.applications) if (a.createdAt < cutoff) (this.applications.delete(id), (out.applications += 1));
+    const drop = <T>(list: T[], old: (x: T) => boolean) => {
+      let n = 0;
+      for (let i = list.length - 1; i >= 0; i -= 1) if (old(list[i] as T)) (list.splice(i, 1), (n += 1));
+      return n;
+    };
+    out.events = drop(this.events, (e) => e.occurredAt < cutoff);
+    out.notifications = drop(this.notifications, (n) => n.createdAt < cutoff);
+    out.deliveries = drop(this.deliveries, (d) => d.at < cutoff);
+    out.tokens = drop(this.tokens, (t) => t.expiresAt < cutoff);
+    return out;
   }
 }

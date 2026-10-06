@@ -23,6 +23,7 @@ import {
   questionsForPack,
   requiredCredentialOf,
   scoreAnswer,
+  interviewFromDocuments,
   tailorCv,
   traceCheck,
   trainingWarnings,
@@ -99,6 +100,14 @@ export class OpennJobService {
       ...(profile.preferences ? { languages: prefs.languages.length, countries: prefs.countries.length, cities: prefs.cities.length } : {}),
     });
     return profile;
+  }
+
+  /** PRO-1: converts an uploaded CV to text. Counts only, never content, go to the event log. */
+  async extractCv(userId: string, bytes: Buffer, contentType: string) {
+    const { extractCv } = await import('./cv');
+    const out = await extractCv(bytes, contentType);
+    await this.emit(userId, 'profile.cv_extracted', { format: out.format, characters: out.text.length, pages: out.pages ?? null });
+    return out;
   }
 
   async getProfile(userId: string): Promise<Profile> {
@@ -520,6 +529,26 @@ export class OpennJobService {
     );
     await this.emit(userId, 'interview.feedback', { questionId: bankQuestion?.id ?? packQuestion?.id ?? 'custom', total: feedback.total, source: feedback.source });
     return { question, lookFor: bankQuestion?.lookFor ?? [], feedback };
+  }
+
+  /** Questions built from the advert and the documents this application actually sent (INT-1). */
+  async interviewForApplication(userId: string, id: string) {
+    const application = await this.mustGetApplication(userId, id);
+    if (!application.sentDocuments) throw new ConflictException('This application has no sent documents yet. Interview preparation uses what was sent.');
+    const job = await this.deps.repository.getJob(application.jobId);
+    const advert = job ?? { title: application.jobTitle, description: '', criteria: [] };
+    const interview = interviewFromDocuments(application.id, advert, application.sentDocuments);
+    await this.emit(userId, 'interview.prepared', { applicationId: id, questions: interview.questions.length, gaps: interview.gaps.length });
+    return { jobTitle: application.jobTitle, employer: application.employer, ...interview };
+  }
+
+  async interviewFeedbackForApplication(userId: string, id: string, input: { questionId: string; answer: string }) {
+    const prepared = await this.interviewForApplication(userId, id);
+    const q = prepared.questions.find((x) => x.id === input.questionId);
+    if (!q) throw new NotFoundException(`Question ${input.questionId} not found for this application`);
+    const feedback = await scoreAnswer({ question: q.question, answer: input.answer, lookFor: q.lookFor }, this.llmFor(userId, 'interview-feedback'));
+    await this.emit(userId, 'interview.feedback', { questionId: q.id, applicationId: id, total: feedback.total, source: feedback.source });
+    return { question: q.question, lookFor: q.lookFor, feedback };
   }
 
   // ----- usage ----------------------------------------------------------------------

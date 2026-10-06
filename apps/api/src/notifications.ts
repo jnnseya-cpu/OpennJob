@@ -34,6 +34,26 @@ export interface EmailSender {
 export const sandboxEmail: EmailSender = { name: 'sandbox', live: false, send: async () => 'logged' };
 
 /**
+ * Development and test only: each message is written as a JSON file in a directory, so a test or a
+ * developer can read the verification link without a mail server. The API refuses to start with it
+ * in production (startupProblems).
+ */
+export function fileMailbox(dir: string): EmailSender {
+  return {
+    name: 'dev-mailbox',
+    live: true,
+    async send(m) {
+      const { mkdirSync, writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const { randomUUID } = await import('node:crypto');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${Date.now()}-${randomUUID()}.json`), JSON.stringify(m), { mode: 0o600 });
+      return 'sent';
+    },
+  };
+}
+
+/**
  * Resend's HTTP API (POST https://api.resend.com/emails). Written from its public
  * documentation; never called from this repository's tests and never verified live.
  */
@@ -146,6 +166,60 @@ export class Notifier {
     }
     for (const channel of skipped) await record(channel, 'skipped', 'opted out');
     return out;
+  }
+
+  /**
+   * A catalogue message with content only the caller has: a one-time link, or the daily report.
+   * The e-mail carries it; the in-app copy (when the event has one) carries the catalogue text
+   * only, so no token is ever stored. The delivery log keeps channel and status, never content.
+   */
+  async sendDirect(userId: string, key: string, extra: { text: string; html: string; linkUrl?: string }, vars: NotificationVars = {}): Promise<NotificationDelivery[]> {
+    const def = notificationEvent(key);
+    if (!def) throw new Error(`Unknown notification ${key}`);
+    const { send, skipped } = routeChannels(def, await this.preferences(userId));
+    const v = { ...vars, app: this.brand.name };
+    const out: NotificationDelivery[] = [];
+    const record = async (channel: Channel, status: NotificationDelivery['status'], provider: string) => {
+      const d: NotificationDelivery = { id: this.deps.newId(), userId, eventKey: def.key, channel, status, provider, at: this.deps.clock().toISOString() };
+      await this.deps.repository.appendDelivery(d);
+      this.deps.logger.info({ msg: 'notification', event: def.key, channel, status });
+      out.push(d);
+    };
+    for (const channel of send) {
+      try {
+        if (channel === 'inapp') {
+          await this.deps.repository.saveNotification({ id: this.deps.newId(), userId, eventKey: def.key, category: def.category, severity: def.severity,
+            subject: renderTemplate(def.subject, v), body: renderTemplate(def.body, v), createdAt: this.deps.clock().toISOString() });
+          await record('inapp', 'delivered', 'inbox');
+        } else if (channel === 'email') {
+          const user = await this.deps.repository.getUserById(userId);
+          if (!user) continue;
+          const m = renderEmailHtml(def, v, this.brand);
+          const link = extra.linkUrl ? `<p style="margin:16px 0"><a href="${extra.linkUrl.replace(/"/g, '&quot;')}">${extra.linkUrl.replace(/</g, '&lt;')}</a></p>` : '';
+          const html = m.html.replace('</p>', `</p>${extra.html}${link}`);
+          const status = await this.sender.send({ to: user.email, subject: m.subject, text: `${m.text}\n\n${extra.text}${extra.linkUrl ? `\n\n${extra.linkUrl}` : ''}`, html });
+          await record('email', status, this.sender.name);
+        } else {
+          await record(channel, 'logged', 'not wired');
+        }
+      } catch {
+        await record(channel, 'failed', channel === 'email' ? this.sender.name : 'not wired');
+      }
+    }
+    for (const channel of skipped) await record(channel, 'skipped', 'opted out');
+    return out;
+  }
+
+  /** NFR-4: a message to the operator (OPENNJOB_OPERATOR_EMAIL). Names what failed and counts, nothing personal. */
+  async alertOperator(subject: string, text: string): Promise<'sent' | 'logged' | 'failed' | 'not configured'> {
+    const to = this.deps.config.operatorEmail;
+    this.deps.logger.warn({ msg: 'operator alert', alert: subject });
+    if (!to) return 'not configured';
+    try {
+      return await this.sender.send({ to, subject: `[${this.brand.name} alert] ${subject}`, text, html: `<p>${text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string)}</p>` });
+    } catch {
+      return 'failed';
+    }
   }
 
   /**

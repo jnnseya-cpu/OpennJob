@@ -2,7 +2,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { HttpException, Inject, Injectable, SetMetadata, UnauthorizedException, createParamDecorator } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RateLimiter, verifyAccessToken } from './auth';
+import { passwordVersion, verifyAccessToken } from './auth';
+import type { Limiter } from './auth';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
 
@@ -91,6 +92,10 @@ export class AccessTokenGuard implements CanActivate {
     // A deleted account's tokens stop working at once, not when they expire.
     const user = await this.deps.repository.getUserById(check.userId);
     if (!user) throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', message: 'Missing or invalid bearer token', code: 'token_invalid' });
+    // A token issued before the password was last changed no longer works (ACC-3).
+    if (check.pwv && check.pwv !== passwordVersion(user.passwordHash)) {
+      throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', message: 'Missing or invalid bearer token', code: 'token_invalid' });
+    }
     request.opennjobUserId = user.id;
     return true;
   }
@@ -105,15 +110,15 @@ export const AUTH_RATE_LIMITER = Symbol('OPENNJOB_AUTH_RATE_LIMITER');
  */
 @Injectable()
 export class AuthRateLimitGuard implements CanActivate {
-  constructor(@Inject(AUTH_RATE_LIMITER) private readonly limiter: RateLimiter) {}
+  constructor(@Inject(AUTH_RATE_LIMITER) private readonly limiter: Limiter) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const http = context.switchToHttp();
     const request = http.getRequest<AuthedRequest>();
     const keys = [`ip:${request.ip ?? 'unknown'}`];
     const email = (request.body as { email?: unknown } | undefined)?.email;
     if (typeof email === 'string' && email.length <= 254) keys.push(`email:${email.trim().toLowerCase()}`);
-    const results = keys.map((k) => this.limiter.take(k));
+    const results = await Promise.all(keys.map((k) => this.limiter.take(k)));
     const blocked = results.filter((r) => !r.allowed);
     if (blocked.length > 0) {
       const retryAfter = Math.max(...blocked.map((r) => r.retryAfterSeconds));

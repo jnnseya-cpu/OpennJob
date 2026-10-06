@@ -101,7 +101,7 @@ describe('POST /auth/register', () => {
     await t.raw().get('/auth/versions').expect(200, { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1', registration: 'open' });
     const res = await t.raw().post('/auth/register').send(registration({ email: '  Bola.Adeyemi@Example.org ' })).expect(201);
     expect(res.body).toEqual({
-      user: { id: 'id-1', email: EMAIL, createdAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } },
+      user: { id: 'id-1', email: EMAIL, createdAt: NOW, emailVerified: false, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } },
       accessToken: expect.any(String),
       tokenType: 'Bearer',
       expiresIn: 3600,
@@ -117,7 +117,8 @@ describe('POST /auth/register', () => {
     const mine = t.as(res.body.accessToken);
     await mine.get('/account').expect(200, res.body.user);
     await mine.get('/profile').expect(404); // a new account starts empty: it does not see the first user's data
-    expect((await t.deps.repository.listEvents('id-1')).map((e) => [e.type, e.payload])).toEqual([['account.registered', { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1' }]]);
+    // ACC-2: registration sends the verification e-mail. The event carries no token.
+    expect((await t.deps.repository.listEvents('id-1')).map((e) => [e.type, e.payload])).toEqual([['account.registered', { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1' }], ['auth.verification_sent', {}]]);
   });
 
   it('invite-only pilot: only listed addresses may register; others get 403 and no account; sign-in is unaffected', async () => {

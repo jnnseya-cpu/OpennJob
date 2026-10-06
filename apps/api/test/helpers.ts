@@ -112,6 +112,8 @@ export const userRecord = (id: string, email: string): User => ({
   acceptedTermsVersion: 'terms-test-1',
   acceptedPrivacyVersion: 'privacy-test-1',
   consentAt: NOW,
+  // Accounts made by the helpers have a verified address; the verification flow has its own tests.
+  emailVerifiedAt: NOW,
 });
 
 /**

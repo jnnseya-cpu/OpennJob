@@ -91,9 +91,9 @@ export class PostgresRepository implements Repository {
   async createUser(user: User): Promise<void> {
     try {
       await this.db.query(
-        `INSERT INTO users (id, email, password_hash, created_at, accepted_terms_version, accepted_privacy_version, consent_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [user.id, user.email, user.passwordHash, user.createdAt, user.acceptedTermsVersion, user.acceptedPrivacyVersion, user.consentAt],
+        `INSERT INTO users (id, email, password_hash, created_at, accepted_terms_version, accepted_privacy_version, consent_at, email_verified_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [user.id, user.email, user.passwordHash, user.createdAt, user.acceptedTermsVersion, user.acceptedPrivacyVersion, user.consentAt, user.emailVerifiedAt ?? null],
       );
     } catch (err) {
       const e = err as { code?: string; constraint?: string };
@@ -385,6 +385,17 @@ export class PostgresRepository implements Repository {
   async claimOnce(key: string, at: string): Promise<boolean> {
     const res = await this.db.query('INSERT INTO platform_claims (key, claimed_at) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [key, at]);
     return (res.rowCount ?? 0) > 0;
+  }
+
+  async purgeBefore(cutoff: string): Promise<Record<string, number>> {
+    const count = async (sql: string) => (await this.db.query(sql, [cutoff])).rowCount ?? 0;
+    return {
+      applications: await count('DELETE FROM applications WHERE created_at < $1'),
+      events: await count('DELETE FROM events WHERE occurred_at < $1'),
+      notifications: await count('DELETE FROM notifications WHERE created_at < $1'),
+      deliveries: await count('DELETE FROM notification_deliveries WHERE at < $1'),
+      tokens: await count('DELETE FROM auth_tokens WHERE expires_at < $1'),
+    };
   }
 
   async hitRateLimit(key: string, windowStart: string): Promise<number> {

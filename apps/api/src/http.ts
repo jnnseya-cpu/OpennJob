@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { CV_MAX_BYTES, CV_TYPES } from './cv';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
@@ -42,6 +43,8 @@ export async function createApp(deps: OpennJobDeps, options: { trustProxy?: stri
     maxAge: 600,
   });
   app.useBodyParser('json', { limit: deps.config.bodyLimit });
+  // CV upload (PRO-1) is the one route that takes a file: a raw PDF or Word body, at most 5 MB.
+  app.useBodyParser('raw', { limit: CV_MAX_BYTES, type: [CV_TYPES.pdf, CV_TYPES.docx] });
   // Responses carry personal data: never let a shared cache keep one.
   app.use((_req: unknown, res: { setHeader(name: string, value: string): void }, next: () => void) => {
     res.setHeader('Cache-Control', 'no-store');

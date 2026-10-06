@@ -2,8 +2,9 @@ import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ApplyingService } from './applying.service';
+import { Scheduler } from './scheduler';
 import { AccountService } from './account.service';
-import { RateLimiter } from './auth';
+import { SharedRateLimiter } from './auth';
 import { AUTH_RATE_LIMITER, AccessTokenGuard, AuthRateLimitGuard } from './auth.guard';
 import {
   AccountController,
@@ -41,9 +42,10 @@ export class AppModule {
       controllers: [HealthController, AuthController, AccountController, ProfileController, PassportController, JobsController, AgentController, EmployerController, ApplicationsController, ScreeningController, OperatorController, InterviewController, UsageController, NotificationsController],
       providers: [
         { provide: DEPS, useValue: deps },
-        { provide: AUTH_RATE_LIMITER, useValue: new RateLimiter(deps.config.authRateLimitMax, deps.config.authRateLimitWindowMs, () => deps.clock().getTime()) },
+        { provide: AUTH_RATE_LIMITER, useValue: new SharedRateLimiter(deps.repository, deps.config.authRateLimitMax, deps.config.authRateLimitWindowMs, () => deps.clock().getTime()) },
         OpennJobService,
         ApplyingService,
+        Scheduler,
         AccountService,
         AuthRateLimitGuard,
         { provide: APP_GUARD, useClass: AccessTokenGuard },

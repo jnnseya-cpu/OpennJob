@@ -34,7 +34,7 @@ for (const backend of BACKENDS) {
       const body = res.body;
       expect(Object.keys(body).sort()).toEqual(['applications', 'events', 'exportedAt', 'notificationDeliveries', 'notificationPreferences', 'notifications', 'passport', 'profile', 'usage', 'user']);
       expect(body.exportedAt).toBe(NOW);
-      expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL, createdAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } });
+      expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL, createdAt: NOW, emailVerified: true, emailVerifiedAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } });
       expect(body.profile).toEqual({ ...PROFILE, preferences: { languages: ['English'], countries: ['GB'], cities: [] } });
       expect(body.profile.cvText).toBe(CV_TEXT);
       expect(body.passport).toEqual(PASSPORT);

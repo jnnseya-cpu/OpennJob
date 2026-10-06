@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { CV_TYPES, CvError } from './cv';
 import { AccountService } from './account.service';
 import { ApplyingService } from './applying.service';
 import { AuthRateLimitGuard, CurrentUser, EmployerRoute, OperatorRoute, Public } from './auth.guard';
@@ -11,11 +12,15 @@ import {
   deleteAccountSchema,
   loginSchema,
   registerSchema,
+  verifyEmailSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   confirmApplicationSchema,
   employerJobSchema,
   matchFilterSchema,
   createApplicationSchema,
   interviewFeedbackSchema,
+  applicationInterviewFeedbackSchema,
   minScoreSchema,
   passportSchema,
   profileSchema,
@@ -30,7 +35,7 @@ import {
   submittedSchema,
 } from './schemas';
 import type { ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput } from './schemas';
-import type { DeleteAccountInput, LoginInput, RegisterInput } from './schemas';
+import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
 // Note: every constructor parameter uses an explicit @Inject(...) so the app does not
@@ -80,6 +85,32 @@ export class AuthController {
   login(@Body(new ZodPipe(loginSchema)) body: LoginInput) {
     return this.accounts.login(body);
   }
+
+  /** ACC-2: the link from the verification e-mail. */
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @Post('verify-email')
+  @HttpCode(200)
+  verifyEmail(@Body(new ZodPipe(verifyEmailSchema)) body: VerifyEmailInput) {
+    return this.accounts.verifyEmail(body);
+  }
+
+  /** ACC-3: always 200, whether or not the address has an account. */
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @Post('password/forgot')
+  @HttpCode(200)
+  forgot(@Body(new ZodPipe(forgotPasswordSchema)) body: ForgotPasswordInput) {
+    return this.accounts.forgotPassword(body);
+  }
+
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @Post('password/reset')
+  @HttpCode(200)
+  reset(@Body(new ZodPipe(resetPasswordSchema)) body: ResetPasswordInput) {
+    return this.accounts.resetPassword(body);
+  }
 }
 
 @Controller('account')
@@ -94,6 +125,12 @@ export class AccountController {
   @Get('export')
   export(@CurrentUser() userId: string) {
     return this.accounts.exportAccount(userId);
+  }
+
+  @Post('verification')
+  @HttpCode(200)
+  resendVerification(@CurrentUser() userId: string) {
+    return this.accounts.resendVerification(userId);
   }
 
   @Delete()
@@ -115,6 +152,22 @@ export class ProfileController {
   @Get()
   get(@CurrentUser() userId: string) {
     return this.service.getProfile(userId);
+  }
+
+  /** PRO-1: a PDF or Word CV as text, for the person to check and edit. Nothing is saved here. */
+  @Post('cv')
+  @HttpCode(200)
+  async cv(@CurrentUser() userId: string, @Req() req: { body?: unknown; headers: Record<string, string | string[] | undefined> }) {
+    const type = String(req.headers['content-type'] ?? '').split(';')[0]?.trim() ?? '';
+    if (!Buffer.isBuffer(req.body) || (type !== CV_TYPES.pdf && type !== CV_TYPES.docx)) {
+      throw new BadRequestException('Send the file as application/pdf or the Word .docx type');
+    }
+    try {
+      return await this.service.extractCv(userId, req.body, type);
+    } catch (err) {
+      if (err instanceof CvError) throw new BadRequestException(err.message);
+      throw err;
+    }
   }
 }
 
@@ -236,6 +289,18 @@ export class ApplicationsController {
   @Get(':id')
   get(@CurrentUser() userId: string, @Param('id') id: string) {
     return this.service.getApplication(userId, id);
+  }
+
+  /** Interview questions quoting the advert and the documents this application sent (INT-1). */
+  @Get(':id/interview')
+  interview(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.service.interviewForApplication(userId, id);
+  }
+
+  @Post(':id/interview/feedback')
+  @HttpCode(200)
+  interviewFeedback(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(applicationInterviewFeedbackSchema)) body: { questionId: string; answer: string }) {
+    return this.service.interviewFeedbackForApplication(userId, id, body);
   }
 
   /** The user's edit of the drafted statement. The extension fills the saved text. */

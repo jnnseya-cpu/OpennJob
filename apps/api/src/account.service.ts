@@ -1,10 +1,15 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EmailTakenError, SYSTEM_USER_ID } from '@opennjob/core';
 import type { User } from '@opennjob/core';
-import { hashPassword, passwordProblems, signAccessToken, verifyPassword } from './auth';
+import { createHash, randomBytes } from 'node:crypto';
+import { hashPassword, passwordProblems, passwordVersion, signAccessToken, verifyPassword } from './auth';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
-import type { DeleteAccountInput, LoginInput, RegisterInput } from './schemas';
+import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
+
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+const RESET_TTL_MS = 60 * 60 * 1000;
+const tokenHash = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
 
 /** What the API says about an account. Never the password hash. */
 function publicUser(user: User) {
@@ -12,6 +17,8 @@ function publicUser(user: User) {
     id: user.id,
     email: user.email,
     createdAt: user.createdAt,
+    emailVerified: Boolean(user.emailVerifiedAt),
+    ...(user.emailVerifiedAt ? { emailVerifiedAt: user.emailVerifiedAt } : {}),
     consent: { acceptedTermsVersion: user.acceptedTermsVersion, acceptedPrivacyVersion: user.acceptedPrivacyVersion, acceptedAt: user.consentAt },
   };
 }
@@ -27,8 +34,33 @@ export class AccountService {
     return this.deps.clock().toISOString();
   }
 
-  private token(userId: string) {
-    return signAccessToken(userId, this.deps.config.jwtSecret, this.deps.config.jwtTtlSeconds, this.deps.clock());
+  private token(user: User) {
+    return signAccessToken(user.id, this.deps.config.jwtSecret, this.deps.config.jwtTtlSeconds, this.deps.clock(), passwordVersion(user.passwordHash));
+  }
+
+  /** The address a one-time link points at: the web app when its address is known, otherwise the token alone. */
+  private link(path: string, token: string): string | undefined {
+    const base = this.deps.config.brand?.appUrl;
+    return base ? `${base.replace(/\/+$/, '')}/${path}/?token=${token}` : undefined;
+  }
+
+  /** A fresh one-time token: only its SHA-256 is stored. The token itself goes into one e-mail and nowhere else. */
+  private async newToken(userId: string, kind: 'verify-email' | 'reset-password', ttlMs: number): Promise<string> {
+    const token = randomBytes(32).toString('base64url');
+    const at = this.deps.clock();
+    await this.deps.repository.saveAuthToken({ id: this.deps.newId(), userId, kind, tokenHash: tokenHash(token), expiresAt: new Date(at.getTime() + ttlMs).toISOString(), createdAt: at.toISOString() });
+    return token;
+  }
+
+  private async sendVerification(user: User): Promise<void> {
+    const token = await this.newToken(user.id, 'verify-email', VERIFY_TTL_MS);
+    const link = this.link('verify-email', token);
+    await this.deps.notifier?.sendDirect(user.id, 'account.email_verification_required', {
+      text: link ? 'Confirm your address:' : `Your confirmation code: ${token}\nEnter it on the Verify e-mail page.`,
+      html: link ? '<p>Confirm your address:</p>' : `<p>Your confirmation code:</p><p style="font-family:monospace;font-size:15px">${token}</p><p>Enter it on the Verify e-mail page.</p>`,
+      ...(link ? { linkUrl: link } : {}),
+    });
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'auth.verification_sent', userId: user.id, occurredAt: this.now(), payload: {} });
   }
 
   versions() {
@@ -75,7 +107,8 @@ export class AccountService {
       throw err;
     }
     await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.registered', userId: user.id, occurredAt: at, payload: { termsVersion: user.acceptedTermsVersion, privacyVersion: user.acceptedPrivacyVersion } });
-    return { user: publicUser(user), ...this.token(user.id) };
+    await this.sendVerification(user);
+    return { user: publicUser(user), ...this.token(user) };
   }
 
   async login(input: LoginInput) {
@@ -85,7 +118,60 @@ export class AccountService {
     // One message for "no such account" and "wrong password".
     if (!user || !ok) throw new UnauthorizedException('Email address or password is incorrect');
     await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.signed_in', userId: user.id, occurredAt: this.now(), payload: {} });
-    return { user: publicUser(user), ...this.token(user.id) };
+    return { user: publicUser(user), ...this.token(user) };
+  }
+
+  /** ACC-2: the link from the e-mail confirms the address. A used or expired link does nothing. */
+  async verifyEmail(input: VerifyEmailInput) {
+    const userId = await this.deps.repository.consumeAuthToken('verify-email', tokenHash(input.token), this.now());
+    if (!userId) throw new BadRequestException('This link has expired or has already been used. Ask for a new one from Account.');
+    await this.deps.repository.markEmailVerified(userId, this.now());
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.email_verified', userId, occurredAt: this.now(), payload: {} });
+    return { verified: true };
+  }
+
+  async resendVerification(userId: string) {
+    const user = await this.mustGetUser(userId);
+    if (user.emailVerifiedAt) return { verified: true, sent: false };
+    const minute = Math.floor(this.deps.clock().getTime() / 60_000);
+    if ((await this.deps.repository.hitRateLimit(`verify:${userId}`, new Date(minute * 60_000).toISOString())) > 1) throw new ConflictException('A link was sent less than a minute ago');
+    await this.sendVerification(user);
+    return { verified: false, sent: true };
+  }
+
+  /** ACC-3: always the same reply, so the answer never says whether an address has an account. */
+  async forgotPassword(input: ForgotPasswordInput) {
+    const user = await this.deps.repository.getUserByEmail(input.email);
+    if (user) {
+      const token = await this.newToken(user.id, 'reset-password', RESET_TTL_MS);
+      const link = this.link('reset-password', token);
+      await this.deps.notifier?.sendDirect(user.id, 'security.password_reset_link', {
+        text: link ? 'Choose a new password:' : `Your reset code: ${token}\nEnter it on the Reset password page.`,
+        html: link ? '<p>Choose a new password:</p>' : `<p>Your reset code:</p><p style="font-family:monospace;font-size:15px">${token}</p>`,
+        ...(link ? { linkUrl: link } : {}),
+      });
+      await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'auth.password_reset_requested', userId: user.id, occurredAt: this.now(), payload: {} });
+    }
+    return { sent: true };
+  }
+
+  async resetPassword(input: ResetPasswordInput) {
+    const refuse = (problems: string[]) =>
+      new BadRequestException({ statusCode: 400, error: 'Bad Request', message: 'Validation failed', issues: problems.map((message) => ({ path: 'password', message })) });
+    // The rules that need no account are checked first, so a weak password does not use up the link.
+    const early = passwordProblems(input.password);
+    if (early.length > 0) throw refuse(early);
+    const userId = await this.deps.repository.consumeAuthToken('reset-password', tokenHash(input.token), this.now());
+    if (!userId) throw new BadRequestException('This link has expired or has already been used. Ask for a new one.');
+    const user = await this.mustGetUser(userId);
+    const problems = passwordProblems(input.password, user.email);
+    if (problems.length > 0) throw refuse(problems);
+    const hash = await hashPassword(input.password, this.deps.config.bcryptRounds);
+    await this.deps.repository.updatePasswordHash(userId, hash);
+    // Following the link proves the address too.
+    if (!user.emailVerifiedAt) await this.deps.repository.markEmailVerified(userId, this.now());
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.password_changed', userId, occurredAt: this.now(), payload: {} });
+    return { reset: true };
   }
 
   private async mustGetUser(userId: string): Promise<User> {

@@ -124,6 +124,13 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         expect(stored).toMatchObject({ acceptedTermsVersion: 'terms-1', acceptedPrivacyVersion: 'privacy-2', consentAt: '2026-10-06T09:00:01.000Z' });
       });
 
+      it('keeps the e-mail verification time given at creation, and absent when absent', async () => {
+        const id = unique('user-v');
+        await repo.createUser({ ...user(id), emailVerifiedAt: '2026-10-06T09:05:00.000Z' });
+        expect((await repo.getUserById(id))?.emailVerifiedAt).toBe('2026-10-06T09:05:00.000Z');
+        expect((await repo.getUserById(a))?.emailVerifiedAt).toBeUndefined();
+      });
+
       it('returns undefined for an unknown id or email', async () => {
         expect(await repo.getUserById(unique('nobody'))).toBeUndefined();
         expect(await repo.getUserByEmail('nobody@example.org')).toBeUndefined();
@@ -464,6 +471,30 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         expect(await repo.hitRateLimit(rl, NOW)).toBe(1);
         expect(await repo.hitRateLimit(rl, NOW)).toBe(2);
         expect(await repo.hitRateLimit(rl, '2026-10-06T09:15:00.000Z')).toBe(1);
+      });
+
+      it('purgeBefore deletes records older than the cutoff and keeps newer ones (DP-5)', async () => {
+        const OLD = '2026-01-01T00:00:00.000Z';
+        const CUTOFF = '2026-06-01T00:00:00.000Z';
+        const oldApp = { ...application(unique('app'), a, jobId), createdAt: OLD };
+        const newApp = application(unique('app'), a, jobId);
+        await repo.createApplication(oldApp);
+        await repo.createApplication(newApp);
+        const oldEv = { ...event(unique('ev'), a, 'profile.updated', {}), occurredAt: OLD };
+        const newEv = event(unique('ev'), a, 'profile.updated', {});
+        await repo.appendEvent(oldEv);
+        await repo.appendEvent(newEv);
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'verify-email', tokenHash: unique('h').padEnd(64, '0'), expiresAt: OLD, createdAt: OLD });
+        const counts = await repo.purgeBefore(CUTOFF);
+        expect(counts.applications).toBeGreaterThanOrEqual(1);
+        expect(counts.events).toBeGreaterThanOrEqual(1);
+        expect(counts.tokens).toBeGreaterThanOrEqual(1);
+        expect(await repo.getApplication(a, oldApp.id)).toBeUndefined();
+        expect(await repo.getApplication(a, newApp.id)).toEqual(newApp);
+        const ids = (await repo.listEvents(a)).map((e) => e.id);
+        expect(ids).not.toContain(oldEv.id);
+        expect(ids).toContain(newEv.id);
+        expect(await repo.getUserById(a)).toBeDefined(); // the account itself is never purged by age
       });
 
       it('stores the job contract type', async () => {
