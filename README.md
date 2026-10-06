@@ -186,8 +186,12 @@ How the web app keeps the product rules:
   CV, passport, statement or contact value reaches the browser console or the API log.
 - The access token is kept in `sessionStorage` (gone when the tab closes); the password
   is never stored. `localStorage` holds only the chosen mode and pack.
-- Not built, and the screens say so: email verification, password reset, password or
-  email change, CV upload as PDF or Word, billing, server-side sign-out.
+- E-mail verification (banner, link page, code entry), forgot and reset password, CV upload
+  as PDF or Word, standard screening answers, automatic applications with the exact wording,
+  revoke and pause, the daily report switch, receipts and hold reasons in the tracker, and
+  interview preparation from an application's sent documents.
+- Not built, and the screens say so: password change while signed in, e-mail change,
+  billing, server-side sign-out.
 
 **Landing page, dashboard, charts.** `/` is a public landing page (signed-in visitors go to
 `/dashboard/`). The dashboard and the Matches, Tracker, Interview and Profile screens carry charts
@@ -247,16 +251,30 @@ as a non-root user, deleted afterwards).
 
 | Command | Result |
 | --- | --- |
-| `npm test` (no `DATABASE_URL`) | 24 test files, 540 passed, 0 failed, **91 skipped** (the PostgreSQL-backed tests) |
-| `npm run test:pg` (the same, with a live PostgreSQL) | 24 test files, **631 passed**, 0 failed, 0 skipped |
-| `npm run test:e2e` (no `DATABASE_URL`) | 70 passed, 0 failed, **1 skipped** (the API process on PostgreSQL); the 10 web-app tests ran on the in-memory store |
-| `npm run test:pg -- npx playwright test` (with a live PostgreSQL, after `npm run build`) | **71 passed**, 0 failed, 0 skipped; the 10 web-app tests ran on PostgreSQL with encryption on |
+| `npm run typecheck` | clean (all four workspaces, tests included) |
+| `npm test` (no `DATABASE_URL`) | 32 test files, 667 passed, 0 failed, **114 skipped** (the PostgreSQL-backed tests) |
+| `npm run test:pg` (the same, with a live PostgreSQL) | 32 test files, **781 passed**, 0 failed, 0 skipped |
+| `npx playwright test` after `npm run build` (no `DATABASE_URL`) | 86 passed, 0 failed, **1 skipped** (the API process on PostgreSQL) |
+| `npm run test:pg -- npx playwright test` (with a live PostgreSQL) | **87 passed**, 0 failed, 0 skipped; the web-app tests ran on PostgreSQL with encryption on |
+| `npm run test:agent` (career-agent, Python) | 125 tests, OK |
+
+These are from the round that built spec phases 2 to 5 (applying on the person's behalf,
+the scheduler and report, e-mail verification and password reset, CV upload, interview from
+the documents sent, and their web screens). Each requirement and test case is mapped to its
+tests in `docs/traceability.md`. New test files in that round: `spec-applying.test.ts`,
+`spec-queue.test.ts`, `spec-p4.test.ts` (API), `tailoring.test.ts`, `screening.test.ts`,
+`sources-register.test.ts` (core), `queue.spec.ts` (extension) and `account-flows.spec.ts`
+(web). Existing tests changed in that round, none loosened: the web test that expected
+"upload not available" and "password reset not available" now checks the working controls;
+the notification count after registering is 2 (the welcome notice and "verify your e-mail
+address"); and the extension specs attach their service-worker listener before checking for
+the worker, which fixed a race that failed once under load.
 
 A run that says "skipped" has not tested PostgreSQL. The numbers that count are the two
 with a live database, and CI is set up to produce those (it has a postgres service
 container). The CI workflow itself has never run.
 
-What the numbers are made of:
+From the first hand-over (630 vitest and 61 Playwright tests), for the record:
 
 - **vitest, 630.** The 438 tests that existed before this round are all still there and
   pass (their 16 files; the edits to them are listed below). 192 are new, in 8 files
@@ -423,14 +441,17 @@ opennjob/
     src/deps.ts               configuration from the environment; PostgreSQL or in-memory
     src/auth.ts               password rules, bcrypt, JWT, rate limiter
     src/auth.guard.ts         access-token guard, @CurrentUser, rate-limit guard
-    src/account.service.ts    register, login, export, delete
+    src/account.service.ts    register, login, e-mail verification, password reset, export, delete
+    src/applying.service.ts   standing authorisation, pauses, the queue, receipts, screening answers
+    src/scheduler.ts          06:00 discovery, 09:00 report, 03:00 retention (London), operator alerts
+    src/cv.ts                 PDF and Word CV to text
     src/services.ts           profile, passport, jobs, matching, applications, interview, usage
     src/postgres.ts           PostgresRepository, PostgresUsageMeter (pg)
     src/crypto.ts             AES-256-GCM encryption of CV text, passport, statements
     src/migrations.ts         the migration runner; migrate-cli.ts is `npm run migrate`
     src/logging.ts            JSON logger, request log, error filter
   apps/web/                 candidate web app: Next.js 14, App Router, static export to out/
-    src/app/                  one folder per screen: signin, register, profile, matches, review, tracker, interview, account
+    src/app/                  one folder per screen: signin, register, verify-email, forgot-password, reset-password, profile, matches, review, tracker, interview, notifications, account
     src/components/AppShell.tsx   header (pack, mode), tab bar, sign-in guard
     src/lib/api.ts            the only API client: address from /opennjob-config.json, token in sessionStorage
     src/lib/declarations.ts   what the user confirms on the review screen
@@ -509,8 +530,12 @@ added beyond the v1 brief because the extension and a developer need them.
 - **Export and deletion.** `GET /account/export` and `DELETE /account` (which asks for
   the password again). Deletion removes the profile, passport, applications, events and
   usage records; in PostgreSQL the test reads every table afterwards.
-- **Not there:** email verification, password reset, change of password or email,
-  multi-factor authentication, account lock-out, admin tools. See `GO-LIVE.md`.
+- E-mail verification and password reset by one-time links (`POST /auth/verify-email`,
+  `/auth/password/forgot`, `/auth/password/reset`, `/account/verification`). Only the
+  SHA-256 of a token is stored. Nothing is sent to an employer for an unverified address. A
+  reset ends every earlier session.
+- **Not there:** change of password while signed in, change of email, multi-factor
+  authentication, account lock-out, admin tools. See `GO-LIVE.md`.
 
 ### PostgreSQL and migrations
 
@@ -705,8 +730,10 @@ employer accounts, and nothing checks who the employer is or moderates what is p
 
 | Area | State |
 | --- | --- |
-| Persistence | PostgreSQL when `DATABASE_URL` is set; otherwise in memory and lost on restart. No backups, no retention rule. |
-| Authentication | Real accounts with bcrypt and JWT. Missing: email verification, password reset, password change, refresh tokens, server-side sign-out, multi-factor authentication. |
+| Persistence | PostgreSQL when `DATABASE_URL` is set; otherwise in memory and lost on restart. No backups. Retention deletes old records only when `OPENNJOB_RETENTION_DAYS` is set. |
+| Authentication | Real accounts with bcrypt and JWT, e-mail verification and password reset. Missing: password change while signed in, refresh tokens, server-side sign-out, multi-factor authentication. |
+| E-mail | Resend when `RESEND_API_KEY` is set; never tried against the real service. `OPENNJOB_DEV_MAILBOX_DIR` writes e-mails to files for local testing (refused in production). No message has reached a real inbox. |
+| Scheduler | `OPENNJOB_SCHEDULER=true`: discovery at 06:00, the report at 09:00 and retention at 03:00, London time, once per day across instances. Tested with a simulated clock only. |
 | Candidate web app | `apps/web`, tested in headless Chromium against the built API. Never deployed, never used by a real person, never tried on a real phone. No content-security policy is configured for it (Next.js inlines scripts, so a policy needs `'unsafe-inline'` or nonces; not done). |
 | Encryption | CV text, passport and statements only, and only in PostgreSQL. One key, no rotation. |
 | Terms and privacy notice | The versions accepted at registration (`draft-1`) refer to documents that do not exist. |
@@ -714,7 +741,7 @@ employer accounts, and nothing checks who the employer is or moderates what is p
 | Model name | `OPENNJOB_MODEL` must be set. If it is not, the code falls back to `PLACEHOLDER_MODEL_CONFIRM_BEFORE_USE` in `packages/core/src/llm.ts` and warns. That placeholder has not been checked against Anthropic's current model list. |
 | Billing | `UsageMeter` records ACU per LLM call (in the `usage_records` table with PostgreSQL). The ACU formula (1 ACU per 1,000 tokens) is a placeholder. `BitriPayBillingPort` is an interface with **no implementation**; it states what OpennJob needs and does not describe BitriPay's real API. |
 | Events | In-process `EventBus`. Events are also appended to the event log (the `events` table with PostgreSQL). |
-| CV input | Plain text only. No PDF or Word parsing. |
+| CV input | Pasted text, or a PDF or Word (.docx) file turned into text for the person to check (`pdfjs-dist`, `mammoth`). Scanned PDFs give no text; there is no OCR. |
 | Statement drafting without an LLM | A list of the matching sentences copied from the CV, in criteria order. It cannot invent anything, and it is not polished prose. |
 | LLM statement check | The prompt forbids invented experience and a cheap check flags criteria the CV does not evidence but the draft mentions. That is a warning, not a guarantee. The user must read every AI-drafted statement. |
 | Criteria extraction without an LLM | Recognises about 25 healthcare terms and about 28 construction, data-centre, energy and rail terms. It will miss unusual criteria and cannot read nuance. It does not read French adverts well: a French advert needs the LLM, or criteria supplied with the job. |
@@ -724,7 +751,7 @@ employer accounts, and nothing checks who the employer is or moderates what is p
 | French statements without an LLM | Only the opening line is French. The CV's sentences are copied untranslated, and the draft says so. |
 | Interview feedback in French without an LLM | A much smaller cue list than the English one, tried only on the test answers. |
 | Employer posting | One shared key, no employer accounts, no moderation, no editing or withdrawing a posting. |
-| Job refresh | Any signed-in user can call `POST /jobs/refresh`, which refreshes the shared catalogue. No scheduler. |
+| Job refresh | Any signed-in user can call `POST /jobs/refresh`, which refreshes the shared catalogue; the scheduler also refreshes it daily. No role restricts it. |
 | Preferences | Languages, countries and cities only. No salary, contract type, distance or remote-working preference. |
 | Interview scoring without an LLM | Looks for wording that signals Situation / Task / Action / Result. It cannot judge whether an answer is true, safe or relevant. |
 | Extension UI | A popup. It closes when the user clicks on the page, which loses the ticks. A Chrome side panel would fix that. It can sign in but not register. No icons, no onboarding, no error reporting. |
@@ -884,8 +911,9 @@ OpennJob handles personal data, and some of the most sensitive kinds.
    including which countries Adzuna really supports.
 2. Make one real Anthropic call end to end; confirm the model name; review statement
    quality with real nurses' CVs (with their consent).
-3. Email verification and password reset (the web app exists; these do not). Try the
-   web app on real phones; decide on the Next.js version (see Known issues).
+3. A real sending domain with SPF and DKIM, then one verification e-mail and one 09:00
+   report to a real inbox. Try the web app on real phones; decide on the Next.js version
+   (see `docs/dependency-audit.md`).
 4. Privacy policy and terms, DPIA, ICO check, before any real user's data; and a legal
    check per country before offering jobs outside the UK.
 5. Build the image, run `docker compose up`, run the CI workflow, and deploy to a

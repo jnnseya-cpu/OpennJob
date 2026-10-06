@@ -115,6 +115,60 @@ built API process, in memory and on PostgreSQL with encryption on; never deploye
       stops on CAPTCHA and login walls. `policy.test.ts`, `form-filling.spec.ts`,
       `pack-forms.spec.ts`, `real-extension.spec.ts` (none of these were weakened)
 
+**Applying on the person's behalf, reports and accounts (spec phases 2 to 5)**
+
+Every requirement and test case of the owner's "OpennJob Build and Test Requirements" is
+mapped to its tests, or marked not done with the reason, in `docs/traceability.md`.
+
+- [x] Tailored CV that only reorders the person's own lines; a trace check holds any
+      sentence it cannot trace; the exact documents sent are kept, encrypted, with their
+      SHA-256. `tailoring.test.ts`, `spec-applying.test.ts`, `repository.contract.ts`
+- [x] One application per job (same id, or employer, title and location within
+      `OPENNJOB_DUPLICATE_DAYS`); a daily limit per London day; an LLM spending ceiling
+      per person and in total that holds new drafts. `spec-applying.test.ts`
+- [x] Standing authorisation: off until the person agrees to the current wording, dated,
+      revocable in one step, pausable; the operator's pause for everyone. A form with any
+      declaration or sensitive question is never submitted. The queue re-checks
+      everything before each submission and claims each application once.
+      `spec-queue.test.ts`, `queue.spec.ts` (fictional forms only)
+- [x] Submitted only with a receipt: the page address and the site's own confirmation
+      text. No confirmation seen means "uncertain", never retried automatically.
+      `spec-queue.test.ts`, `queue.spec.ts`
+- [x] Application systems are off until the operator records a terms check and one
+      supervised real submission. None is on. `spec-queue.test.ts`
+- [x] Ordinary screening answers stored once and reused; an unknown question holds the
+      application and the person's answer is saved; declarations are refused on save and
+      never filled from storage. `screening.test.ts`, `spec-queue.test.ts`,
+      `account-flows.spec.ts`
+- [x] E-mail verification and password reset by one-time links (only their SHA-256 is
+      stored; one use; 24 hours and 1 hour). Nothing is queued for an unverified address.
+      A reset ends every earlier session. The reset request answers the same for unknown
+      addresses. `spec-p4.test.ts`, `account-flows.spec.ts`
+- [x] CV upload: PDF and Word (.docx) become text the person reads and edits before
+      saving. The file is not kept. `spec-p4.test.ts` (real fixture files),
+      `account-flows.spec.ts`
+- [x] Scheduler on London time, once per day across instances (`OPENNJOB_SCHEDULER=true`):
+      06:00 discovery and drafts, 09:00 report (quiet days included, watermarked, no CV
+      text or answers, pausable by the person), 03:00 retention when
+      `OPENNJOB_RETENTION_DAYS` is set. Tested on both sides of both 2026/27 clock
+      changes with a simulated clock. `spec-p4.test.ts`
+- [x] Operator alerts by e-mail (`OPENNJOB_OPERATOR_EMAIL`) on a failed source, agent run
+      or report e-mail, one per problem per hour. `spec-p4.test.ts`
+- [x] The sign-in rate limit is shared by every API instance through the database.
+      `spec-p4.test.ts`
+- [x] Matches for 5,000 stored jobs answer in under a second (in memory, build machine).
+      `spec-p4.test.ts`
+- [x] Interview preparation from the advert and the documents that application sent,
+      quoted word for word, with uncovered criteria named. `spec-p4.test.ts`,
+      `account-flows.spec.ts`
+- [x] Web screens for all of the above: verification banner and pages, forgot and reset
+      password, automatic applications with the exact wording, revoke and pause, queue
+      status, daily report switch, CV upload, standard answers, receipts and hold reasons
+      in the tracker, interview from an application. `account-flows.spec.ts`
+- [x] A terms register for every job source, with a test that fails when a source has no
+      row (`docs/sources.md`, `sources-register.test.ts`). It says no source has been
+      checked.
+
 ## Not done
 
 Every item here is open. None has a workaround in the code.
@@ -126,17 +180,20 @@ Every item here is open. None has a workaround in the code.
       audit. No content-security policy is set for it. The production API must list the
       site's origin in `OPENNJOB_CORS_ORIGINS`; nothing has been configured.
 - [ ] **E-mail has never been sent.** The Resend adapter is untested against the real service;
-      no sending domain, SPF, DKIM or DMARC is set up. SMS, push and WhatsApp have no provider
+      no sending domain, SPF, DKIM or DMARC is set up (REP-4). Verification links, reset links,
+      operator alerts and the 09:00 report have only reached the test capture and the
+      development mailbox, never a real inbox. SMS, push and WhatsApp have no provider
       at all. Notification subjects (job title, employer) are not encrypted at rest.
-- [ ] **Next.js 14 has open advisories** (`npm audit --omit=dev`). Most are in server
-      features a static export does not run; they were not reviewed one by one. Decide
-      on a supported major version before deploying.
+- [ ] **Next.js 14 has open advisories** (`npm audit --omit=dev`), on 14.2.35, the newest
+      14.2 release. They are in server features (server actions, image optimisation,
+      rewrites, middleware) that the static export does not run, as listed in
+      `docs/dependency-audit.md`; moving to a supported major version is still to do.
+      `mammoth` pulls in `sprintf-js` through its command-line parser, which the API
+      never loads.
 - [ ] The web app's "I have submitted it" is the person's own record. Nothing checks it
       against the employer, and employer replies are not tracked.
-- [ ] **Email verification and password reset do not exist.** Anyone can register with
-      an email address they do not own. A person who forgets their password is locked
-      out for good; with encryption on, nobody can recover their account for them.
-      There is no change-password or change-email route either.
+- [ ] No change-password route while signed in (the reset link is the only way) and no
+      change-email route.
 - [ ] **Billing (BitriPay) is not implemented.** Usage is metered in "ACU" with a
       placeholder formula. `BitriPayBillingPort` is an interface with no implementation,
       and it does not describe BitriPay's real API. There are no plans, prices, invoices
@@ -146,12 +203,15 @@ Every item here is open. None has a workaround in the code.
       access token works until it expires (one hour by default).
 - [ ] No admin or support tooling: no way to look up, suspend or help a user.
 - [ ] `POST /jobs/refresh` can be called by any signed-in user and refreshes the shared
-      job catalogue for everyone. There is no scheduler and no role that restricts it.
+      job catalogue for everyone. No role restricts it (the scheduler now refreshes daily).
 - [ ] Employer posting is still one shared key with no employer accounts and no
       moderation.
-- [ ] CV input is plain text only. No PDF or Word import.
-- [ ] No data-retention rule is implemented: nothing is ever deleted except by
-      `DELETE /account`.
+- [ ] Scanned PDFs (images with no text layer) give no text; the person is told to paste
+      the CV instead. No OCR.
+- [ ] Retention is off until `OPENNJOB_RETENTION_DAYS` is set; the period is the owner's
+      decision and is not set anywhere.
+- [ ] The automatic queue has run only against fictional forms on 127.0.0.1. No real
+      employer form has been submitted by it, and no application system is enabled.
 
 ### Never verified against the real world
 
@@ -185,7 +245,8 @@ Every item here is open. None has a workaround in the code.
 - [ ] **TLS.** The API speaks plain HTTP and expects a TLS-terminating proxy in front.
       None is configured. Without TLS, passwords and tokens cross the network in the clear.
 - [ ] **Backups.** None configured, and no restore has ever been tested.
-- [ ] **Monitoring and alerting.** None. Logs go to stdout as JSON and nothing reads
+- [ ] **Monitoring and alerting.** Only the operator e-mail alerts above, never received
+      by a real inbox. Logs go to stdout as JSON and nothing reads
       them. Nobody is told when the API is down, erroring, or under attack.
 - [ ] **Encryption key management.** `OPENNJOB_DATA_KEY` is one key from an environment
       variable. There is no rotation, no key versioning, no escrow and no recovery. If
@@ -193,9 +254,8 @@ Every item here is open. None has a workaround in the code.
       cannot be changed without writing a re-encryption tool that does not exist.
 - [ ] The same for `OPENNJOB_JWT_SECRET`: changing it signs everyone out; there is no
       overlap period.
-- [ ] **The rate limit is per process.** With more than one API instance each counts on
-      its own, and a restart clears the count. No shared limiter, no WAF, no bot
-      protection in front of `/auth/*`.
+- [ ] No WAF and no bot protection in front of `/auth/*`; the shared rate limit is the
+      only defence against password guessing.
 - [ ] Names, email addresses, phone numbers, addresses and preferences in `profiles`
       are **not** encrypted at the application level. Only CV text, the passport and
       statements are. Account email addresses are stored in the clear (they are looked
@@ -206,8 +266,9 @@ Every item here is open. None has a workaround in the code.
 - [ ] No staging environment, no deployment pipeline, no rollback procedure, no runbook,
       no incident process, no on-call.
 - [ ] No load or soak test. Database pool size, bcrypt cost and instance size are guesses.
-- [ ] `npm audit` reports advisories in vitest's own dependencies (development only;
-      `npm audit --omit=dev` reports none). Not resolved.
+- [ ] `npm audit` reports advisories in vitest's own dependencies (development only) and,
+      with `--omit=dev`, in Next.js and mammoth (see `docs/dependency-audit.md`). Not
+      resolved.
 
 ### Chrome Web Store
 
@@ -261,7 +322,7 @@ Every item here is open. None has a workaround in the code.
 ### Before the first real user, at minimum
 
 Privacy policy and terms; DPIA; ICO check; the web app deployed behind TLS with a
-content-security policy, and tried on real phones; email verification and password reset; hosting with TLS, backups that
+content-security policy, and tried on real phones; a real sending domain with SPF and DKIM; hosting with TLS, backups that
 have been restored once, and alerting; key management for `OPENNJOB_DATA_KEY`; an
 independent security test; one real Anthropic call and a confirmed model name; the job
 sources checked against the live APIs and their terms; the extension tried by hand on

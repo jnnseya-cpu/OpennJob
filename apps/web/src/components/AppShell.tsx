@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api, isSignedIn, onSessionChange, takeNextPath } from '../lib/api';
+import { api, errorText, isSignedIn, onSessionChange, takeNextPath } from '../lib/api';
 import { PACKS } from '../lib/core';
-import type { Application, Mode, PackId } from '../lib/types';
+import type { Application, Mode, PackId, PublicUser } from '../lib/types';
 
 /** The threshold the API applies unless OPENNJOB_APPLY_THRESHOLD says otherwise. An agent run reports the real one. */
 export const DEFAULT_THRESHOLD = 80;
@@ -59,7 +59,9 @@ function writePref(key: string, value: string): void {
   }
 }
 
-const PUBLIC_PATHS = ['/signin', '/register'];
+const PUBLIC_PATHS = ['/signin', '/register', '/forgot-password'];
+/** Pages a link in an e-mail opens: they work whether or not this browser is signed in. */
+const LINK_PATHS = ['/verify-email', '/reset-password'];
 const TABS: [string, string][] = [
   ['/dashboard', 'Home'],
   ['/matches', 'Matches'],
@@ -78,6 +80,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [agentMessage, setAgentMessage] = useState('');
   const [waiting, setWaiting] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [unverified, setUnverified] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState('');
 
   useEffect(() => {
     const m = readPref('opennjob.mode');
@@ -91,11 +95,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const isLanding = pathname === '/';
   const isPublic = PUBLIC_PATHS.includes(pathname);
+  const isLink = LINK_PATHS.includes(pathname);
   useEffect(() => {
-    if (signedIn === undefined) return;
+    if (signedIn === undefined || isLink) return;
     if (!signedIn && !isPublic && !isLanding) router.replace(takeNextPath() ?? '/signin/');
     else if (signedIn && (isPublic || isLanding)) router.replace(takeNextPath() ?? '/dashboard/');
-  }, [signedIn, isPublic, isLanding, pathname, router]);
+  }, [signedIn, isPublic, isLink, isLanding, pathname, router]);
 
   const refreshWaiting = useCallback(() => {
     if (!isSignedIn()) return;
@@ -105,7 +110,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     api<{ unread: number }>('/notifications')
       .then((n) => setUnread(n.unread))
       .catch(() => undefined);
+    api<PublicUser>('/account')
+      .then((u) => setUnverified(!u.emailVerified))
+      .catch(() => undefined);
   }, []);
+
+  async function resendVerification() {
+    setVerifyMsg('');
+    try {
+      const r = await api<{ verified: boolean; sent: boolean }>('/account/verification', { method: 'POST', body: {} });
+      if (r.verified) setUnverified(false);
+      else setVerifyMsg('A new link was sent. Check your inbox.');
+    } catch (err) {
+      setVerifyMsg(errorText(err));
+    }
+  }
   useEffect(() => {
     if (signedIn) refreshWaiting();
   }, [signedIn, pathname, refreshWaiting]);
@@ -136,7 +155,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (isLanding && signedIn === false) return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 
   // Until the session is known, and while a redirect is pending, show nothing personal.
-  const showPage = signedIn !== undefined && (isPublic ? !signedIn : signedIn && pathname !== '/');
+  const showPage = signedIn !== undefined && (isLink || (isPublic ? !signedIn : signedIn && pathname !== '/'));
   const current = pathname.startsWith('/review') ? '/matches' : pathname;
 
   return (
@@ -160,7 +179,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             ) : null}
           </div>
-          {signedIn && !isPublic ? (
+          {signedIn && !isPublic && !isLink ? (
             <>
               <select className="pack" aria-label="Industry pack" value={pack} onChange={(e) => state.setPack(e.target.value as PackChoice)}>
                 <option value="all">All industry packs</option>
@@ -183,6 +202,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             </>
           ) : null}
         </header>
+        {signedIn && !isPublic && !isLink && unverified ? (
+          <div className="note" role="region" aria-label="E-mail verification" data-testid="verify-banner">
+            Confirm your e-mail address: nothing is sent to an employer for you until you do. Use the link or code we e-mailed you.{' '}
+            <Link href="/verify-email/">Enter a code</Link> ·{' '}
+            <button type="button" className="link" onClick={resendVerification}>
+              Send a new link
+            </button>
+            {verifyMsg ? <span className="small"> {verifyMsg}</span> : null}
+          </div>
+        ) : null}
         <main>{showPage ? children : <p className="muted small">Loading…</p>}</main>
       </div>
       {signedIn && !isPublic ? (

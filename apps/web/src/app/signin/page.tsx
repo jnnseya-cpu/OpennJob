@@ -11,6 +11,7 @@ const NOTICES: Record<string, string> = {
   expired: 'Your session ended. Sign in again.',
   deleted: 'Your account and everything stored for it were deleted.',
   signedout: 'You are signed out on this device.',
+  reset: 'Your password was changed and every earlier session ended. Sign in with the new password.',
 };
 
 function SignIn() {
@@ -19,7 +20,6 @@ function SignIn() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [forgot, setForgot] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -51,14 +51,9 @@ function SignIn() {
         <button className="btn primary" type="submit" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
-        <button type="button" className="link" onClick={() => setForgot(true)}>
+        <Link href="/forgot-password/" className="small">
           Forgot your password?
-        </button>
-        {forgot ? (
-          <p className="note" role="status">
-            Password reset is not available yet. There is no way to recover an account without its password at the moment.
-          </p>
-        ) : null}
+        </Link>
       </form>
       <p className="small">
         New here? <Link href="/register/">Create an account</Link>

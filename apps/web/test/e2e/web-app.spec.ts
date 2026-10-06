@@ -125,8 +125,9 @@ test('a visitor is sent to sign-in; registering needs both consents, which start
 
 test('profile: details, CV, preferences and the credential passport are saved through the API', async () => {
   await expect(page.getByLabel('Email for applications')).toHaveValue(EMAIL);
-  await expect(page.getByRole('button', { name: 'Upload PDF or Word' })).toBeDisabled();
-  await expect(page.getByText('Not available yet: paste your CV as text.')).toBeVisible();
+  // Upload takes PDF or Word (exercised in account-flows.spec.ts); pasting text still works.
+  await expect(page.locator('#cv-file')).toHaveAttribute('accept', /\.pdf.*\.docx/);
+  await expect(page.getByText('The file is read and not kept.')).toBeVisible();
 
   await page.getByLabel('First name', { exact: true }).fill(FIRST);
   await page.getByLabel('Last name', { exact: true }).fill(LAST);
@@ -435,8 +436,7 @@ test('an expired session sends the user back to sign in; sign-in works and is re
   await page.getByLabel('Password', { exact: true }).fill('a wrong passphrase 123');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('alert')).toBeVisible();
-  await page.getByRole('button', { name: 'Forgot your password?' }).click();
-  await expect(page.getByText('Password reset is not available yet.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password/');
 
   await page.getByLabel('Password', { exact: true }).fill(other.password);
   await page.getByRole('button', { name: 'Sign in' }).click();

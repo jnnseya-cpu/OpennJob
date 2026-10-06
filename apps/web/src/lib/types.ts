@@ -56,6 +56,68 @@ export interface PublicUser {
   email: string;
   createdAt: string;
   consent: { acceptedTermsVersion: string; acceptedPrivacyVersion: string; acceptedAt: string };
+  emailVerified: boolean;
+  emailVerifiedAt?: string;
+}
+
+/** GET /agent/authorisation: standing authorisation to submit, to one named wording (APP-2). */
+export interface Authorisation {
+  enabled: boolean;
+  scopeVersion?: string;
+  consentAt?: string;
+  revokedAt?: string;
+  paused: boolean;
+  scope: { version: string; text: string };
+}
+
+/** GET /agent/status */
+export interface AgentStatus {
+  authorisation: Authorisation;
+  operatorPaused: boolean;
+  dailyLimit: { limit: number; used: number; remaining: number; resetsAt: string };
+  queue: { ready: number; waitingForSystem: number; needsYou: number };
+  wait?: string;
+  message?: string;
+  systems: { id: string; label: string; enabled: boolean }[];
+}
+
+/** Ordinary screening answers, stored once and reused. Never declarations. */
+export interface ScreeningAnswers {
+  noticePeriod?: string;
+  salaryExpectation?: string;
+  dayRate?: string;
+  yearsExperience?: string;
+  relocation?: boolean;
+  travel?: boolean;
+  drivingLicence?: boolean;
+  custom: Record<string, string>;
+}
+
+/** POST /profile/cv */
+export interface CvExtraction {
+  text: string;
+  format: 'pdf' | 'docx';
+  pages?: number;
+  warnings: string[];
+  suggestions: { firstName?: string; lastName?: string; email?: string; phone?: string; postcode?: string; city?: string };
+}
+
+/** GET /applications/:id/interview */
+export interface DocumentInterview {
+  applicationId: string;
+  jobTitle: string;
+  employer: string;
+  documentsSha256: { statement: string; tailoredCv: string };
+  questions: {
+    id: string;
+    criterion: string;
+    essential: boolean;
+    advertQuote?: string;
+    documentQuote?: { document: 'statement' | 'tailoredCv'; text: string };
+    question: string;
+    lookFor: string[];
+  }[];
+  gaps: string[];
 }
 
 export interface AuthResult {

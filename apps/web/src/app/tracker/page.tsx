@@ -5,11 +5,18 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../../components/AppShell';
 import { StageBar, StatTiles } from '../../components/Charts';
 import { api, errorText } from '../../lib/api';
-import { STATUS_LABEL } from '../../lib/labels';
+import { HOLD_LABEL, STATUS_LABEL } from '../../lib/labels';
 import type { Application } from '../../lib/types';
 
 const ORDER: Record<Application['status'], number> = { needs_you: 0, uncertain: 1, draft: 2, confirmed: 3, interview: 4, submitted: 5, closed: 6 };
 const MODE_NAME: Record<Application['mode'], string> = { review: 'review all', hybrid: 'hybrid', auto: 'auto' };
+
+function holdText(reason: string): string {
+  if (HOLD_LABEL[reason]) return HOLD_LABEL[reason];
+  if (reason.startsWith('question:')) return `A question with no stored answer: “${reason.slice(9)}”. Answer it on the review page.`;
+  if (reason.startsWith('sensitive:')) return `A ${reason.slice(10).replace(/-/g, ' ')} question that only you answer.`;
+  return reason;
+}
 
 export default function TrackerPage() {
   const { agentMessage } = useApp();
@@ -62,7 +69,30 @@ export default function TrackerPage() {
               </div>
               <span className={`chip ${a.status === 'draft' ? 'gap' : ''}`}>{STATUS_LABEL[a.status]}</span>
             </div>
+            {a.status === 'needs_you' && a.holdReasons?.length ? (
+              <ul className="plain small" aria-label="Why it waits for you">
+                {a.holdReasons.map((r) => (
+                  <li key={r}>{holdText(r)}</li>
+                ))}
+              </ul>
+            ) : null}
+            {a.receipt ? (
+              <div className="small" data-testid="receipt">
+                <b>Confirmation from the site</b>
+                {a.receipt.automatic ? ' (sent by the agent under your standing authorisation)' : ''}: <span className="quote">“{a.receipt.confirmationText}”</span>
+                <br />
+                <span className="muted">
+                  {new Date(a.receipt.at).toLocaleString('en-GB')} · {a.receipt.pageUrl}
+                </span>
+              </div>
+            ) : null}
+            {a.status === 'uncertain' ? <p className="small note">The form was sent but no confirmation was seen. Check with the employer before applying again: it is never retried automatically.</p> : null}
             <div className="row">
+              {a.sentDocuments ? (
+                <Link className="btn" href={`/interview/?application=${encodeURIComponent(a.id)}`}>
+                  Prepare for interview
+                </Link>
+              ) : null}
               <Link className={`btn ${a.status === 'submitted' ? '' : 'primary'}`} href={`/review/?job=${encodeURIComponent(a.jobId)}`}>
                 {a.status === 'draft' ? 'Review and approve' : a.status === 'confirmed' ? 'Next steps' : 'View'}
               </Link>

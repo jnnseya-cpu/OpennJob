@@ -177,6 +177,37 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return parsed as T;
 }
 
+/** Sends a file as the raw request body (CV upload). The file is not kept by the API. */
+export async function upload<T>(path: string, file: Blob, contentType: string): Promise<T> {
+  const session = currentSession();
+  if (!session) {
+    clearSession('/signin/?notice=expired');
+    throw new ApiError(401, 'Your session has ended. Sign in again.');
+  }
+  const base = await apiBase();
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': contentType, Authorization: `Bearer ${session.accessToken}` }, body: file, credentials: 'omit', cache: 'no-store' });
+  } catch {
+    throw new ApiError(0, 'The OpennJob service could not be reached. Check your connection and try again.');
+  }
+  const text = await res.text();
+  let parsed: unknown;
+  try {
+    parsed = text ? JSON.parse(text) : undefined;
+  } catch {
+    parsed = undefined;
+  }
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearSession('/signin/?notice=expired');
+      throw new ApiError(401, 'Your session has ended. Sign in again.');
+    }
+    throw new ApiError(res.status, messageOf(res.status, parsed));
+  }
+  return parsed as T;
+}
+
 export function errorText(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Something went wrong. Try again.';
 }

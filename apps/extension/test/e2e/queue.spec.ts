@@ -182,7 +182,11 @@ test.beforeAll(async () => {
     ...(process.env.OPENNJOB_CHROMIUM_PATH ? { executablePath: process.env.OPENNJOB_CHROMIUM_PATH } : {}),
     args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
   });
-  worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker', { timeout: 20_000 }));
+  // Listen before looking, so a worker that registers in between is not missed.
+  const workerEvent = context.waitForEvent('serviceworker', { timeout: 20_000 });
+  const existing = context.serviceWorkers()[0];
+  if (existing) workerEvent.catch(() => undefined);
+  worker = existing ?? (await workerEvent);
   extensionId = new URL(worker.url()).host;
 });
 

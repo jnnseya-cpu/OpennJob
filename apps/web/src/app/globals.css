@@ -47,6 +47,8 @@ a { color: var(--accent-ink); }
 .note { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
 .note.ok { background: var(--accent-soft); color: var(--accent-ink); }
 .note.bad { background: var(--bad-soft); color: var(--bad); }
+blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--line); background: var(--bg); border-radius: 0 8px 8px 0; line-height: 1.5; }
+.quote { font-style: italic; }
 main { padding-block: 16px; display: flex; flex-direction: column; gap: 16px; }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }

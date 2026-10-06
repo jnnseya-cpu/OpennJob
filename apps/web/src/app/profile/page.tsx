@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useApp } from '../../components/AppShell';
 import { BarList } from '../../components/Charts';
-import { ApiError, api, errorText } from '../../lib/api';
+import { ScreeningForm } from '../../components/ScreeningForm';
+import { ApiError, api, errorText, upload } from '../../lib/api';
 import { COUNTRIES, KNOWN_CITIES, LANGUAGES, PACKS, cityCountry, countryName, getPack } from '../../lib/core';
 import type { PackCredentialField } from '../../lib/core';
-import type { Passport, PassportView, Profile, PublicUser } from '../../lib/types';
+import type { CvExtraction, Passport, PassportView, Profile, PublicUser } from '../../lib/types';
 
 type Details = Omit<Profile, 'preferences' | 'addressLine2'> & { addressLine2: string };
 const EMPTY_DETAILS: Details = { firstName: '', lastName: '', email: '', phone: '', addressLine1: '', addressLine2: '', city: '', postcode: '', cvText: '' };
@@ -54,6 +55,9 @@ export default function ProfilePage() {
   const [cityError, setCityError] = useState('');
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string }>();
   const [savingProfile, setSavingProfile] = useState(false);
+  const [cv, setCv] = useState<CvExtraction>();
+  const [cvError, setCvError] = useState('');
+  const [reading, setReading] = useState(false);
 
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [dbs, setDbs] = useState({ certificateNumber: '', issueDate: '', onUpdateService: false });
@@ -146,6 +150,46 @@ export default function ProfilePage() {
     setPrefs((p) => (p.cities.includes(value) ? p : { ...p, cities: [...p.cities, value] }));
   }
 
+  async function readCv(file: File | undefined) {
+    setCvError('');
+    setCv(undefined);
+    if (!file) return;
+    const type = /\.pdf$/i.test(file.name) ? 'application/pdf' : /\.docx$/i.test(file.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : '';
+    if (!type) {
+      setCvError('Choose a PDF or a Word (.docx) file.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setCvError('The file is larger than 5 MB.');
+      return;
+    }
+    setReading(true);
+    try {
+      setCv(await upload<CvExtraction>('/profile/cv', file, type));
+    } catch (err) {
+      setCvError(errorText(err));
+    } finally {
+      setReading(false);
+    }
+  }
+
+  function applyCv() {
+    if (!cv) return;
+    const s = cv.suggestions;
+    setDetails((d) => ({
+      ...d,
+      cvText: cv.text,
+      firstName: d.firstName || s.firstName || '',
+      lastName: d.lastName || s.lastName || '',
+      email: d.email || s.email || '',
+      phone: d.phone || s.phone || '',
+      postcode: d.postcode || s.postcode || '',
+      city: d.city || s.city || '',
+    }));
+    setCv(undefined);
+    setProfileMsg({ ok: true, text: 'The CV text is in the box below. Check every line, then save your profile.' });
+  }
+
   async function saveProfile(e: FormEvent) {
     e.preventDefault();
     setSavingProfile(true);
@@ -219,13 +263,37 @@ export default function ProfilePage() {
           <label className="label" htmlFor="cv">CV</label>
           <textarea id="cv" style={{ minHeight: 260 }} value={details.cvText} onChange={set('cvText')} placeholder="Paste your CV as plain text. One achievement per line works best." />
           <div className="row">
-            <button type="button" className="btn" disabled aria-describedby="upload-note">
-              Upload PDF or Word
-            </button>
+            <label className="btn" htmlFor="cv-file">
+              {reading ? 'Reading…' : 'Upload PDF or Word'}
+            </label>
+            <input id="cv-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} onChange={(e) => void readCv(e.target.files?.[0])} />
             <p className="small muted grow" id="upload-note">
-              Not available yet: paste your CV as text. Match scores and drafts are built from this text.
+              PDF or Word (.docx), up to 5 MB. The file is read and not kept. Match scores and drafts are built from the text in this box.
             </p>
           </div>
+          {cvError ? <div className="note bad" role="alert">{cvError}</div> : null}
+          {cv ? (
+            <div className="stack" data-testid="cv-preview">
+              <span className="label">Text read from your {cv.format === 'pdf' ? `PDF${cv.pages ? ` (${cv.pages} page${cv.pages === 1 ? '' : 's'})` : ''}` : 'Word file'}</span>
+              {cv.warnings.map((w) => (
+                <div key={w} className="note">{w}</div>
+              ))}
+              <pre className="small" style={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto', background: 'var(--bg)', padding: 8, borderRadius: 8 }}>{cv.text}</pre>
+              {Object.values(cv.suggestions).some(Boolean) ? (
+                <p className="small">
+                  Found, for empty details only: {Object.entries(cv.suggestions).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(' · ')}
+                </p>
+              ) : null}
+              <div className="row">
+                <button type="button" className="btn primary" onClick={applyCv}>
+                  Use this text
+                </button>
+                <button type="button" className="link" onClick={() => setCv(undefined)}>
+                  Discard
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="card">
@@ -388,6 +456,8 @@ export default function ProfilePage() {
           {savingPassport ? 'Saving…' : 'Save passport'}
         </button>
       </form>
+
+      <ScreeningForm />
     </>
   );
 }

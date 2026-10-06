@@ -61,6 +61,7 @@ packages/core/                Pure TypeScript domain logic. No framework, no I/O
   src/policy.ts                 THE SAFETY CORE: decide() for review / hybrid / auto
   src/fields.ts                 classifies form fields: sensitive or not, and what may fill them
   src/matching.ts statement.ts interview.ts packs.ts preferences.ts geo.ts languages.ts passport.ts
+  src/tailoring.ts screening.ts adapters.ts interview-docs.ts time.ts   tailored CV + trace check, screening rules, application systems + standing-authorisation wording, interview from sent documents, London time
   src/repository.ts             Repository interface + InMemoryRepository
   src/usage.ts events.ts llm.ts UsageMeter, EventBus, LlmPort (+ fakes)
   src/sources/                  job-source adapters (response shapes UNVERIFIED against live APIs)
@@ -73,7 +74,10 @@ apps/api/                     NestJS REST API
   src/deps.ts                   config from env, startupProblems(), createDefaultDeps() (Postgres if DATABASE_URL)
   src/auth.ts                   password rules, bcrypt, JWT sign/verify, RateLimiter
   src/auth.guard.ts             AccessTokenGuard (global), @Public, @EmployerRoute, @CurrentUser, AuthRateLimitGuard
-  src/account.service.ts        register, login, export, delete
+  src/account.service.ts        register, login, e-mail verification, password reset, export, delete
+  src/applying.service.ts       standing authorisation, pauses, queue (next/go/result), receipts, screening answers
+  src/scheduler.ts              London-time daily jobs (06:00 discovery, 09:00 report, 03:00 retention), claimed once per day; operator alerts
+  src/cv.ts                     PDF (pdfjs-dist) and Word (mammoth) CV to text; the file is not kept
   src/services.ts               everything else; every method takes userId first
   src/controllers.ts schemas.ts routes and zod validation
   src/postgres.ts               PostgresRepository, PostgresUsageMeter
@@ -82,7 +86,7 @@ apps/api/                     NestJS REST API
   src/logging.ts                JSON logger, request log, SafeExceptionFilter
   test/                         vitest (*.test.ts); test/e2e/*.spec.ts runs the built process under Playwright
 apps/web/                     candidate web app: Next.js 14 App Router, static export (out/), all client-side
-  src/app/<screen>/page.tsx     signin register profile matches review tracker interview account
+  src/app/<screen>/page.tsx     signin register verify-email forgot-password reset-password profile matches review tracker interview notifications account
   src/components/AppShell.tsx   header (pack, mode), tabs, sign-in guard, shared state
   src/lib/api.ts                the only API client; API address from /opennjob-config.json; token in sessionStorage
   src/lib/declarations.ts       what the review screen asks the user to confirm (from the pack registry)
@@ -99,6 +103,8 @@ career-agent/                 SEPARATE single-user Python tool (personal trial),
   tests/                        unittest, fictional data; `npm run test:agent`
 db/migrations/                NNN_name.sql, applied in order, tracked in schema_migrations
 deploy/gcp-cloud-run.md       Cloud Run + Cloud SQL + Secret Manager steps (from memory, not executed)
+docs/traceability.md          every spec requirement and test case -> its tests, or not done and why
+docs/sources.md               terms-check register for every job source (a test fails if one is missing)
 Dockerfile docker-compose.yml .github/workflows/ci.yml .env.example
 docker-compose.prod.yml deploy/   production on one server (Caddy + API + PostgreSQL + backups), Vercel, Cloud Run
 ```
@@ -173,6 +179,11 @@ as needing explicit sign-off from the owner.
   `localStorage` (mode and pack only). It never submits anything to an employer, never
   pre-ticks a declaration and offers no "tick all" for them. A new API call goes through
   `src/lib/api.ts`. Imports from core only via `@core/web` (`packages/core/src/web.ts`).
+- A new job source needs a row in `docs/sources.md`; `packages/core/test/sources-register.test.ts`
+  fails without it. The row says "not checked" until someone has read that source's terms.
+- New accounts must verify their e-mail before anything is submitted. Tests that run the
+  queue against the built API verify through `OPENNJOB_DEV_MAILBOX_DIR` (development only;
+  the API refuses it in production).
 - Extension: page-derived text goes into the popup with `textContent` only. Permissions
   stay at `activeTab`, `scripting`, `storage`. The one addition (owner decision OD-4,
   6 October 2026) is `optional_host_permissions: ["https://*/*"]` for the queue: it is
@@ -182,5 +193,7 @@ as needing explicit sign-off from the owner.
 - Commits: one logical change, imperative subject. Do not push unless asked.
 
 ## Next task
-None set. `GO-LIVE.md` lists what is open; the web app's own open items are under
-"The product is not complete".
+None set. `GO-LIVE.md` lists what is open, and `docs/traceability.md` marks each spec
+requirement that is not done (DIS-2 live recordings, APP-9 a supervised real submission,
+REP-4 SPF/DKIM, DP-3/4/6, NFR-6/7/8) with the reason. Most need the owner or a real-world
+check, not code.
