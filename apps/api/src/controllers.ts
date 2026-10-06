@@ -45,7 +45,6 @@ export class HealthController {
 }
 
 @Controller('auth')
-@UseGuards(AuthRateLimitGuard)
 export class AuthController {
   constructor(@Inject(AccountService) private readonly accounts: AccountService) {}
 
@@ -56,13 +55,17 @@ export class AuthController {
     return this.accounts.versions();
   }
 
+  // Only the routes that check credentials or create accounts are rate limited. Reading the
+  // versions is not an attempt at anything, and must not lock a person out of signing in.
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post('register')
   register(@Body(new ZodPipe(registerSchema)) body: RegisterInput) {
     return this.accounts.register(body);
   }
 
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post('login')
   @HttpCode(200)
   login(@Body(new ZodPipe(loginSchema)) body: LoginInput) {

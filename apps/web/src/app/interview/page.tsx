@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useApp } from '../../components/AppShell';
+import { BarList } from '../../components/Charts';
 import { api, errorText } from '../../lib/api';
 import { PACKS, getPack } from '../../lib/core';
 import type { InterviewFeedback, PackId, PackQuestion } from '../../lib/types';
@@ -105,16 +106,8 @@ export default function InterviewPage() {
           {result ? (
             <div className="stack" aria-label="Feedback">
               <span className="label">{result.feedback.source === 'llm' ? 'Feedback from an AI model' : 'Built-in check (no AI)'}</span>
-              <dl className="kv">
-                {PART_NAMES.map(([k, name]) => (
-                  <div key={k} style={{ display: 'contents' }}>
-                    <dt>{name}</dt>
-                    <dd className="num">{result.feedback.scores[k]}/5</dd>
-                  </div>
-                ))}
-                <dt>Total</dt>
-                <dd className="num">{result.feedback.total}/20</dd>
-              </dl>
+              <BarList title={`STAR score: ${result.feedback.total}/20`} rows={PART_NAMES.map(([k, name]) => ({ label: name, value: result.feedback.scores[k], detail: `${name}: ${result.feedback.scores[k]} out of 5` }))} max={5} unit="/5" valueHead="Score" />
+              <p className="small num">Total {result.feedback.total}/20</p>
               {result.feedback.strengths.length ? (
                 <>
                   <b className="small">What worked</b>

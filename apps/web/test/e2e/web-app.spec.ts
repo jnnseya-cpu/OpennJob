@@ -76,6 +76,18 @@ test.afterAll(async () => {
   await api?.stop();
 });
 
+test('the landing page is public, honest about the pilot, and leads to registration', async () => {
+  await page.goto(`${web.url}/`);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The applications are drafted. The signature is yours.');
+  await expect(page.getByText('Private pilot · by invitation')).toBeVisible();
+  await page.locator('#limits').scrollIntoViewIfNeeded();
+  await expect(page.locator('#limits h2')).toHaveText('The parts we decided to leave to you.');
+  await expect(page.locator('#limits')).toContainText('Answer a declaration');
+  await noSideScroll();
+  await page.getByRole('link', { name: 'Request access' }).click();
+  await expect(page).toHaveURL(/\/register\/$/);
+});
+
 test('a visitor is sent to sign-in; registering needs both consents, which start unticked', async () => {
   expect(((await (await fetch(`${api.url}/health`)).json()) as { persistence: string }).persistence).toBe(api.persistence);
   await page.goto(`${web.url}/matches/`);
@@ -318,6 +330,42 @@ test('review all mode also needs "I have checked every field"; a credential-depe
   expect(app?.confirmedFields).toEqual(expect.arrayContaining(['review:all-fields-checked', 'declaration:ftp', 'declaration:pin']));
 });
 
+test('dashboard charts and notifications: inbox from real events, settings, e-mail preview, test send', async () => {
+  await page.getByRole('link', { name: 'Home' }).click();
+  await expect(page).toHaveURL(/\/dashboard\/$/);
+  const apps = await call<{ status: string }[]>('GET', '/applications');
+  await expect(page.getByTestId('stat-submitted').locator('strong')).toHaveText(String(apps.filter((a) => a.status === 'submitted').length));
+  await expect(page.getByRole('figure', { name: 'How your matches score' })).toBeVisible();
+  await expect(page.getByRole('figure', { name: 'Application pipeline' }).getByText(/Submitted · \d+/)).toBeVisible();
+  // Every chart has a table view.
+  await page.getByRole('figure', { name: 'Application pipeline' }).getByText('Show as table').click();
+  await expect(page.getByRole('figure', { name: 'Application pipeline' }).getByRole('cell', { name: 'Waiting for you' })).toBeVisible();
+  await noSideScroll();
+
+  const inbox = await call<{ unread: number; items: { subject: string }[] }>('GET', '/notifications');
+  expect(inbox.items.map((n) => n.subject)).toEqual(expect.arrayContaining(['Welcome to OpennJob', 'Profile saved', 'Recorded as submitted: Healthcare Assistant - Elderly Care', 'Action needed: review Healthcare Assistant - Elderly Care']));
+  await page.goto(`${web.url}/notifications/`);
+  await expect(page.getByRole('link', { name: `Notifications, ${inbox.unread} unread` })).toBeVisible();
+  await expect(page.getByTestId('notification').filter({ hasText: 'Recorded as submitted: Healthcare Assistant - Elderly Care' })).toBeVisible();
+  await page.getByRole('button', { name: 'Mark all read' }).click();
+  await expect(page.getByRole('link', { name: 'Notifications', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('checkbox', { name: /^SMS/ }).check();
+  await expect(page.getByText('Settings saved.')).toBeVisible();
+  expect((await call<{ sms: boolean }>('GET', '/notifications/preferences')).sms).toBe(true);
+  await expect(page.getByRole('checkbox', { name: 'Account deleted' })).toBeDisabled(); // a service notice cannot be muted
+
+  await page.getByRole('button', { name: 'Catalogue and delivery' }).click();
+  await expect(page.getByTestId('stat-events').locator('strong')).not.toHaveText('0');
+  await page.getByLabel('Event to preview').selectOption('agent.run_completed');
+  await page.getByRole('button', { name: 'Preview e-mail' }).click();
+  await expect(page.frameLocator('iframe[title^="E-mail preview"]').getByText('Agent run finished: 3 applications prepared')).toBeVisible();
+  await page.getByRole('button', { name: 'Send test to me' }).click();
+  await expect(page.getByText(/^Test sent: /)).toHaveText('Test sent: Email logged, In-app delivered, Push skipped.'); // e-mail sandboxed; push off by default
+  await expect(page.getByTestId('delivery').first()).toContainText('agent.run_completed');
+});
+
 test('interview practice: questions for the pack and STAR feedback from the API', async () => {
   await page.getByRole('link', { name: 'Interview' }).click();
   await page.getByLabel('Practising for').selectOption('hc');
@@ -381,8 +429,9 @@ test('an expired session sends the user back to sign in; sign-in works and is re
 
   await page.getByLabel('Password', { exact: true }).fill(other.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/matches\/$/);
-  await expect(page.getByText('Add your CV first.')).toBeVisible(); // no profile yet: nothing of the deleted account shows
+  await expect(page).toHaveURL(/\/dashboard\/$/);
+  await expect(page.getByText('Add your CV first')).toBeVisible(); // no profile yet: nothing of the deleted account shows
+  await expect(page.getByTestId('stat-waiting').locator('strong')).toHaveText('0');
 
   await page.evaluate(() => {
     const s = JSON.parse(sessionStorage.getItem('opennjob.session') ?? '{}') as Record<string, string>;
@@ -396,7 +445,7 @@ test('an expired session sends the user back to sign in; sign-in works and is re
   await page.getByLabel('Email address', { exact: true }).fill(other.email);
   await page.getByLabel('Password', { exact: true }).fill(other.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/matches\/$/);
+  await expect(page).toHaveURL(/\/dashboard\/$/);
   await page.evaluate(() => {
     const s = JSON.parse(sessionStorage.getItem('opennjob.session') ?? '{}') as Record<string, string>;
     sessionStorage.setItem('opennjob.session', JSON.stringify({ ...s, accessToken: `${s.accessToken}x` }));

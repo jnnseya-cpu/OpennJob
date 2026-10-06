@@ -21,6 +21,8 @@ import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
 import { SafeExceptionFilter } from './logging';
 import { OpennJobService } from './services';
+import { Notifier } from './notifications';
+import { NotificationsController } from './notifications.controller';
 
 @Module({})
 export class AppModule {
@@ -28,9 +30,12 @@ export class AppModule {
   static register(deps: OpennJobDeps): DynamicModule {
     // Every domain event is also written to the repository's event log (the `events` table).
     deps.eventBus.subscribe('*', (event) => deps.repository.appendEvent(event));
+    // ...and fans out to the notification catalogue (in-app, e-mail, SMS, push, WhatsApp).
+    deps.notifier = new Notifier(deps);
+    deps.notifier.start();
     return {
       module: AppModule,
-      controllers: [HealthController, AuthController, AccountController, ProfileController, PassportController, JobsController, AgentController, EmployerController, ApplicationsController, InterviewController, UsageController],
+      controllers: [HealthController, AuthController, AccountController, ProfileController, PassportController, JobsController, AgentController, EmployerController, ApplicationsController, InterviewController, UsageController, NotificationsController],
       providers: [
         { provide: DEPS, useValue: deps },
         { provide: AUTH_RATE_LIMITER, useValue: new RateLimiter(deps.config.authRateLimitMax, deps.config.authRateLimitWindowMs, () => deps.clock().getTime()) },

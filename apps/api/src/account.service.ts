@@ -84,6 +84,7 @@ export class AccountService {
     const ok = await verifyPassword(input.password, user?.passwordHash ?? (await this.dummyHash));
     // One message for "no such account" and "wrong password".
     if (!user || !ok) throw new UnauthorizedException('Email address or password is incorrect');
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.signed_in', userId: user.id, occurredAt: this.now(), payload: {} });
     return { user: publicUser(user), ...this.token(user.id) };
   }
 
@@ -101,7 +102,7 @@ export class AccountService {
   async exportAccount(userId: string) {
     const user = await this.mustGetUser(userId);
     const { repository, usageMeter } = this.deps;
-    return {
+    const data = {
       exportedAt: this.now(),
       user: publicUser(user),
       profile: (await repository.getProfile(userId)) ?? null,
@@ -109,7 +110,12 @@ export class AccountService {
       applications: await repository.listApplications(userId),
       events: await repository.listEvents(userId),
       usage: await usageMeter.list(userId),
+      notifications: await repository.listNotifications(userId, 100_000),
+      notificationDeliveries: await repository.listDeliveries(userId, 100_000),
+      notificationPreferences: (await repository.getNotificationPreferences(userId)) ?? null,
     };
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.exported', userId, occurredAt: this.now(), payload: {} });
+    return data;
   }
 
   /**
@@ -123,6 +129,8 @@ export class AccountService {
     await this.deps.repository.deleteUser(userId);
     // Logged against no account: the id of a deleted account is not kept.
     await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.deleted', userId: SYSTEM_USER_ID, occurredAt: this.now(), payload: {} });
+    // Mandatory notice to the address the account had. Nothing about it is stored.
+    await this.deps.notifier?.accountDeleted(user.email);
     return { deleted: true };
   }
 }

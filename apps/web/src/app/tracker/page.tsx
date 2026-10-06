@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useApp } from '../../components/AppShell';
+import { StageBar, StatTiles } from '../../components/Charts';
 import { api, errorText } from '../../lib/api';
 import { STATUS_LABEL } from '../../lib/labels';
 import type { Application } from '../../lib/types';
@@ -27,6 +28,27 @@ export default function TrackerPage() {
       {agentMessage ? <div className="note ok" role="status">{agentMessage}</div> : null}
       {error ? <div className="note bad" role="alert">{error}</div> : null}
       {apps === undefined && !error ? <p className="muted small">Loading…</p> : null}
+      {apps && apps.length ? (
+        <>
+          <StatTiles
+            items={[
+              { label: 'Applications', value: apps.length },
+              { label: 'Average match', value: `${Math.round(apps.reduce((n, a) => n + a.score, 0) / apps.length)}%` },
+              { label: 'Submitted', value: apps.filter((a) => a.status === 'submitted').length },
+            ]}
+          />
+          <section className="card">
+            <StageBar
+              title="Where your applications are"
+              stages={[
+                { label: 'Waiting for you', count: apps.filter((a) => a.status === 'draft').length },
+                { label: 'Approved, not sent', count: apps.filter((a) => a.status === 'confirmed').length },
+                { label: 'Submitted', count: apps.filter((a) => a.status === 'submitted').length },
+              ]}
+            />
+          </section>
+        </>
+      ) : null}
       {apps && !apps.length ? <div className="empty">No applications yet. Open a match, or tap Run agent on the Matches tab.</div> : null}
       <div className="stack">
         {apps?.map((a) => (

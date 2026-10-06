@@ -31,6 +31,7 @@ interface AppState {
   agentMessage: string;
   setAgentMessage(text: string): void;
   waiting: number;
+  unread: number;
   refreshWaiting(): void;
 }
 
@@ -60,11 +61,11 @@ function writePref(key: string, value: string): void {
 
 const PUBLIC_PATHS = ['/signin', '/register'];
 const TABS: [string, string][] = [
+  ['/dashboard', 'Home'],
   ['/matches', 'Matches'],
   ['/tracker', 'Tracker'],
   ['/interview', 'Interview'],
   ['/profile', 'Profile'],
-  ['/account', 'Account'],
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -76,6 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
   const [agentMessage, setAgentMessage] = useState('');
   const [waiting, setWaiting] = useState(0);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     const m = readPref('opennjob.mode');
@@ -87,17 +89,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     return onSessionChange(update);
   }, []);
 
+  const isLanding = pathname === '/';
   const isPublic = PUBLIC_PATHS.includes(pathname);
   useEffect(() => {
     if (signedIn === undefined) return;
-    if (!signedIn && !isPublic) router.replace(takeNextPath() ?? '/signin/');
-    else if (signedIn && (isPublic || pathname === '/')) router.replace(takeNextPath() ?? '/matches/');
-  }, [signedIn, isPublic, pathname, router]);
+    if (!signedIn && !isPublic && !isLanding) router.replace(takeNextPath() ?? '/signin/');
+    else if (signedIn && (isPublic || isLanding)) router.replace(takeNextPath() ?? '/dashboard/');
+  }, [signedIn, isPublic, isLanding, pathname, router]);
 
   const refreshWaiting = useCallback(() => {
     if (!isSignedIn()) return;
     api<Application[]>('/applications')
       .then((apps) => setWaiting(apps.filter((a) => a.status === 'draft').length))
+      .catch(() => undefined);
+    api<{ unread: number }>('/notifications')
+      .then((n) => setUnread(n.unread))
       .catch(() => undefined);
   }, []);
   useEffect(() => {
@@ -121,10 +127,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       agentMessage,
       setAgentMessage,
       waiting,
+      unread,
       refreshWaiting,
     }),
-    [mode, pack, threshold, agentMessage, waiting, refreshWaiting],
+    [mode, pack, threshold, agentMessage, waiting, unread, refreshWaiting],
   );
+
+  if (isLanding && signedIn === false) return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 
   // Until the session is known, and while a redirect is pending, show nothing personal.
   const showPage = signedIn !== undefined && (isPublic ? !signedIn : signedIn && pathname !== '/');
@@ -138,7 +147,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             <b>
               Openn<i>Job</i>
             </b>
-            <span className="muted small">Six industry packs · UK and worldwide</span>
+            <span className="muted small grow">Six industry packs · UK and worldwide</span>
+            {signedIn && !isPublic ? (
+              <span className="row" style={{ gap: 4 }}>
+                <Link href="/notifications/" className="iconlink" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'} aria-current={pathname === '/notifications' ? 'page' : undefined}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.3 15.4A1 1 0 0 0 5.2 17h13.6a1 1 0 0 0 .9-1.6L18 12.6V9a6 6 0 0 0-6-6zm0 19a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 22z" fill="currentColor" /></svg>
+                  {unread > 0 ? <span className="count">{unread}</span> : null}
+                </Link>
+                <Link href="/account/" className="iconlink" aria-current={pathname === '/account' ? 'page' : undefined}>
+                  Account
+                </Link>
+              </span>
+            ) : null}
           </div>
           {signedIn && !isPublic ? (
             <>

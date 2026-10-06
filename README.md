@@ -187,6 +187,25 @@ How the web app keeps the product rules:
 - Not built, and the screens say so: email verification, password reset, password or
   email change, CV upload as PDF or Word, billing, server-side sign-out.
 
+**Landing page, dashboard, charts.** `/` is a public landing page (signed-in visitors go to
+`/dashboard/`). The dashboard and the Matches, Tracker, Interview and Profile screens carry charts
+(`apps/web/src/components/Charts.tsx`: stat tiles, bar lists, a score histogram with the threshold
+line, a pipeline bar), each with hover and keyboard tooltips and a table view; colours validated for
+contrast in light and dark. Screenshots: `docs/screenshots/` (fictional account).
+
+**Notifications.** One event engine (`apps/api/src/notifications.ts`) listens to every domain event
+and fans each catalogue entry (`packages/core/src/notifications.ts`: 36 events in 10 categories,
+14 live, 22 planned for features not built yet, 9 service notices that ignore opt-outs) out to
+in-app, e-mail, SMS, push and WhatsApp according to the user's settings. In-app is real; e-mail
+goes through Resend when `RESEND_API_KEY` and `OPENNJOB_EMAIL_FROM` are set and is otherwise
+recorded in sandbox mode; SMS, push and WhatsApp are not connected and are recorded only. Every
+attempt is a delivery row with no message text and no address. Routes: `GET /notifications`,
+`POST /notifications/read`, `GET|PUT /notifications/preferences`, `GET /notifications/deliveries`,
+`GET /notifications/catalogue`, `GET /notifications/preview?event=`, `POST /notifications/test`.
+The web app's Notifications page has the inbox, the settings, and a catalogue view with channel
+coverage, delivery outcomes, a branded e-mail preview and "Send test to me". The Resend adapter
+was written from its documentation and has never sent a real e-mail.
+
 **Private pilot.** Set `OPENNJOB_REGISTRATION_ALLOWLIST` to the invited email addresses and only
 those can register (403 for anyone else); `GET /auth/versions` reports `registration: "invite"` and the
 register page says so. Leave it empty to open registration. Existing accounts always sign in.

@@ -126,6 +126,31 @@ export const EMPTY_PASSPORT: Passport = { rightToWorkConfirmed: false, training:
 
 export type ApplicationStatus = 'draft' | 'confirmed' | 'submitted';
 
+/** One in-app notification. Subject and body name at most a job title, an employer and counts. */
+export interface Notification {
+  id: string;
+  userId: string;
+  eventKey: string;
+  category: string;
+  severity: 'info' | 'success' | 'warning' | 'critical';
+  subject: string;
+  body: string;
+  createdAt: string;
+  readAt?: string;
+}
+
+/** One attempt to deliver one event on one channel. No content and no address are kept. */
+export interface NotificationDelivery {
+  id: string;
+  userId: string;
+  eventKey: string;
+  channel: 'email' | 'inapp' | 'sms' | 'push' | 'whatsapp';
+  /** delivered (in-app), sent (provider accepted), logged (sandbox: no provider), skipped (opted out), failed */
+  status: 'delivered' | 'sent' | 'logged' | 'skipped' | 'failed';
+  provider: string;
+  at: string;
+}
+
 export interface Application {
   id: string;
   userId: string;

@@ -157,9 +157,9 @@ describe('structured request logging', () => {
       'escalated using NEWS2',
     ];
     for (const secret of forbidden) expect(everything, secret.slice(0, 40)).not.toContain(secret);
-    // Only these fields are ever written.
+    // Only these fields are ever written. event and channel come from the notification engine (catalogue key and channel name).
     const keys = new Set(logger.lines.flatMap((l) => Object.keys(l)));
-    expect([...keys].sort()).toEqual(['durationMs', 'level', 'method', 'msg', 'path', 'requestId', 'status', 'userId']);
+    expect([...keys].sort()).toEqual(['channel', 'durationMs', 'event', 'level', 'method', 'msg', 'path', 'requestId', 'status', 'userId']);
   });
 
   it('logs an unexpected error by type and code only, and replies 500 without detail', async () => {

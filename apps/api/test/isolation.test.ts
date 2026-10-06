@@ -24,6 +24,11 @@ const ROUTES = [
   'GET /health',
   'GET /interview/questions',
   'GET /jobs/matches',
+  'GET /notifications',
+  'GET /notifications/catalogue',
+  'GET /notifications/deliveries',
+  'GET /notifications/preferences',
+  'GET /notifications/preview',
   'GET /passport',
   'GET /profile',
   'GET /usage',
@@ -36,7 +41,10 @@ const ROUTES = [
   'POST /employer/jobs',
   'POST /interview/feedback',
   'POST /jobs/refresh',
+  'POST /notifications/read',
+  'POST /notifications/test',
   'PUT /applications/:id/statement',
+  'PUT /notifications/preferences',
   'PUT /passport',
   'PUT /profile',
 ];
@@ -74,6 +82,9 @@ for (const backend of BACKENDS) {
       applications: (await t.api.get('/applications').expect(200)).body,
       usage: (await t.api.get('/usage').expect(200)).body,
       events: await t.deps.repository.listEvents(USER_ID),
+      notifications: (await t.api.get('/notifications').expect(200)).body,
+      preferences: (await t.api.get('/notifications/preferences').expect(200)).body,
+      deliveries: (await t.api.get('/notifications/deliveries').expect(200)).body,
     });
 
     beforeEach(async () => {
@@ -221,6 +232,23 @@ for (const backend of BACKENDS) {
       await b.get('/profile').expect(401); // B's token died with the account
     });
 
+    it("notifications: B sees only B's inbox, deliveries and preferences, and cannot mark or change A's", async () => {
+      const aInbox = (await t.api.get('/notifications').expect(200)).body;
+      expect(aInbox.items.length).toBeGreaterThan(0); // A's profile, passport and draft notified A
+      expect((await b.get('/notifications').expect(200)).body).toEqual({ unread: 0, items: [] });
+      expect((await b.get('/notifications/deliveries').expect(200)).body.items).toEqual([]);
+      await b.post('/notifications/read').send({ ids: aInbox.items.map((n: { id: string }) => n.id) }).expect(200, { changed: 0 });
+      await b.post('/notifications/read').send({}).expect(200, { changed: 0 });
+      await b.put('/notifications/preferences').send({ email: false, sms: true, push: true, whatsapp: true, muted: ['profile.saved'] }).expect(200);
+      expect((await t.api.get('/notifications/preferences').expect(200)).body).toMatchObject({ email: true, sms: false, muted: [] });
+      await b.post('/notifications/test').send({}).expect(200);
+      expect((await t.api.get('/notifications').expect(200)).body).toEqual(aInbox);
+      const catalogue = (await b.get('/notifications/catalogue').expect(200)).body;
+      expect(JSON.stringify(catalogue)).not.toContain(aApp.jobTitle);
+      const preview = (await b.get('/notifications/preview?event=agent.review_needed').expect(200)).body;
+      expect(preview.html).not.toContain(aApp.jobTitle);
+    });
+
     it("after everything B can do on every route, A's data is exactly as it was", async () => {
       const before = await snapshotOfA();
       await b.put('/profile').send(B_PROFILE).expect(200);
@@ -235,6 +263,10 @@ for (const backend of BACKENDS) {
         await b.put(`/applications/${encodeURIComponent(id)}/statement`).send({ statement: 'Overwritten by B.' }).expect((r) => expect([400, 404]).toContain(r.status));
       }
       await b.get('/usage').expect(200);
+      await b.get('/notifications').expect(200);
+      await b.post('/notifications/read').send({}).expect(200);
+      await b.put('/notifications/preferences').send({ email: false, sms: false, push: false, whatsapp: false, muted: [] }).expect(200);
+      await b.post('/notifications/test').send({ event: 'agent.run_completed' }).expect(200);
       await b.get('/account/export').expect(200);
       await b.post('/interview/feedback').send({ questionId: 'val-compassion', answer: 'I sat with a resident who was upset and listened.' }).expect(200);
       expect(await snapshotOfA()).toEqual(before);

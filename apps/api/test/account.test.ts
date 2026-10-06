@@ -32,7 +32,7 @@ for (const backend of BACKENDS) {
       const res = await t.api.get('/account/export').expect(200);
       expect(res.headers['content-type']).toMatch(/application\/json/);
       const body = res.body;
-      expect(Object.keys(body).sort()).toEqual(['applications', 'events', 'exportedAt', 'passport', 'profile', 'usage', 'user']);
+      expect(Object.keys(body).sort()).toEqual(['applications', 'events', 'exportedAt', 'notificationDeliveries', 'notificationPreferences', 'notifications', 'passport', 'profile', 'usage', 'user']);
       expect(body.exportedAt).toBe(NOW);
       expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL, createdAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } });
       expect(body.profile).toEqual({ ...PROFILE, preferences: { languages: ['English'], countries: ['GB'], cities: [] } });
@@ -108,7 +108,7 @@ for (const backend of BACKENDS) {
       await t.api.delete('/account').send({ password: USER_PASSWORD }).expect(200);
       for (const [table, column] of tables) expect(await count(table, column), table).toBe(0);
       // Nothing anywhere in the database still mentions the id (jobs and the system event included).
-      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
+      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs', 'notifications', 'notification_deliveries', 'notification_preferences'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
       expect(everything).not.toContain(USER_ID);
       expect(everything).not.toContain(USER_EMAIL);
     });

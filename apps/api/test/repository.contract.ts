@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { EmailTakenError, SYSTEM_USER_ID, createSampleSource } from '@opennjob/core';
-import type { Application, DomainEvent, Job, Passport, Profile, Repository, UsageMeter, UsageRecord, User } from '@opennjob/core';
+import type { Application, DomainEvent, Job, Notification, NotificationDelivery, Passport, Profile, Repository, UsageMeter, UsageRecord, User } from '@opennjob/core';
 
 /**
  * THE REPOSITORY CONTRACT. One suite, run against every implementation of Repository
@@ -337,6 +337,42 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         await repo.appendEvent(system);
         expect(await repo.listEvents(SYSTEM_USER_ID)).toContainEqual(system);
         expect(await repo.listEvents(a)).toEqual([]);
+      });
+    });
+
+    describe('notifications', () => {
+      const note = (id: string, userId: string, extra: Partial<Notification> = {}): Notification => ({ id, userId, eventKey: 'agent.review_needed', category: 'AI agent', severity: 'warning', subject: 'Action needed: review Site Manager (fictional)', body: 'A draft waits for you.', createdAt: '2026-10-06T09:00:00.000Z', ...extra });
+
+      it('stores an inbox per user, newest first, and marks read only the owner\'s', async () => {
+        const [n1, n2, other] = [note(unique('n'), a), note(unique('n'), a, { severity: 'success', createdAt: '2026-10-06T09:01:00.000Z' }), note(unique('n'), b)];
+        for (const n of [n1, other, n2]) await repo.saveNotification(n);
+        expect(await repo.listNotifications(a)).toEqual([n2, n1]);
+        expect(await repo.listNotifications(a, 1)).toEqual([n2]);
+        expect(await repo.markNotificationsRead(b, [n1.id], NOW)).toBe(0); // not B's
+        expect(await repo.markNotificationsRead(a, [n1.id], NOW)).toBe(1);
+        expect(await repo.markNotificationsRead(a, [n1.id], NOW)).toBe(0); // already read
+        expect(await repo.markNotificationsRead(a, undefined, NOW)).toBe(1);
+        expect((await repo.listNotifications(a)).every((n) => n.readAt === NOW)).toBe(true);
+        expect((await repo.listNotifications(b))[0]?.readAt).toBeUndefined();
+      });
+
+      it('keeps a delivery log and preferences per user; deleting the account removes them', async () => {
+        const d = (id: string, userId: string, channel: NotificationDelivery['channel'], status: NotificationDelivery['status']): NotificationDelivery => ({ id, userId, eventKey: 'account.test', channel, status, provider: 'sandbox', at: NOW });
+        const mine = [d(unique('d'), a, 'email', 'logged'), d(unique('d'), a, 'sms', 'skipped')];
+        await repo.appendDelivery(mine[0] as NotificationDelivery); await repo.appendDelivery(d(unique('d'), b, 'inapp', 'delivered')); await repo.appendDelivery(mine[1] as NotificationDelivery);
+        expect(await repo.listDeliveries(a)).toEqual([mine[1], mine[0]]);
+        expect(await repo.getNotificationPreferences(a)).toBeUndefined();
+        const prefs = { email: false, sms: true, push: false, whatsapp: false, muted: ['profile.saved'] };
+        await repo.saveNotificationPreferences(a, prefs);
+        await repo.saveNotificationPreferences(a, { ...prefs, push: true });
+        expect(await repo.getNotificationPreferences(a)).toEqual({ ...prefs, push: true });
+        expect(await repo.getNotificationPreferences(b)).toBeUndefined();
+        await repo.saveNotification(note(unique('n'), a));
+        expect(await repo.deleteUser(a)).toBe(true);
+        expect(await repo.listNotifications(a)).toEqual([]);
+        expect(await repo.listDeliveries(a)).toEqual([]);
+        expect(await repo.getNotificationPreferences(a)).toBeUndefined();
+        expect((await repo.listDeliveries(b)).length).toBe(1);
       });
     });
 

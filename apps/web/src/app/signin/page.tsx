@@ -27,7 +27,7 @@ function SignIn() {
     setError('');
     try {
       const r = await api<AuthResult>('/auth/login', { method: 'POST', body: { email, password }, auth: false });
-      setSession({ accessToken: r.accessToken, expiresAt: r.expiresAt }, '/matches/');
+      setSession({ accessToken: r.accessToken, expiresAt: r.expiresAt }, '/dashboard/');
     } catch (err) {
       setError(errorText(err));
       setBusy(false);

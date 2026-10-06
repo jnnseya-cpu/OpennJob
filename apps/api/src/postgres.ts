@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import type { PoolConfig } from 'pg';
 import { EmailTakenError, SYSTEM_USER_ID, dedupeKey } from '@opennjob/core';
-import type { Application, DomainEvent, Job, Passport, Profile, Repository, UsageMeter, UsageRecord, UsageTotals, User } from '@opennjob/core';
+import type { Application, DomainEvent, Job, Notification, NotificationDelivery, NotificationPreferences, Passport, Profile, Repository, UsageMeter, UsageRecord, UsageTotals, User } from '@opennjob/core';
 import type { FieldCipher } from './crypto';
 import { PlaintextCipher } from './crypto';
 
@@ -288,6 +288,70 @@ export class PostgresRepository implements Repository {
       occurredAt: iso(r.occurred_at),
       payload: r.payload as Record<string, unknown>,
     }));
+  }
+
+  // ----- notifications --------------------------------------------------------------
+
+  async saveNotification(n: Notification): Promise<void> {
+    await this.db.query(
+      'INSERT INTO notifications (id, user_id, event_key, category, severity, subject, body, created_at, read_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [n.id, n.userId, n.eventKey, n.category, n.severity, n.subject, n.body, n.createdAt, n.readAt ?? null],
+    );
+  }
+
+  async listNotifications(userId: string, limit = 200): Promise<Notification[]> {
+    const { rows } = await this.db.query('SELECT * FROM notifications WHERE user_id = $1 ORDER BY seq DESC LIMIT $2', [userId, limit]);
+    return rows.map((r) =>
+      present<Notification>({
+        id: r.id as string,
+        userId: r.user_id as string,
+        eventKey: r.event_key as string,
+        category: r.category as string,
+        severity: r.severity as Notification['severity'],
+        subject: r.subject as string,
+        body: r.body as string,
+        createdAt: iso(r.created_at),
+        readAt: r.read_at ? iso(r.read_at) : null,
+      }),
+    );
+  }
+
+  async markNotificationsRead(userId: string, ids: string[] | undefined, at: string): Promise<number> {
+    const res = ids
+      ? await this.db.query('UPDATE notifications SET read_at = $3 WHERE user_id = $1 AND read_at IS NULL AND id = ANY($2)', [userId, ids, at])
+      : await this.db.query('UPDATE notifications SET read_at = $2 WHERE user_id = $1 AND read_at IS NULL', [userId, at]);
+    return res.rowCount ?? 0;
+  }
+
+  async appendDelivery(d: NotificationDelivery): Promise<void> {
+    await this.db.query('INSERT INTO notification_deliveries (id, user_id, event_key, channel, status, provider, at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [
+      d.id, d.userId, d.eventKey, d.channel, d.status, d.provider, d.at,
+    ]);
+  }
+
+  async listDeliveries(userId: string, limit = 200): Promise<NotificationDelivery[]> {
+    const { rows } = await this.db.query('SELECT * FROM notification_deliveries WHERE user_id = $1 ORDER BY seq DESC LIMIT $2', [userId, limit]);
+    return rows.map((r) => ({
+      id: r.id as string,
+      userId: r.user_id as string,
+      eventKey: r.event_key as string,
+      channel: r.channel as NotificationDelivery['channel'],
+      status: r.status as NotificationDelivery['status'],
+      provider: r.provider as string,
+      at: iso(r.at),
+    }));
+  }
+
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
+    const { rows } = await this.db.query('SELECT data FROM notification_preferences WHERE user_id = $1', [userId]);
+    return rows[0] ? (rows[0].data as NotificationPreferences) : undefined;
+  }
+
+  async saveNotificationPreferences(userId: string, preferences: NotificationPreferences): Promise<void> {
+    await this.db.query(
+      'INSERT INTO notification_preferences (user_id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET data = excluded.data, updated_at = now()',
+      [userId, json(preferences)],
+    );
   }
 }
 

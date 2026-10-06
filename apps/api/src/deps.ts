@@ -1,4 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import type { Brand } from '@opennjob/core';
+import { DEFAULT_BRAND, resendEmail } from './notifications';
+import type { EmailSender, Notifier } from './notifications';
 import {
   AnthropicLlm,
   InMemoryRepository,
@@ -62,6 +65,8 @@ export interface OpennJobConfig {
    * route is closed. Employer posting is optional; nothing else depends on it.
    */
   employerKey?: string;
+  /** Branding on outbound e-mail (OPENNJOB_BRAND_NAME, _COLOUR, _FOOTER, OPENNJOB_APP_URL). Default: OpennJob. */
+  brand?: Brand;
 }
 
 export const DEFAULT_TERMS_VERSION = 'draft-1';
@@ -88,6 +93,10 @@ export interface OpennJobDeps {
   config: OpennJobConfig;
   /** Structured log sink. Never give it CV, passport or statement content. */
   logger: Logger;
+  /** Outbound e-mail. Undefined: sandbox (recorded, never sent). See notifications.ts. */
+  emailSender?: EmailSender;
+  /** Set by AppModule.register: the notification engine. */
+  notifier?: Notifier;
   /** Releases what the bundle holds open (the database pool). Called on shutdown. */
   close?: () => Promise<void>;
 }
@@ -137,6 +146,18 @@ export function loadConfig(env: Env): OpennJobConfig {
   // Only a whole number from 0 to 100 is accepted; anything else leaves the default (80) in force.
   const rawThreshold = (env.OPENNJOB_APPLY_THRESHOLD ?? '').trim();
   if (/^\d{1,3}$/.test(rawThreshold) && Number(rawThreshold) <= 100) config.applyThreshold = Number(rawThreshold);
+  const brandName = (env.OPENNJOB_BRAND_NAME ?? '').trim();
+  const brandColour = (env.OPENNJOB_BRAND_COLOUR ?? '').trim();
+  const brandFooter = (env.OPENNJOB_BRAND_FOOTER ?? '').trim();
+  const appUrl = (env.OPENNJOB_APP_URL ?? '').trim();
+  if (brandName || brandColour || brandFooter || appUrl) {
+    config.brand = {
+      name: brandName || DEFAULT_BRAND.name,
+      colour: /^#[0-9a-fA-F]{6}$/.test(brandColour) ? brandColour : DEFAULT_BRAND.colour,
+      footer: brandFooter || DEFAULT_BRAND.footer,
+      ...(/^https?:\/\//.test(appUrl) ? { appUrl } : {}),
+    };
+  }
   const employerKey = (env.OPENNJOB_EMPLOYER_KEY ?? '').trim();
   if (employerKey) config.employerKey = employerKey;
   return config;
@@ -223,6 +244,9 @@ export function createDefaultDeps(env: Env = process.env, fetchFn: FetchLike = f
     deps.persistence = 'postgres';
     deps.close = () => pool.end();
   }
+  const resendKey = (env.RESEND_API_KEY ?? '').trim();
+  const emailFrom = (env.OPENNJOB_EMAIL_FROM ?? '').trim();
+  if (resendKey && emailFrom) deps.emailSender = resendEmail(resendKey, emailFrom);
   if ((env.ANTHROPIC_API_KEY ?? '').trim()) {
     deps.llm = new AnthropicLlm({ apiKey: env.ANTHROPIC_API_KEY as string, ...(env.OPENNJOB_MODEL ? { model: env.OPENNJOB_MODEL } : {}) });
   }

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PipeTransform } from '@nestjs/common';
 import { z } from 'zod';
-import { CREDENTIAL_IDS, PACK_IDS, REGION_IDS, cityCountry, isoDateToUtcDay, normaliseCountryCode, normaliseLanguage } from '@opennjob/core';
+import { CREDENTIAL_IDS, NOTIFICATION_CATALOGUE, PACK_IDS, REGION_IDS, cityCountry, isoDateToUtcDay, normaliseCountryCode, normaliseLanguage } from '@opennjob/core';
 
 /** Validates a request body/query against a zod schema; replies 400 with the list of problems. */
 @Injectable()
@@ -125,6 +125,18 @@ export const confirmApplicationSchema = z
 
 /** The user's own edit of a drafted statement. Same upper bound as an LLM draft could reach, with room to spare. */
 export const statementSchema = z.object({ statement: z.string().trim().min(1).max(20_000) }).strict();
+
+const notificationKey = z.string().trim().max(80).refine((k) => NOTIFICATION_CATALOGUE.some((e) => e.key === k), 'unknown notification event');
+
+export const notificationPreferencesSchema = z
+  .object({ email: z.boolean(), sms: z.boolean(), push: z.boolean(), whatsapp: z.boolean(), muted: z.array(notificationKey).max(200).default([]).transform(unique) })
+  .strict();
+
+export const markReadSchema = z.object({ ids: z.array(text(200)).min(1).max(500).optional() }).strict();
+
+export const notificationTestSchema = z.object({ event: notificationKey.default('account.test') }).strict();
+
+export const notificationPreviewSchema = z.object({ event: notificationKey });
 
 export const interviewFeedbackSchema = z
   .object({ questionId: text(80).optional(), question: text(500).optional(), answer: z.string().trim().min(1).max(8000) })

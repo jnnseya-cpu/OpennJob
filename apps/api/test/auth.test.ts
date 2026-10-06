@@ -132,6 +132,14 @@ describe('POST /auth/register', () => {
     await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(200);
   });
 
+  it('reading the versions does not count towards the sign-in rate limit', async () => {
+    t = await createTestApp({ config: testConfig({ authRateLimitMax: 2 }) });
+    for (let i = 0; i < 10; i += 1) await t.raw().get('/auth/versions').expect(200);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(200);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(200);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(429);
+  });
+
   it('reads OPENNJOB_REGISTRATION_ALLOWLIST as lower-case addresses; empty means open', () => {
     expect(loadConfig({ OPENNJOB_REGISTRATION_ALLOWLIST: ' Bola.Adeyemi@Example.org , x@example.org ' }).registrationAllowlist).toEqual(['bola.adeyemi@example.org', 'x@example.org']);
     expect(loadConfig({}).registrationAllowlist).toEqual([]);

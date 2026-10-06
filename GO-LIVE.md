@@ -97,6 +97,13 @@ built API process, in memory and on PostgreSQL with encryption on; never deploye
 - [x] No CV, passport, statement or contact value reached the browser console or the
       API log during the whole run. `web-app.spec.ts`
 
+**Notifications**
+
+- [x] Catalogue of 36 events (14 live, 22 planned), routed by user settings; service notices
+      ignore opt-outs; in-app inbox; delivery log with no content or address; per-user routes
+      covered in `isolation.test.ts`; removed with the account; in the export.
+      `notifications.test.ts`, `repository.contract.ts`, `isolation.test.ts`, `web-app.spec.ts`
+
 **Extension**
 
 - [x] The popup has a sign-in form and a configurable API address, stores the user's
@@ -118,6 +125,9 @@ Every item here is open. None has a workaround in the code.
       real phone (only headless Chromium at a phone-sized viewport). No accessibility
       audit. No content-security policy is set for it. The production API must list the
       site's origin in `OPENNJOB_CORS_ORIGINS`; nothing has been configured.
+- [ ] **E-mail has never been sent.** The Resend adapter is untested against the real service;
+      no sending domain, SPF, DKIM or DMARC is set up. SMS, push and WhatsApp have no provider
+      at all. Notification subjects (job title, employer) are not encrypted at rest.
 - [ ] **Next.js 14 has open advisories** (`npm audit --omit=dev`). Most are in server
       features a static export does not run; they were not reviewed one by one. Decide
       on a supported major version before deploying.

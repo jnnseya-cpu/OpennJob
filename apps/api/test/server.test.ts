@@ -99,7 +99,7 @@ describe.skipIf(!hasPostgres)('start-up with DATABASE_URL (live PostgreSQL)', ()
   it('refuses to start on a database that has not been migrated', async () => {
     const db = await createTestDatabase({ migrate: false });
     try {
-      await expect(startServer({ ...BASE, OPENNJOB_JWT_SECRET: SECRET, DATABASE_URL: urlFor(db.schema) }, memoryLogger())).rejects.toThrow(/missing migrations: 001_initial_schema, 002_accounts_and_encryption.*npm run migrate/);
+      await expect(startServer({ ...BASE, OPENNJOB_JWT_SECRET: SECRET, DATABASE_URL: urlFor(db.schema) }, memoryLogger())).rejects.toThrow(/missing migrations: 001_initial_schema, 002_accounts_and_encryption, 003_notifications.*npm run migrate/);
     } finally {
       await db.drop();
     }

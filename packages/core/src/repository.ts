@@ -1,4 +1,5 @@
-import type { Application, DomainEvent, Job, Passport, Profile, User } from './types';
+import type { Application, DomainEvent, Job, Notification, NotificationDelivery, Passport, Profile, User } from './types';
+import type { NotificationPreferences } from './notifications';
 
 /** Thrown by createUser when the email address already has an account. */
 export class EmailTakenError extends Error {
@@ -45,6 +46,18 @@ export interface Repository {
   listApplications(userId: string): Promise<Application[]>;
   appendEvent(event: DomainEvent): Promise<void>;
   listEvents(userId: string): Promise<DomainEvent[]>;
+
+  // ----- notifications (all per user; removed with the account) -----
+  saveNotification(notification: Notification): Promise<void>;
+  /** Newest first. */
+  listNotifications(userId: string, limit?: number): Promise<Notification[]>;
+  /** Marks the given ids (or every unread one when ids is undefined) read. Returns how many changed. */
+  markNotificationsRead(userId: string, ids: string[] | undefined, at: string): Promise<number>;
+  appendDelivery(delivery: NotificationDelivery): Promise<void>;
+  /** Newest first. */
+  listDeliveries(userId: string, limit?: number): Promise<NotificationDelivery[]>;
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
+  saveNotificationPreferences(userId: string, preferences: NotificationPreferences): Promise<void>;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -56,6 +69,9 @@ export class InMemoryRepository implements Repository {
   private readonly jobs = new Map<string, Job>();
   private readonly applications = new Map<string, Application>();
   private readonly events: DomainEvent[] = [];
+  private readonly notifications: Notification[] = [];
+  private readonly deliveries: NotificationDelivery[] = [];
+  private readonly notificationPrefs = new Map<string, NotificationPreferences>();
 
   async createUser(user: User) {
     if (this.users.has(user.id)) throw new Error(`User ${user.id} already exists`);
@@ -76,6 +92,9 @@ export class InMemoryRepository implements Repository {
     this.passports.delete(userId);
     for (const [id, a] of this.applications) if (a.userId === userId) this.applications.delete(id);
     for (let i = this.events.length - 1; i >= 0; i -= 1) if (this.events[i]?.userId === userId) this.events.splice(i, 1);
+    for (let i = this.notifications.length - 1; i >= 0; i -= 1) if (this.notifications[i]?.userId === userId) this.notifications.splice(i, 1);
+    for (let i = this.deliveries.length - 1; i >= 0; i -= 1) if (this.deliveries[i]?.userId === userId) this.deliveries.splice(i, 1);
+    this.notificationPrefs.delete(userId);
     return existed;
   }
   async ping() {
@@ -131,5 +150,33 @@ export class InMemoryRepository implements Repository {
   }
   async listEvents(userId: string) {
     return this.events.filter((e) => e.userId === userId).map(clone);
+  }
+  async saveNotification(n: Notification) {
+    this.notifications.push(clone(n));
+  }
+  async listNotifications(userId: string, limit = 200) {
+    return this.notifications.filter((n) => n.userId === userId).reverse().slice(0, limit).map(clone);
+  }
+  async markNotificationsRead(userId: string, ids: string[] | undefined, at: string) {
+    let changed = 0;
+    for (const n of this.notifications) {
+      if (n.userId !== userId || n.readAt || (ids && !ids.includes(n.id))) continue;
+      n.readAt = at;
+      changed += 1;
+    }
+    return changed;
+  }
+  async appendDelivery(d: NotificationDelivery) {
+    this.deliveries.push(clone(d));
+  }
+  async listDeliveries(userId: string, limit = 200) {
+    return this.deliveries.filter((d) => d.userId === userId).reverse().slice(0, limit).map(clone);
+  }
+  async getNotificationPreferences(userId: string) {
+    const p = this.notificationPrefs.get(userId);
+    return p ? clone(p) : undefined;
+  }
+  async saveNotificationPreferences(userId: string, preferences: NotificationPreferences) {
+    this.notificationPrefs.set(userId, clone(preferences));
   }
 }

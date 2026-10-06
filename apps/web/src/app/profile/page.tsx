@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useApp } from '../../components/AppShell';
+import { BarList } from '../../components/Charts';
 import { ApiError, api, errorText } from '../../lib/api';
 import { COUNTRIES, KNOWN_CITIES, LANGUAGES, PACKS, cityCountry, countryName, getPack } from '../../lib/core';
 import type { PackCredentialField } from '../../lib/core';
@@ -349,6 +350,14 @@ export default function ProfilePage() {
             </div>
           );
         })}
+        {trainingStatus.some((t) => t.daysRemaining !== undefined) ? (
+          <BarList
+            title="Days until each training expires"
+            rows={trainingStatus.filter((t) => t.daysRemaining !== undefined).map((t) => ({ label: t.name, value: Math.max(0, t.daysRemaining ?? 0), detail: (t.daysRemaining ?? 0) < 0 ? `${t.name}: expired` : `${t.name}: ${t.daysRemaining} days left` }))}
+            unit=" d"
+            valueHead="Days left"
+          />
+        ) : null}
         <button type="button" className="btn" onClick={() => setTraining((rows) => [...rows, { name: '', completedOn: '', expiresOn: '' }])}>
           Add training
         </button>

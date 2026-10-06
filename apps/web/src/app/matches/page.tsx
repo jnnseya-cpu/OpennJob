@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../components/AppShell';
+import { Histogram, scoreBins } from '../../components/Charts';
 import { ApiError, api, errorText } from '../../lib/api';
 import { REGION_IDS, getPack } from '../../lib/core';
 import type { Region } from '../../lib/core';
@@ -123,6 +124,11 @@ export default function MatchesPage() {
         </p>
       ) : null}
       {error ? <div className="note bad" role="alert">{error}</div> : null}
+      {shown.length > 1 ? (
+        <section className="card">
+          <Histogram title="Score spread in this view" bins={scoreBins(shown.map((m) => m.score))} threshold={threshold} thresholdLabel={`Agent prepares at ${threshold}%`} />
+        </section>
+      ) : null}
       {matches === undefined && !error ? <p className="muted small">Loading matches…</p> : null}
       {matches && !matches.length ? (
         <div className="empty stack">
