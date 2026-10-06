@@ -44,7 +44,7 @@ def tick(store,instant=None,sender=None):
     # missed digest once. Returns the digest status when one was attempted, else None.
     local=(instant or datetime.now(ZONE)).astimezone(ZONE);day=local.date().isoformat()
     if local.hour<9 or store.db.execute('SELECT 1 FROM digests WHERE day=?',(day,)).fetchone():return None
-    store.db.execute('INSERT INTO digests VALUES(?,?,?)',(day,'sending',now()));store.db.commit()
+    store.db.execute('INSERT INTO digests(day,status,at) VALUES(?,?,?)',(day,'sending',now()));store.db.commit()
     try:
         (sender or send)(store);status='sent'
     except Exception as e:

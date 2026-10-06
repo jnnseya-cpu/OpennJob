@@ -14,6 +14,8 @@ def install_documents(directory):
 
 # No test may read the real data/local/: every test runs against a temporary data directory.
 _BASE = tempfile.mkdtemp(prefix='career-agent-tests-')
+# The fixture server runs on 127.0.0.1; only the tests allow the agent to open it.
+os.environ['CAREER_ALLOW_LOCAL_FIXTURE'] = '1'
 install_documents(_BASE)
 os.environ['CAREER_DATA'] = _BASE
 
@@ -57,7 +59,7 @@ def library():
     return example('answer_library.example.json')
 
 
-def fixture_job(url='http://127.0.0.1:8766/application.html', **extra):
+def fixture_job(url='https://127.0.0.1:8766/application.html', **extra):
     j = {'id': 'fixture', 'url': url, 'country': 'United Kingdom', 'company': 'Local fixture', 'title': 'Construction Manager',
          'description': 'Construction delivery leadership and contractor governance.',
          'requirements': [{'text': 'Contractor governance', 'jd_quote': 'contractor governance', 'weight': 100, 'state': 'met', 'evidence_ids': ['E02'], 'hard': True}],
@@ -66,7 +68,7 @@ def fixture_job(url='http://127.0.0.1:8766/application.html', **extra):
     return j
 
 
-def fixture_adapter(base='http://127.0.0.1:8766'):
+def fixture_adapter(base='https://127.0.0.1:8766'):
     text = (ROOT / 'fixtures' / 'application.adapter.json').read_text(encoding='utf-8').replace('{BASE}', base)
     return json.loads(text)
 

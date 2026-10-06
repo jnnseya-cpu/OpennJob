@@ -11,6 +11,7 @@ from http.server import HTTPServer,BaseHTTPRequestHandler
 from urllib.parse import urlparse,parse_qs
 from pathlib import Path
 from .core import Store,gates,now
+from .store import ClaimConflict
 from .policy import daily_attempt_count
 from . import paths
 class Handler(BaseHTTPRequestHandler):
@@ -41,12 +42,19 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body=json.loads(self.rfile.read(length));job_id=body['job_id']
             if self.path=='/attempt':
-                j=next(j for j in s.jobs() if j['id']==job_id);profile=paths.read('profile.json');reasons=gates(j,profile);a=next(a for a in s.applications() if a['job_id']==job_id)
+                j=next(j for j in s.jobs() if j['id']==job_id);profile=paths.read('profile.json');policy=paths.read('policy.json');reasons=gates(j,profile);a=next(a for a in s.applications() if a['job_id']==job_id)
                 if not a['payload'].get('human_reviewed'):reasons.append('Pack needs review')
                 if not j.get('matching_reviewed'):reasons.append('Matching needs review')
-                if daily_attempt_count(s)>=paths.read('policy.json')['daily_submission_limit']:reasons.append('Daily attempt limit reached')
+                recorded=a['payload'].get('versions')
+                if recorded:
+                    from . import versions
+                    changed=versions.stale(recorded,versions.current())
+                    if changed:reasons.append('Pack is stale: '+', '.join(changed)+' changed since it was prepared')
                 if reasons:return self.respond(409,{'blockers':reasons})
-                s.transition(job_id,'submitting',{'attempt_at':now(),'initiated_by':'applicant'});return self.respond(200,{'ok':True})
+                # The same claim service as the worker: one actor, one attempt, the cap, one transaction.
+                try:attempt=s.claim(job_id,actor='extension',idempotency_key=body.get('idempotency_key'),cap=policy['daily_submission_limit'])
+                except ClaimConflict as e:return self.respond(409,{'blockers':[str(e)]})
+                return self.respond(200,{'ok':True,'attempt_id':attempt})
             if self.path=='/result':
                 status=body.get('status')
                 if status not in ('submitted','uncertain','failed'):raise ValueError('Invalid result')

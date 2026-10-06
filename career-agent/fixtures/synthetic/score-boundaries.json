@@ -1,0 +1,26 @@
+[
+  {
+    "coverage": "79",
+    "expected_threshold_pass": false
+  },
+  {
+    "coverage": "79.5",
+    "expected_threshold_pass": false
+  },
+  {
+    "coverage": "79.999",
+    "expected_threshold_pass": false
+  },
+  {
+    "coverage": "80",
+    "expected_threshold_pass": true
+  },
+  {
+    "coverage": "80.001",
+    "expected_threshold_pass": true
+  },
+  {
+    "coverage": "100",
+    "expected_threshold_pass": true
+  }
+]

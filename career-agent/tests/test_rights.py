@@ -37,7 +37,7 @@ class Rights(unittest.TestCase):
         # Needs sponsorship: eligible only where the job confirms sponsorship.
         p = profile(); p['work_rights'][0].update(right_to_work=False, requires_sponsorship=True)
         self.assertTrue(any('sponsorship not confirmed' in r for r in gates(job, p)))
-        self.assertFalse(any('sponsorship not confirmed' in r for r in gates(dict(job, sponsorship_confirmed=True), p)))
+        self.assertFalse(any('sponsorship not confirmed' in r for r in gates(dict(job, sponsorship_eligibility_confirmed=True), p)))
         # A legacy flag without a document no longer counts.
         p = profile(); p['work_rights'] = []; p['right_to_work'] = True
         self.assertTrue(any('No right-to-work record' in r for r in gates(job, p)))

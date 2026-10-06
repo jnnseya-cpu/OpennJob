@@ -1,3 +1,5 @@
+# Ranges for development. Install with the tested lock: python3 -m pip install -r requirements.lock
 playwright>=1.50,<2
 reportlab>=4,<5
 python-docx>=1,<2
+jsonschema[format-nongpl]>=4.23,<5

@@ -8,6 +8,7 @@ from pathlib import Path
 from agent.core import Store
 from agent import paths
 from tests.helpers import DataDir, ROOT, profile, policy, library, fixture_job, fixture_adapter
+from tests.fixture_server import serve_https
 
 try:
     from playwright.sync_api import sync_playwright
@@ -43,8 +44,8 @@ def serve(directory):
 class WorkerInChromium(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = serve(ROOT / 'fixtures')
-        cls.base = f'http://127.0.0.1:{cls.server.server_port}'
+        cls.server = serve_https(ROOT / 'fixtures')
+        cls.base = cls.server.base
         cls.pw = sync_playwright().start()
         exe = os.getenv('CAREER_BROWSER_EXECUTABLE')
         cls.browser = cls.pw.chromium.launch(headless=True, **({'executable_path': exe} if exe else {}))
@@ -58,7 +59,7 @@ class WorkerInChromium(unittest.TestCase):
         self.store = Store(paths.db_path())
         self.job = fixture_job(url=f'{self.base}/application.html'); self.store.put_job(self.job)
         self.adapter = fixture_adapter(self.base)
-        self.context = self.browser.new_context()
+        self.context = self.browser.new_context(ignore_https_errors=True)
         self.page = self.context.new_page()
 
     def tearDown(self):
