@@ -22,6 +22,16 @@ operator's responsibility.
 Response shapes for the five live adapters were written from public documentation and are
 **not verified against the live APIs** (DIS-2). Nothing in this repository calls them in tests.
 
+## What the job-search APIs are asked
+
+Adzuna and Reed are asked per person: the job titles found in that person's CV
+(`packages/core/src/search.ts`), in the cities and countries they chose on Profile, or their
+home country when they chose none. Reed is asked for the UK only, Adzuna for the countries it
+operates in. Only a job title and a place are sent; no name, contact detail or CV text. The same
+search needed by several people is asked once, and every refresh is capped
+(`OPENNJOB_SEARCH_MAX_QUERIES_PER_USER`, `OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH`) to stay within
+the APIs' quotas. There is no server-wide keyword or location setting.
+
 ## Sites OpennJob does not read
 
 No scraper or automated access exists, or may be added without a terms check or a

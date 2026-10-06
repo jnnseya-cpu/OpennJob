@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createSampleSource } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
-import { DEFAULT_APPLY_THRESHOLD, applyThresholdOf, buildSources, loadConfig } from '../src/deps';
+import { buildSearchSources, DEFAULT_APPLY_THRESHOLD, applyThresholdOf, buildSources, loadConfig } from '../src/deps';
 import type { OpennJobDeps } from '../src/deps';
 import { PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
@@ -602,11 +602,10 @@ describe('configuration', () => {
     expect(loadConfig({ OPENNJOB_JWT_SECRET: 'user', OPENNJOB_EMPLOYER_KEY: ' emp ' })).toMatchObject({ jwtSecret: 'user', employerKey: 'emp' });
   });
 
-  it('ADZUNA_COUNTRIES builds one adapter per country code, defaulting to gb', () => {
-    const env = { ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key' };
-    expect(buildSources(env, noFetch).map((s) => s.label)).toEqual(['adzuna']);
-    expect(buildSources({ ...env, ADZUNA_COUNTRIES: 'gb, FR ,de,za,fr' }, noFetch).map((s) => s.label)).toEqual(['adzuna', 'adzuna:fr', 'adzuna:de', 'adzuna:za']);
-    expect(buildSources({ ...env, ADZUNA_COUNTRIES: 'france, 12' }, noFetch).map((s) => s.label)).toEqual(['adzuna']);
+  it('Adzuna searches the countries each person chose (not ADZUNA_COUNTRIES); it is asked only where it operates', () => {
+    const [adzuna] = buildSearchSources({ ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key', ADZUNA_COUNTRIES: 'gb' }, noFetch);
+    expect(adzuna?.countries).toEqual(expect.arrayContaining(['GB', 'FR', 'DE', 'ZA']));
+    expect(adzuna?.countries).not.toContain('CD');
   });
 
   it('OPENNJOB_DEMO_JOBS loads fictional jobs for every pack', async () => {

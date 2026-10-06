@@ -134,6 +134,7 @@ describe('POST /jobs/refresh', () => {
       stored: 6,
       new: 6,
       criteriaFromLlm: 0,
+      searches: 0,
       errors: [{ source: 'lever:broken', message: 'lever:broken: HTTP 500' }],
     });
     const again = await t.api.post('/jobs/refresh').expect(200);

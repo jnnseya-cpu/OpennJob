@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryRepository } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
 import { silentLogger } from '../src/logging';
-import { buildSources, createDefaultDeps, loadConfig } from '../src/deps';
+import { buildSearchSources, buildSources, createDefaultDeps, loadConfig } from '../src/deps';
 
 const noFetch: FetchLike = async () => { throw new Error('tests must not make live calls'); };
 
@@ -26,6 +26,8 @@ describe('loadConfig', () => {
       dailyApplicationLimit: 20,
       llmDailyAcuPerUser: 50,
       llmDailyAcuTotal: 500,
+      searchMaxQueriesPerUser: 6,
+      searchMaxQueriesPerRefresh: 60,
     };
     expect(loadConfig({})).toEqual(defaults);
     expect(loadConfig({ OPENNJOB_JWT_SECRET: ' abc ', OPENNJOB_LLM_CRITERIA: 'true', OPENNJOB_LLM_CRITERIA_MAX_JOBS: '3' })).toEqual({ ...defaults, jwtSecret: 'abc', llmCriteria: true, llmCriteriaMaxJobs: 3 });
@@ -53,28 +55,38 @@ describe('buildSources', () => {
         ADZUNA_APP_ID: 'id',
         ADZUNA_APP_KEY: 'key',
         REED_API_KEY: 'reed',
-        OPENNJOB_SEARCH_KEYWORDS: 'healthcare assistant',
-        OPENNJOB_SEARCH_LOCATION: 'Leeds',
       },
       noFetch,
     );
-    expect(sources.map((s) => s.label)).toEqual(['sample (fictional demo jobs)', 'greenhouse:boardone', 'greenhouse:boardtwo', 'lever:leverco', 'ashby:ashbyco', 'adzuna', 'reed']);
+    // Adzuna and Reed are asked per person (buildSearchSources), not listed here.
+    expect(sources.map((s) => s.label)).toEqual(['sample (fictional demo jobs)', 'greenhouse:boardone', 'greenhouse:boardtwo', 'lever:leverco', 'ashby:ashbyco']);
   });
 
-  it('needs both Adzuna credentials', () => {
-    expect(buildSources({ ADZUNA_APP_ID: 'id' }, noFetch)).toEqual([]);
-  });
-
-  it('passes search terms and employer names through to the adapters', async () => {
-    const urls: string[] = [];
-    const recording: FetchLike = async (url) => {
-      urls.push(url);
-      return { ok: true, status: 200, json: async () => ({ jobs: [{ id: 1, title: 'Nurse', absolute_url: 'u', location: { name: 'Leeds' }, content: '' }], results: [] }) };
-    };
-    const sources = buildSources({ OPENNJOB_GREENHOUSE_BOARDS: 'b1:Board One Ltd', REED_API_KEY: 'k', OPENNJOB_SEARCH_KEYWORDS: 'support worker', OPENNJOB_SEARCH_LOCATION: 'Leeds' }, recording);
-    const jobs = (await Promise.all(sources.map((s) => s.fetchJobs()))).flat();
+  it('passes employer names through to the board adapters', async () => {
+    const recording: FetchLike = async () => ({ ok: true, status: 200, json: async () => ({ jobs: [{ id: 1, title: 'Nurse', absolute_url: 'u', location: { name: 'Leeds' }, content: '' }] }) });
+    const jobs = (await Promise.all(buildSources({ OPENNJOB_GREENHOUSE_BOARDS: 'b1:Board One Ltd' }, recording).map((s) => s.fetchJobs()))).flat();
     expect(jobs[0]?.employer).toBe('Board One Ltd');
-    expect(urls[1]).toBe('https://www.reed.co.uk/api/1.0/search?keywords=support+worker&locationName=Leeds');
+  });
+});
+
+describe('buildSearchSources: the job-search APIs take only keys; what they are asked comes from each person', () => {
+  it('needs both Adzuna credentials; Reed needs its key', () => {
+    expect(buildSearchSources({}, noFetch)).toEqual([]);
+    expect(buildSearchSources({ ADZUNA_APP_ID: 'id' }, noFetch)).toEqual([]);
+    expect(buildSearchSources({ ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key', REED_API_KEY: 'k' }, noFetch).map((s) => s.label)).toEqual(['adzuna', 'reed']);
+  });
+
+  it('ignores the old server-wide search settings: the query is the one it is given', async () => {
+    const urls: string[] = [];
+    const recording: FetchLike = async (url) => (urls.push(url), { ok: true, status: 200, json: async () => ({ results: [] }) });
+    const [adzuna, reed] = buildSearchSources({ ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key', REED_API_KEY: 'k', OPENNJOB_SEARCH_KEYWORDS: 'nurse', OPENNJOB_SEARCH_LOCATION: 'Leeds' }, recording);
+    await adzuna?.search({ what: 'site manager', where: 'Lyon', country: 'FR' });
+    await reed?.search({ what: 'site manager', where: 'London', country: 'GB' });
+    await reed?.search({ what: 'site manager', country: 'FR' }); // Reed is UK only: not asked
+    expect(urls).toEqual([
+      'https://api.adzuna.com/v1/api/jobs/fr/search/1?app_id=id&app_key=key&results_per_page=50&what=site+manager&where=Lyon',
+      'https://www.reed.co.uk/api/1.0/search?keywords=site+manager&locationName=London',
+    ]);
   });
 });
 

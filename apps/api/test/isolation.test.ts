@@ -31,6 +31,7 @@ const ROUTES = [
   'GET /health',
   'GET /interview/questions',
   'GET /jobs/matches',
+  'GET /jobs/search-plan',
   'GET /notifications',
   'GET /notifications/catalogue',
   'GET /notifications/deliveries',
@@ -200,6 +201,17 @@ for (const backend of BACKENDS) {
       expect(nurse(forB)?.score).not.toBe(nurse(forA)?.score);
       const evidence = JSON.stringify(forB);
       for (const secret of A_SECRETS) expect(evidence, secret).not.toContain(secret);
+    });
+
+    it("GET /jobs/search-plan: built from the caller's own CV and places", async () => {
+      expect((await b.get('/jobs/search-plan').expect(200)).body).toMatchObject({ hasProfile: false, titles: [], queries: [] });
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      const forA = (await t.api.get('/jobs/search-plan').expect(200)).body;
+      const forB = (await b.get('/jobs/search-plan').expect(200)).body;
+      expect(forA.titles).toContain('registered nurse');
+      expect(forB.titles).toEqual(['healthcare assistant']);
+      expect(forB.places).toEqual([{ country: 'GB' }]);
+      for (const secret of A_SECRETS) expect(JSON.stringify(forB), secret).not.toContain(secret);
     });
 
     it("POST /agent/run: prepares drafts for the caller only, and one user's drafts do not count as another's", async () => {

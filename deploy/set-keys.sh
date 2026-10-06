@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Add API keys and search settings to OpennJob on the server, then restart the API:
+# Add API keys to OpennJob on the server, then restart the API. What the job-search APIs are asked
+# comes from each person's CV and places on Profile, not from here:
 #
 #   cd /opt/opennjob
 #   bash deploy/set-keys.sh claude     # Anthropic API key (Claude): drafts, criteria, interview feedback
-#   bash deploy/set-keys.sh search     # what to search for: keywords and location
 #   bash deploy/set-keys.sh adzuna     # Adzuna job search API (free developer key)
 #   bash deploy/set-keys.sh reed       # Reed job search API (free developer key)
 #   bash deploy/set-keys.sh boards     # employers' own boards on Greenhouse / Lever / Ashby (no key)
@@ -57,19 +57,12 @@ c.models.retrieve(process.env.OPENNJOB_MODEL).then(
   (m) => console.log("Claude key OK; model " + m.id + " is available. AI drafting is on."),
   (e) => { console.log("Claude check FAILED (" + (e.status || e.name) + "): check the key in the Anthropic Console and the model name, then run this again."); process.exit(1); });'
     ;;
-  search)
-    KW="$(ask 'Job search keywords for Adzuna and Reed, e.g. site manager' "$(current OPENNJOB_SEARCH_KEYWORDS)")"
-    LOC="$(ask 'Location (empty = anywhere), e.g. London' "$(current OPENNJOB_SEARCH_LOCATION)")"
-    set_values OPENNJOB_SEARCH_KEYWORDS "$KW" OPENNJOB_SEARCH_LOCATION "$LOC"
-    restart; echo "Saved. The next discovery run (06:00 London, or Matches > Refresh) uses them."
-    ;;
   adzuna)
     confirm_terms "Adzuna" "https://developer.adzuna.com (API terms)"
     ID="$(ask 'Adzuna App ID' "$(current ADZUNA_APP_ID)")"
     KEY="$(ask_secret 'Adzuna App Key')"
     [ -n "$ID" ] && [ -n "$KEY" ] || { echo "Both are needed. Nothing changed." >&2; exit 1; }
-    CC="$(ask 'Countries, two-letter codes, comma separated' "$(current ADZUNA_COUNTRIES | grep . || echo gb)")"
-    set_values ADZUNA_APP_ID "$ID" ADZUNA_APP_KEY "$KEY" ADZUNA_COUNTRIES "$CC"
+    set_values ADZUNA_APP_ID "$ID" ADZUNA_APP_KEY "$KEY"
     unset KEY; restart; echo "Saved. Record the terms check in docs/sources.md (date and your name)."
     ;;
   reed)
@@ -90,5 +83,5 @@ c.models.retrieve(process.env.OPENNJOB_MODEL).then(
     restart; echo "Saved. Record the terms check in docs/sources.md."
     ;;
   *)
-    sed -n '2,13p' "$0"; exit 1 ;;
+    sed -n '2,14p' "$0"; exit 1 ;;
 esac

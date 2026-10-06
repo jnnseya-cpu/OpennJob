@@ -144,3 +144,13 @@ export interface InterviewFeedback {
     source: 'llm' | 'heuristic';
   };
 }
+
+/** GET /jobs/search-plan: what the job-search APIs are asked for this person, from their CV and places. */
+export interface SearchPlanView {
+  hasProfile: boolean;
+  titles: string[];
+  places: { where?: string; country: string }[];
+  queries: { what: string; where?: string; country: string }[];
+  searchSources: { label: string; countries: string[] | null }[];
+  boards: number;
+}

@@ -11,6 +11,8 @@ import {
   draftStatementFallback,
   extractCriteria,
   SYSTEM_USER_ID,
+  queryKey,
+  searchPlan,
   findPackQuestion,
   findQuestion,
   inScope,
@@ -30,7 +32,7 @@ import {
   zonedDayStart,
   nextZonedDayStart,
 } from '@opennjob/core';
-import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory } from '@opennjob/core';
+import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory, SearchQuery } from '@opennjob/core';
 import { DEPS, applyThresholdOf, limitsOf } from './deps';
 import type { OpennJobDeps } from './deps';
 import type {
@@ -135,8 +137,43 @@ export class OpennJobService {
 
   // ----- jobs -----------------------------------------------------------------------
 
+  /**
+   * What the job-search APIs are asked for one person: job titles from their CV, places from their
+   * preferences (packages/core/src/search.ts). No server setting decides it.
+   */
+  async searchPlan(userId: string) {
+    const profile = await this.deps.repository.getProfile(userId);
+    const plan = profile ? searchPlan(profile, this.deps.config.searchMaxQueriesPerUser ?? 6) : { titles: [], places: [], queries: [] };
+    return {
+      ...plan,
+      hasProfile: Boolean(profile),
+      searchSources: (this.deps.searchSources ?? []).map((s) => ({ label: s.label, countries: s.countries ?? null })),
+      boards: this.deps.sources.length,
+    };
+  }
+
+  /** The searches for this refresh: the person's own, or every person's for the platform-wide run, each asked once. */
+  private async refreshQueries(userId: string): Promise<SearchQuery[]> {
+    const perUser = this.deps.config.searchMaxQueriesPerUser ?? 6;
+    const cap = this.deps.config.searchMaxQueriesPerRefresh ?? 60;
+    const userIds = userId === SYSTEM_USER_ID ? await this.deps.repository.listUserIds() : [userId];
+    const seen = new Map<string, SearchQuery>();
+    for (const id of userIds) {
+      const profile = await this.deps.repository.getProfile(id);
+      if (!profile) continue;
+      for (const q of searchPlan(profile, perUser).queries) if (!seen.has(queryKey(q)) && seen.size < cap) seen.set(queryKey(q), q);
+    }
+    return [...seen.values()];
+  }
+
   async refreshJobs(userId: string) {
-    const collected = await collectJobs(this.deps.sources);
+    const queries = (this.deps.searchSources ?? []).length > 0 ? await this.refreshQueries(userId) : [];
+    const searches = queries.flatMap((q) =>
+      (this.deps.searchSources ?? [])
+        .filter((src) => !src.countries || src.countries.includes(q.country.toUpperCase()))
+        .map((src) => ({ label: src.label, fetchJobs: () => src.search(q) })),
+    );
+    const collected = await collectJobs([...this.deps.sources, ...searches]);
     let jobs: Job[] = collected.jobs;
     let llmExtracted = 0;
 
@@ -176,7 +213,8 @@ export class OpennJobService {
 
     const added = await this.deps.repository.upsertJobs(jobs);
     const summary = {
-      sources: this.deps.sources.map((s) => s.label),
+      sources: [...this.deps.sources.map((s) => s.label), ...(this.deps.searchSources ?? []).map((s) => s.label)],
+      searches: searches.length,
       fetched: collected.fetched,
       duplicatesRemoved: collected.duplicates,
       stored: jobs.length,
@@ -184,7 +222,7 @@ export class OpennJobService {
       criteriaFromLlm: llmExtracted,
       errors: collected.errors,
     };
-    await this.emit(userId, 'jobs.refreshed', { fetched: summary.fetched, stored: summary.stored, new: added, sourceErrors: summary.errors.length });
+    await this.emit(userId, 'jobs.refreshed', { fetched: summary.fetched, stored: summary.stored, new: added, sourceErrors: summary.errors.length, searches: searches.length });
     return summary;
   }
 

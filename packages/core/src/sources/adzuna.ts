@@ -20,7 +20,7 @@
  * only refuses something that is not two letters. Check the list before relying on it.
  */
 import { arr, decodeEntities, getJson, normaliseJob, num, obj, present, str, stripTags, tidy, toIso } from './common';
-import type { FetchLike, JobSourceAdapter } from './common';
+import type { FetchLike, JobSourceAdapter, SearchSource } from './common';
 
 /** FROM MEMORY, UNVERIFIED. See the comment at the top of this file. */
 export const ADZUNA_COUNTRIES_UNVERIFIED: readonly string[] = [
@@ -51,35 +51,68 @@ export function createAdzunaSource(options: AdzunaOptions): JobSourceAdapter {
   return {
     name: 'adzuna',
     label,
-    async fetchJobs() {
-      const perPage = Math.min(ADZUNA_MAX_RESULTS_PER_PAGE, Math.max(1, Math.trunc(options.resultsPerPage ?? ADZUNA_MAX_RESULTS_PER_PAGE)));
-      const params = new URLSearchParams({ app_id: options.appId, app_key: options.appKey, results_per_page: String(perPage), what: options.what });
-      if (options.where) params.set('where', options.where);
-      const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${options.page ?? 1}?${params.toString()}`;
-      const body = obj(await getJson(options.fetch, label, url));
-      return arr(body.results)
-        .map((item) => {
-          const j = obj(item);
-          const postedAt = toIso(j.created);
-          const salaryMin = num(j.salary_min);
-          const salaryMax = num(j.salary_max);
-          return normaliseJob({
-            source: 'adzuna',
-            externalId: str(j.id),
-            title: tidy(decodeEntities(stripTags(str(j.title)))),
-            employer: str(obj(j.company).display_name),
-            location: str(obj(j.location).display_name),
-            // The search was scoped to this country, so every result is in it. (Adzuna's 'gb' is ISO 'GB'.)
-            country: country.toUpperCase(),
-            url: str(j.redirect_url),
-            applyUrl: str(j.redirect_url),
-            description: tidy(decodeEntities(stripTags(str(j.description)))),
-            ...(salaryMin !== undefined ? { salaryMin } : {}),
-            ...(salaryMax !== undefined ? { salaryMax } : {}),
-            ...(postedAt ? { postedAt } : {}),
-          });
-        })
-        .filter(present);
+    fetchJobs: () => adzunaSearch(options, label, country, options.what, options.where, options.page ?? 1),
+  };
+}
+
+export interface AdzunaSearchOptions {
+  appId: string;
+  appKey: string;
+  resultsPerPage?: number;
+  fetch: FetchLike;
+}
+
+/**
+ * Adzuna asked per search: the job title from the person's CV, and the place from their
+ * preferences. Only countries Adzuna supports (as remembered, unverified) are asked.
+ */
+export function createAdzunaSearch(options: AdzunaSearchOptions): SearchSource {
+  return {
+    name: 'adzuna',
+    label: 'adzuna',
+    countries: ADZUNA_COUNTRIES_UNVERIFIED.map((c) => c.toUpperCase()),
+    search: (q) => {
+      const country = q.country.toLowerCase();
+      if (!/^[a-z]{2}$/.test(country)) return Promise.resolve([]);
+      return adzunaSearch(options, country === 'gb' ? 'adzuna' : `adzuna:${country}`, country, q.what, q.where, 1);
     },
   };
+}
+
+async function adzunaSearch(
+  options: { appId: string; appKey: string; resultsPerPage?: number; fetch: FetchLike },
+  label: string,
+  country: string,
+  what: string,
+  where: string | undefined,
+  page: number,
+) {
+  const perPage = Math.min(ADZUNA_MAX_RESULTS_PER_PAGE, Math.max(1, Math.trunc(options.resultsPerPage ?? ADZUNA_MAX_RESULTS_PER_PAGE)));
+  const params = new URLSearchParams({ app_id: options.appId, app_key: options.appKey, results_per_page: String(perPage), what });
+  if (where) params.set('where', where);
+  const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}?${params.toString()}`;
+  const body = obj(await getJson(options.fetch, label, url));
+  return arr(body.results)
+    .map((item) => {
+      const j = obj(item);
+      const postedAt = toIso(j.created);
+      const salaryMin = num(j.salary_min);
+      const salaryMax = num(j.salary_max);
+      return normaliseJob({
+        source: 'adzuna',
+        externalId: str(j.id),
+        title: tidy(decodeEntities(stripTags(str(j.title)))),
+        employer: str(obj(j.company).display_name),
+        location: str(obj(j.location).display_name),
+        // The search was scoped to this country, so every result is in it. (Adzuna's 'gb' is ISO 'GB'.)
+        country: country.toUpperCase(),
+        url: str(j.redirect_url),
+        applyUrl: str(j.redirect_url),
+        description: tidy(decodeEntities(stripTags(str(j.description)))),
+        ...(salaryMin !== undefined ? { salaryMin } : {}),
+        ...(salaryMax !== undefined ? { salaryMax } : {}),
+        ...(postedAt ? { postedAt } : {}),
+      });
+    })
+    .filter(present);
 }

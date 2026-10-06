@@ -17,6 +17,25 @@ export interface JobSourceAdapter {
   fetchJobs(): Promise<Job[]>;
 }
 
+/** One search on a job-search API, built from a person's CV and preferences (search.ts). */
+export interface SearchQuery {
+  /** A job title read from the CV, e.g. "site manager". */
+  what: string;
+  /** A city from the person's preferences; absent means the whole country. */
+  where?: string;
+  /** ISO 3166-1 alpha-2, upper case. */
+  country: string;
+}
+
+/** A job-search API that is asked per search (Adzuna, Reed), unlike a board that lists everything it has. */
+export interface SearchSource {
+  readonly name: JobSource;
+  readonly label: string;
+  /** Countries it can search (ISO alpha-2, upper case); undefined means it is asked for every country. */
+  readonly countries?: readonly string[];
+  search(query: SearchQuery): Promise<Job[]>;
+}
+
 export class SourceError extends Error {
   constructor(
     readonly source: string,

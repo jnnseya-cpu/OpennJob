@@ -196,6 +196,12 @@ export class JobsController {
     return this.service.refreshJobs(userId);
   }
 
+  /** What the job-search APIs are asked for this person: titles from the CV, places from the preferences. */
+  @Get('search-plan')
+  searchPlan(@CurrentUser() userId: string) {
+    return this.service.searchPlan(userId);
+  }
+
   @Get('matches')
   matches(@CurrentUser() userId: string, @Query('min', new ZodPipe(minScoreSchema)) min: number, @Query(new ZodPipe(matchFilterSchema)) filters: MatchFilterInput) {
     return this.service.matches(userId, min, filters);

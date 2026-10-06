@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../components/AppShell';
 import { Histogram, scoreBins } from '../../components/Charts';
 import { ApiError, api, errorText } from '../../lib/api';
-import { REGION_IDS, getPack } from '../../lib/core';
+import { REGION_IDS, countryName, getPack } from '../../lib/core';
 import type { Region } from '../../lib/core';
 import { STATUS_LABEL, needsLabel, placeOf, regionLabel } from '../../lib/labels';
-import type { AgentRunResult, Application, MatchView, Profile } from '../../lib/types';
+import type { AgentRunResult, Application, MatchView, Profile, SearchPlanView } from '../../lib/types';
 
 export default function MatchesPage() {
   const router = useRouter();
@@ -21,6 +21,8 @@ export default function MatchesPage() {
   const [region, setRegion] = useState<Region | 'all'>('all');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<'' | 'refresh' | 'agent'>('');
+  const [plan, setPlan] = useState<SearchPlanView>();
+  const [found, setFound] = useState('');
 
   const load = useCallback(async () => {
     setError('');
@@ -32,6 +34,7 @@ export default function MatchesPage() {
       const [list, applications] = await Promise.all([api<MatchView[]>(`/jobs/matches?min=0${query}`), api<Application[]>('/applications')]);
       setMatches(list);
       setApps(applications);
+      setPlan(await api<SearchPlanView>('/jobs/search-plan').catch(() => undefined));
       setNoProfile(false);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) setNoProfile(true);
@@ -51,7 +54,8 @@ export default function MatchesPage() {
   async function refresh() {
     setBusy('refresh');
     try {
-      await api('/jobs/refresh', { method: 'POST' });
+      const r = await api<{ new: number; stored: number; searches: number; errors: unknown[] }>('/jobs/refresh', { method: 'POST' });
+      setFound(`${r.searches} search${r.searches === 1 ? '' : 'es'} made: ${r.new} new job${r.new === 1 ? '' : 's'} found.${r.errors.length ? ` ${r.errors.length} source${r.errors.length === 1 ? '' : 's'} did not answer.` : ''}`);
       await load();
     } catch (err) {
       setError(errorText(err));
@@ -109,6 +113,29 @@ export default function MatchesPage() {
         The agent prepares a draft for every match at {threshold}% or more that fits your preferences and credentials. It does not send
         anything.
       </p>
+      {plan && plan.searchSources.length ? (
+        <section className="card" data-testid="search-plan">
+          {plan.titles.length ? (
+            <p className="small">
+              Searching {plan.searchSources.map((s) => s.label.charAt(0).toUpperCase() + s.label.slice(1)).join(' and ')} for{' '}
+              <b>{plan.titles.join(', ')}</b> in{' '}
+              {plan.places.map((p) => (p.where ? `${p.where} (${countryName(p.country) ?? p.country})` : countryName(p.country) ?? p.country)).join(', ')}.
+              <span className="muted"> Taken from your CV and your places on Profile; nobody else sets it.</span>
+            </p>
+          ) : (
+            <p className="small note">
+              No job title was found in your CV, so OpennJob cannot search for you yet. Put your current or target job title in the first lines of
+              your CV, for example "Site Manager", then save your profile. <Link href="/profile/">Go to Profile</Link>
+            </p>
+          )}
+          <div className="row">
+            <button type="button" className="btn" onClick={refresh} disabled={busy !== '' || !plan.titles.length}>
+              {busy === 'refresh' ? 'Looking…' : 'Look for jobs now'}
+            </button>
+            {found ? <span className="small" role="status">{found}</span> : null}
+          </div>
+        </section>
+      ) : null}
       {regions.length ? (
         <div className="row" role="group" aria-label="Region">
           {(['all', ...regions] as (Region | 'all')[]).map((r) => (

@@ -8,15 +8,15 @@ import {
   InMemoryRepository,
   InMemoryUsageMeter,
   InProcessEventBus,
-  createAdzunaSource,
+  createAdzunaSearch,
   createAshbySource,
   createGreenhouseSource,
   createLeverSource,
-  createReedSource,
+  createReedSearch,
   createSampleSource,
   systemClock,
 } from '@opennjob/core';
-import type { Clock, EventBus, FetchLike, JobSourceAdapter, LlmPort, Repository, UsageMeter } from '@opennjob/core';
+import type { Clock, EventBus, FetchLike, JobSourceAdapter, LlmPort, Repository, SearchSource, UsageMeter } from '@opennjob/core';
 import { cipherFromEnv, parseDataKey } from './crypto';
 import { consoleJsonLogger } from './logging';
 import type { Logger } from './logging';
@@ -88,6 +88,10 @@ export interface OpennJobConfig {
   /** NFR-5: ACU of LLM use per person, and in total, per London day (OPENNJOB_LLM_DAILY_ACU_PER_USER, default 50; _TOTAL, default 500). */
   llmDailyAcuPerUser?: number;
   llmDailyAcuTotal?: number;
+  /** Searches per person per refresh, built from their CV (OPENNJOB_SEARCH_MAX_QUERIES_PER_USER, default 6). */
+  searchMaxQueriesPerUser?: number;
+  /** Searches in one platform-wide refresh, all people together (OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH, default 60). Protects the APIs' daily quotas. */
+  searchMaxQueriesPerRefresh?: number;
   /** Branding on outbound e-mail (OPENNJOB_BRAND_NAME, _COLOUR, _FOOTER, OPENNJOB_APP_URL). Default: OpennJob. */
   brand?: Brand;
 }
@@ -125,7 +129,10 @@ export interface OpennJobDeps {
   llm?: LlmPort;
   usageMeter: UsageMeter;
   eventBus: EventBus;
+  /** Sources that list everything they have (demo jobs, employers' boards). */
   sources: JobSourceAdapter[];
+  /** Job-search APIs asked per person, with searches built from their CV and preferences (search.ts). */
+  searchSources?: SearchSource[];
   clock: Clock;
   newId: () => string;
   config: OpennJobConfig;
@@ -197,6 +204,8 @@ export function loadConfig(env: Env): OpennJobConfig {
     };
   }
   config.duplicateDays = int(env.OPENNJOB_DUPLICATE_DAYS, DEFAULT_DUPLICATE_DAYS, 1, 3650);
+  config.searchMaxQueriesPerUser = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_USER, 6, 1, 30);
+  config.searchMaxQueriesPerRefresh = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH, 60, 1, 1000);
   config.dailyApplicationLimit = int(env.OPENNJOB_DAILY_APPLICATION_LIMIT, DEFAULT_DAILY_APPLICATION_LIMIT, 0, 1000);
   config.llmDailyAcuPerUser = int(env.OPENNJOB_LLM_DAILY_ACU_PER_USER, DEFAULT_LLM_DAILY_ACU_PER_USER, 0, 1_000_000);
   config.llmDailyAcuTotal = int(env.OPENNJOB_LLM_DAILY_ACU_TOTAL, DEFAULT_LLM_DAILY_ACU_TOTAL, 0, 100_000_000);
@@ -266,20 +275,21 @@ export function buildSources(env: Env, fetchFn: FetchLike): JobSourceAdapter[] {
   for (const b of boards(env.OPENNJOB_GREENHOUSE_BOARDS)) sources.push(createGreenhouseSource({ boardToken: b.id, ...(b.employer ? { employer: b.employer } : {}), fetch: fetchFn }));
   for (const b of boards(env.OPENNJOB_LEVER_COMPANIES)) sources.push(createLeverSource({ company: b.id, ...(b.employer ? { employer: b.employer } : {}), fetch: fetchFn }));
   for (const b of boards(env.OPENNJOB_ASHBY_BOARDS)) sources.push(createAshbySource({ boardName: b.id, ...(b.employer ? { employer: b.employer } : {}), fetch: fetchFn }));
-  const keywords = (env.OPENNJOB_SEARCH_KEYWORDS ?? '').trim() || 'nurse';
-  const location = (env.OPENNJOB_SEARCH_LOCATION ?? '').trim();
-  if (env.ADZUNA_APP_ID && env.ADZUNA_APP_KEY) {
-    // One adapter per country code in ADZUNA_COUNTRIES (default gb). Entries that are not two letters are ignored.
-    const countries = list(env.ADZUNA_COUNTRIES).map((c) => c.toLowerCase()).filter((c) => /^[a-z]{2}$/.test(c));
-    const perPage = Number.parseInt((env.ADZUNA_RESULTS_PER_PAGE ?? '').trim(), 10);
-    for (const country of countries.length ? [...new Set(countries)] : ['gb']) {
-      sources.push(createAdzunaSource({ appId: env.ADZUNA_APP_ID, appKey: env.ADZUNA_APP_KEY, country, what: keywords, ...(location ? { where: location } : {}), ...(Number.isFinite(perPage) ? { resultsPerPage: perPage } : {}), fetch: fetchFn }));
-    }
-  }
-  if (env.REED_API_KEY) {
-    sources.push(createReedSource({ apiKey: env.REED_API_KEY, keywords, ...(location ? { locationName: location } : {}), fetch: fetchFn }));
-  }
   return sources;
+}
+
+/**
+ * Builds the job-search APIs from environment variables: only the keys. What they are asked comes
+ * from each person's CV and preferences (packages/core/src/search.ts), never from a server setting.
+ */
+export function buildSearchSources(env: Env, fetchFn: FetchLike): SearchSource[] {
+  const out: SearchSource[] = [];
+  if (env.ADZUNA_APP_ID && env.ADZUNA_APP_KEY) {
+    const perPage = Number.parseInt((env.ADZUNA_RESULTS_PER_PAGE ?? '').trim(), 10);
+    out.push(createAdzunaSearch({ appId: env.ADZUNA_APP_ID, appKey: env.ADZUNA_APP_KEY, ...(Number.isFinite(perPage) ? { resultsPerPage: perPage } : {}), fetch: fetchFn }));
+  }
+  if (env.REED_API_KEY) out.push(createReedSearch({ apiKey: env.REED_API_KEY, fetch: fetchFn }));
+  return out;
 }
 
 /**
@@ -301,6 +311,7 @@ export function createDefaultDeps(env: Env = process.env, fetchFn: FetchLike = f
     usageMeter: new InMemoryUsageMeter(),
     eventBus: new InProcessEventBus(),
     sources: buildSources(env, fetchFn),
+    searchSources: buildSearchSources(env, fetchFn),
     clock: systemClock,
     newId: randomUUID,
     config,
