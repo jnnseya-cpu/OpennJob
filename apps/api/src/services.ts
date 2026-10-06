@@ -466,7 +466,8 @@ export class OpennJobService {
     const profile = await this.getProfile(userId);
     const preferences = preferencesOf(profile);
     const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
-    const threshold = applyThresholdOf(this.deps.config);
+    // The higher of the platform's threshold and the person's own bar (Profile).
+    const threshold = Math.max(applyThresholdOf(this.deps.config), preferences.minScore ?? 0);
     const existing = await this.deps.repository.listApplications(userId);
     const jobs = await this.deps.repository.listJobs();
 

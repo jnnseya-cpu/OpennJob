@@ -68,3 +68,24 @@ describe('role fit through the API', () => {
     expect(((await t.api.get(`/applications/${first.id}`).expect(200)).body as Application).status).not.toBe('closed');
   });
 });
+
+describe('the person\'s own minimum match score', () => {
+  it('the agent prepares only at or above the higher of the platform threshold and the person\'s bar', async () => {
+    t = await createTestApp({ sources: [], config: testConfig({ employerKey: EMPLOYER_KEY }) });
+    const post = (body: object) => t.raw().post('/employer/jobs').set('Authorization', `Bearer ${EMPLOYER_KEY}`).send(body).expect(201);
+    // 5 essentials (weight 10): the CV meets 9/10 = 90% on one job and all on the other.
+    const crit = (words: string[]) => words.map((w) => ({ label: `Skill ${w}`, essential: true, keywords: [w] }));
+    const cv = 'Example Candidate (fictional). Senior Project Manager. Skills: alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india.';
+    const ninety = (await post({ ...job('Senior Project Manager', 5), criteria: crit(['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet']) })).body as Job;
+    const hundred = (await post({ ...job('Senior Project Manager', 6), employer: 'Other Employer (fictional)', criteria: crit(['alpha', 'bravo']) })).body as Job;
+    await t.api.put('/profile').send({ ...PROFILE, cvText: cv, preferences: { languages: [], countries: [], cities: [], minScore: 95 } }).expect(200);
+    const run = (await t.api.post('/agent/run').send({}).expect(200)).body as { threshold: number; prepared: Application[] };
+    expect(run.threshold).toBe(95);
+    expect(run.prepared.map((a) => a.jobId)).toEqual([hundred.id]);
+    expect(run.prepared.map((a) => a.jobId)).not.toContain(ninety.id);
+    // The bar cannot go below the platform's threshold, or outside 50-100.
+    await t.api.put('/profile').send({ ...PROFILE, cvText: cv, preferences: { languages: [], countries: [], cities: [], minScore: 40 } }).expect(400);
+    await t.api.put('/profile').send({ ...PROFILE, cvText: cv, preferences: { languages: [], countries: [], cities: [], minScore: 60 } }).expect(200);
+    expect(((await t.api.post('/agent/run').send({}).expect(200)).body as { threshold: number }).threshold).toBe(80);
+  });
+});

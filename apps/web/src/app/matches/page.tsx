@@ -184,6 +184,23 @@ export default function MatchesPage() {
               <div className="bar">
                 <span style={{ width: `${m.score}%` }} />
               </div>
+              {m.hits.length ? (
+                <p className="small reqs" data-testid="match-requirements">
+                  {m.hits.some((h) => h.matched) ? (
+                    <>
+                      <b>Meets:</b> {m.hits.filter((h) => h.matched).map((h) => h.label).join(', ')}
+                    </>
+                  ) : null}
+                  {m.hits.some((h) => h.matched) && m.hits.some((h) => !h.matched) ? ' · ' : null}
+                  {m.hits.some((h) => !h.matched) ? (
+                    <span className="missing">
+                      <b>Missing:</b> {m.hits.filter((h) => !h.matched).map((h) => `${h.label}${h.essential ? ' (essential)' : ''}`).join(', ')}
+                    </span>
+                  ) : null}
+                </p>
+              ) : (
+                <p className="small muted">The advert lists no requirements OpennJob can read: the score rests on the job title.</p>
+              )}
               <div className="row">
                 <span className="chip plain">{regionLabel(m.job.region)}</span>
                 <span className="chip plain">{m.job.origin === 'employer' ? 'Posted by employer' : isAdzuna(m.job) ? 'Jobs by Adzuna' : 'Found by OpennJob'}</span>

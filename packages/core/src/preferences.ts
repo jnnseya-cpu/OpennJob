@@ -6,7 +6,13 @@ export const EMPTY_PREFERENCES: Preferences = { languages: [], countries: [], ci
 
 export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined): Preferences {
   const p = profile?.preferences;
-  return { languages: [...(p?.languages ?? [])], countries: [...(p?.countries ?? [])], cities: [...(p?.cities ?? [])], searchTypes: [...(p?.searchTypes ?? [])] };
+  return {
+    languages: [...(p?.languages ?? [])],
+    countries: [...(p?.countries ?? [])],
+    cities: [...(p?.cities ?? [])],
+    searchTypes: [...(p?.searchTypes ?? [])],
+    ...(typeof p?.minScore === 'number' ? { minScore: p.minScore } : {}),
+  };
 }
 
 /**

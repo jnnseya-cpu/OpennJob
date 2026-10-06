@@ -17,6 +17,8 @@ interface Prefs {
   languages: string[];
   countries: string[];
   cities: string[];
+  searchTypes?: string[];
+  minScore?: number | undefined;
 }
 
 interface TrainingRow {
@@ -101,7 +103,13 @@ export default function ProfilePage() {
         if (profile) {
           const { preferences, addressLine2, ...rest } = profile;
           setDetails({ ...rest, addressLine2: addressLine2 ?? '' });
-          setPrefs({ languages: preferences?.languages ?? [], countries: preferences?.countries ?? [], cities: preferences?.cities ?? [] });
+          setPrefs({
+            languages: preferences?.languages ?? [],
+            countries: preferences?.countries ?? [],
+            cities: preferences?.cities ?? [],
+            ...(preferences?.searchTypes?.length ? { searchTypes: preferences.searchTypes } : {}),
+            ...(typeof preferences?.minScore === 'number' ? { minScore: preferences.minScore } : {}),
+          });
         } else {
           const me = await api<PublicUser>('/account');
           if (live) setDetails((d) => ({ ...d, email: me.email }));
@@ -222,7 +230,7 @@ export default function ProfilePage() {
     setProfileMsg(undefined);
     try {
       const { addressLine2, ...rest } = details;
-      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: prefs } });
+      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: { languages: prefs.languages, countries: prefs.countries, cities: prefs.cities, ...(prefs.searchTypes?.length ? { searchTypes: prefs.searchTypes } : {}), ...(prefs.minScore ? { minScore: prefs.minScore } : {}) } } });
       setProfileMsg({ ok: true, text: 'Profile saved. Your matches use it from now on.' });
     } catch (err) {
       setProfileMsg({ ok: false, text: errorText(err) });
@@ -406,6 +414,20 @@ export default function ProfilePage() {
               <p className="small muted">Pick a country first to narrow by city.</p>
             )}
             <p className="small muted">A language you select counts as evidence for jobs that ask for it.</p>
+            <label className="field">
+              <span>
+                <b>Prepare applications only at or above</b>
+              </span>
+              <select aria-label="Minimum match score" value={prefs.minScore ?? ''} onChange={(e) => setPrefs((p) => ({ ...p, minScore: e.target.value ? Number(e.target.value) : undefined }))}>
+                <option value="">The platform’s threshold (80%)</option>
+                {[85, 90, 95, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}%
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="small muted">Fewer, better-matched applications get more replies than many weak ones. The agent never goes below the platform’s threshold.</p>
           </section>
 
           {profileMsg ? <div className={`note ${profileMsg.ok ? 'ok' : 'bad'}`} role={profileMsg.ok ? 'status' : 'alert'}>{profileMsg.text}</div> : null}

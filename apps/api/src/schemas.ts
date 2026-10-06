@@ -58,6 +58,8 @@ export const preferencesSchema = z
       .default([])
       .transform(unique),
     searchTypes: z.array(z.enum(['uk-permanent', 'uk-contract', 'international'])).max(3).optional().transform((v) => (v ? unique(v) : undefined)),
+    // The person's own bar: the agent prepares only matches at or above this (never below the platform's threshold).
+    minScore: z.number().int().min(50).max(100).optional(),
   })
   .strict();
 

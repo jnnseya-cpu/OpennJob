@@ -75,6 +75,8 @@ export interface Preferences {
   cities: string[];
   /** UK permanent, UK contract, international. Empty or absent means all three. */
   searchTypes?: SearchType[];
+  /** The person's own minimum match score (50-100). The agent uses the higher of this and the platform's threshold. */
+  minScore?: number;
 }
 
 export interface Profile {
