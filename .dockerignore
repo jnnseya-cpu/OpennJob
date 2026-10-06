@@ -16,3 +16,5 @@ apps/api/test
 packages/core/test
 *.md
 deploy
+!deploy/Caddyfile
+career-agent
