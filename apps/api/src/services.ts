@@ -81,6 +81,9 @@ export function withHolds(application: Application, add: string[], remove: (h: s
 }
 
 
+/** Holds the person clears by acting on the employer's site, then "try again". */
+export const RETRYABLE_HOLD = /^(login-wall|captcha|step-refused(:.*)?|step-waits|steps-saved:\d+|too-many-steps|no-submit-button|form-changed|no-form)$/;
+
 @Injectable()
 export class OpennJobService {
   constructor(@Inject(DEPS) private readonly deps: OpennJobDeps) {}
@@ -673,6 +676,22 @@ export class OpennJobService {
   }
 
   /** Records that the form was submitted (by the user, or by the agent in auto mode on a form with no sensitive fields). */
+  /**
+   * The person dealt with something on the employer's site (signed in once, completed a CAPTCHA
+   * themselves, fixed a step it refused) and asks the queue to try again. Only those holds are
+   * cleared; a declaration, a question, the truth check and the AI hold stay until their own steps.
+   * Only before anything was submitted.
+   */
+  async retryApplication(userId: string, id: string): Promise<Application> {
+    const application = await this.mustGetApplication(userId, id);
+    if (application.status === 'submitted' || application.status === 'closed' || application.attemptedAt !== undefined) throw new ConflictException('This application can no longer be retried');
+    const retryable = (h: string) => RETRYABLE_HOLD.test(h);
+    const updated = withHolds(application, [], retryable);
+    await this.deps.repository.updateApplication(updated);
+    await this.emit(userId, 'application.retry', { applicationId: id, holdsLeft: updated.holdReasons?.length ?? 0 });
+    return updated;
+  }
+
   /**
    * The daily review: the person skips an application so that it never goes out automatically.
    * Only before anything was attempted; it is closed and stays in the Tracker under "closed".

@@ -18,25 +18,41 @@ export const APPLICATION_SYSTEMS: readonly ApplicationSystem[] = [
   { id: 'lever', label: 'Lever', hosts: ['jobs.lever.co', 'jobs.eu.lever.co'] },
   { id: 'ashby', label: 'Ashby', hosts: ['jobs.ashbyhq.com'] },
   { id: 'workable', label: 'Workable', hosts: ['apply.workable.com'] },
+  // Workday: every employer has its own tenant, e.g. example.wd3.myworkdayjobs.com. Multi-step
+  // (My Information, My Experience, Application Questions, Voluntary Disclosures, Review); the
+  // extension's step engine drives it (apps/extension/src/agent/steps.ts).
+  { id: 'workday', label: 'Workday', hosts: ['.myworkdayjobs.com', '.myworkdaysite.com', '.myworkday.com'] },
+  // SAP SuccessFactors Recruiting: career sites on SAP hosts, and often on the employer's own
+  // domain (e.g. a jobs.<employer> address): the operator adds those as extra hosts.
+  { id: 'successfactors', label: 'SAP SuccessFactors', hosts: ['.successfactors.com', '.successfactors.eu', '.sapsf.com', '.sapsf.eu', '.jobs2web.com'] },
   { id: 'local-fixture', label: 'Fictional test forms (127.0.0.1)', hosts: ['127.0.0.1', 'localhost'], testOnly: true },
 ];
 
 /** Evidence the operator records before a system is enabled. */
 export interface ApplicationSystemSetting {
   enabled: boolean;
+  /** The employer's own domains that run this system, e.g. "jobs.example.org" (exact host names). */
+  extraHosts?: string[];
   termsCheckedAt?: string;
   supervisedSubmissionAt?: string;
   note?: string;
 }
 
-export function applicationSystemFor(url: string): ApplicationSystem | undefined {
+/**
+ * The application system a URL belongs to: by its own hosts, or by the extra hosts the operator
+ * recorded for a system (an employer's own domain running Workday or SuccessFactors).
+ */
+export function applicationSystemFor(url: string, extraHosts: Readonly<Record<string, readonly string[]>> = {}): ApplicationSystem | undefined {
   let host: string;
   try {
     host = new URL(url).hostname.toLowerCase();
   } catch {
     return undefined;
   }
-  return APPLICATION_SYSTEMS.find((s) => s.hosts.some((h) => (h.startsWith('.') ? host.endsWith(h) : host === h)));
+  return (
+    APPLICATION_SYSTEMS.find((s) => s.hosts.some((h) => (h.startsWith('.') ? host.endsWith(h) : host === h))) ??
+    APPLICATION_SYSTEMS.find((s) => (extraHosts[s.id] ?? []).some((h) => host === h.toLowerCase()))
+  );
 }
 
 /**

@@ -132,7 +132,60 @@ export function scanFields(doc: Document): DetectedField[] {
       elements: [el],
     });
   });
+  scanListboxes(doc, fields, uniqueId);
   return fields;
+}
+
+/** What a drop-down button shows before anything is chosen. */
+const LISTBOX_PLACEHOLDER = /^(select one|select|select\.\.\.|choose|choose one|please select|please choose|--.*--|)$/i;
+
+function listboxLabel(el: HTMLElement): string {
+  const doc = el.ownerDocument;
+  const fieldBox = el.closest('[data-automation-id^="formField"], .field, [class*="formField"]');
+  const fromBox = clean(fieldBox?.querySelector('label, legend')?.textContent);
+  if (fromBox) return fromBox.replace(/\*\s*$/, '').trim();
+  const labelledBy = (el.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
+  const fromIds = labelledBy.map((id) => clean(doc.getElementById(id)?.textContent)).filter(Boolean).join(' ');
+  if (fromIds) return fromIds;
+  if (el.id) {
+    const forLabel = doc.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    if (forLabel) return clean(forLabel.textContent);
+  }
+  return clean(el.getAttribute('aria-label'));
+}
+
+/** Drop-downs built from a button and a list of options (Workday and other single-page apps). */
+function scanListboxes(doc: Document, fields: DetectedField[], uniqueId: (base: string) => string): void {
+  const buttons = Array.from(doc.querySelectorAll<HTMLElement>('button[aria-haspopup="listbox"], [role="combobox"][aria-haspopup="listbox"]'));
+  buttons.forEach((el, index) => {
+    if ((el as HTMLButtonElement).disabled || !isVisible(el)) return;
+    const label = listboxLabel(el);
+    const c = classifyField({ label, name: el.getAttribute('name') ?? '', id: el.id, type: 'select', tag: 'select', groupLabel: sectionHeading(el) });
+    if (c.ignore) return;
+    // A list of options is never one of the person's free-text details ("Phone Device Type" is not
+    // the phone number): such a key is dropped, so the person's stored answer for the question is used.
+    const FREE_TEXT = new Set(['firstName', 'lastName', 'fullName', 'email', 'phone', 'addressLine1', 'addressLine2', 'postcode', 'supportingStatement']);
+    if (c.key && FREE_TEXT.has(c.key)) c.key = null;
+    const box = el.closest('[data-automation-id^="formField"], .field, [class*="formField"]');
+    const required = el.getAttribute('aria-required') === 'true' || /\*\s*$/.test(clean(box?.querySelector('label, legend')?.textContent)) || /\brequired\b/i.test(el.getAttribute('aria-label') ?? '');
+    fields.push({
+      id: uniqueId(el.id || el.getAttribute('data-automation-id') || `listbox-${index}`),
+      label: label || 'Unlabelled list',
+      kind: 'listbox',
+      sensitive: c.sensitive,
+      category: c.category,
+      key: c.key,
+      ...(c.country ? { country: c.country } : {}),
+      required,
+      elements: [el],
+    });
+  });
+}
+
+/** The option a drop-down button shows as chosen, or '' when nothing is chosen. */
+export function listboxValue(el: HTMLElement): string {
+  const shown = clean(el.textContent);
+  return LISTBOX_PLACEHOLDER.test(shown) ? '' : shown;
 }
 
 /** Does the control currently hold a value / selection? */
@@ -143,6 +196,8 @@ export function hasValue(field: DetectedField): boolean {
       return (first as HTMLInputElement).checked;
     case 'radio':
       return field.elements.some((el) => (el as HTMLInputElement).checked);
+    case 'listbox':
+      return listboxValue(first as HTMLElement) !== '';
     default:
       return clean((first as Control).value) !== '';
   }

@@ -184,7 +184,7 @@ describe('per-person searches read more than the snippet', () => {
     const fetch: FetchLike = async (url) => {
       calls.push(url);
       const body = url.includes('/jobs/55001122')
-        ? { jobDescription: `<p>${'A fictional mental health unit looking for a registered nurse. '.repeat(4)}</p><p>Essential:</p><ul><li>NMC registration</li><li>Medication administration and care planning</li></ul>` }
+        ? { jobDescription: `<p>${'A fictional mental health unit looking for a registered nurse. '.repeat(4)}</p><p>Essential:</p><ul><li>NMC registration</li><li>Medication administration and care planning</li></ul>`, externalUrl: 'https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1 ' }
         : url.includes('/jobs/')
           ? null
           : fixture('reed.json');
@@ -196,6 +196,10 @@ describe('per-person searches read more than the snippet', () => {
     expect(jobs[0]?.criteria.map((c) => c.label)).toContain('Care planning');
     // A failed detail call keeps the snippet.
     expect(jobs[1]?.description.length).toBeGreaterThan(0);
+    // Applied for on the employer's own site (here a fictional Workday tenant): the queue applies there.
+    expect(jobs[0]?.applyUrl).toBe('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1');
+    expect(jobs[0]?.url).toContain('reed.co.uk');
+    expect(jobs[1]?.applyUrl).toContain('reed.co.uk');
   });
 
   it('adzuna: sends the CV job title as an exact phrase', async () => {

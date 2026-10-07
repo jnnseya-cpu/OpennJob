@@ -148,7 +148,7 @@ export const SENSITIVE_PATTERNS: ReadonlyArray<{ category: SensitiveCategory; pa
     category: 'credential',
     pattern: /professional membership|membership (number|no|grade)\b|\b(mciob|ciob|mrics|rics|apm|ice|riba) (membership|member|number|no)\b|\bcscs\b|num[ée]ro d.adh[ée]rent|carte professionnelle/,
   },
-  { category: 'declaration', pattern: /d[ée]clar|i confirm|i certify|i consent|i agree|sur l.honneur|j.atteste|je certifie|je confirme|j.accepte/ },
+  { category: 'declaration', pattern: /d[ée]clar|i confirm|i certify|i consent|i agree|sur l.honneur|j.atteste|je certifie|je confirme|j.accepte|i (have read and )?(accept|agree to)\b|data privacy statement|privacy (notice|policy|statement)[^?]*\b(accept|agree|consent|read)|terms (and|&) conditions/ },
 ];
 
 /** "Job reference", "vacancy ref" etc. are not about referees. */

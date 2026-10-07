@@ -60,3 +60,19 @@ describe('the agent run tidies unsent drafts', () => {
     expect(fresh[0]?.statementSource).toBe('llm');
   });
 });
+
+describe('try again after signing in once', () => {
+  it('clears only the holds the person resolves on the employer site', async () => {
+    t = await createTestApp({ sources: [] });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    const j = job('signin', 'provided', [{ label: 'Medication rounds', essential: true, keywords: ['medication'] }]);
+    await t.deps.repository.upsertJobs([j]);
+    await t.deps.repository.createApplication(draft('wall', j, { status: 'needs_you', holdReasons: ['login-wall'] }));
+    await t.deps.repository.createApplication(draft('part', { ...j, id: 'employer:x' }, { status: 'needs_you', holdReasons: ['sensitive:convictions', 'steps-saved:3'] }));
+    expect((await t.api.post('/applications/wall/retry').expect(200)).body).toMatchObject({ status: 'draft' });
+    const part = (await t.api.post('/applications/part/retry').expect(200)).body;
+    expect(part).toMatchObject({ status: 'needs_you', holdReasons: ['sensitive:convictions'] }); // a declaration stays the person's
+    await t.deps.repository.updateApplication({ ...(await t.deps.repository.getApplication(USER_ID, 'wall')) as Application, attemptedAt: '2026-10-07T06:00:00.000Z' });
+    await t.api.post('/applications/wall/retry').expect(409); // never after the go
+  });
+});

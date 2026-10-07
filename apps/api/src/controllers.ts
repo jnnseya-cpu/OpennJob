@@ -362,6 +362,16 @@ export class ApplicationsController {
     return this.service.markSubmitted(userId, id, body);
   }
 
+  /**
+   * "I have signed in" / "try again": clears the holds the person resolves on the employer's site
+   * (a sign-in, a CAPTCHA they completed, a step the site refused). Never a declaration or a question.
+   */
+  @Post(':id/retry')
+  @HttpCode(200)
+  retry(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.service.retryApplication(userId, id);
+  }
+
   /** The daily review: "skip" keeps an application from going out automatically (it is closed). */
   @Post(':id/skip')
   @HttpCode(200)

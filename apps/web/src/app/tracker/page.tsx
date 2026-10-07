@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../../components/AppShell';
 import { StageBar, StatTiles } from '../../components/Charts';
 import { api, errorText } from '../../lib/api';
-import { HOLD_LABEL, STATUS_LABEL } from '../../lib/labels';
+import { HOLD_LABEL, RETRYABLE_HOLD, STATUS_LABEL } from '../../lib/labels';
 import type { AgentStatus, Application, InterviewRates } from '../../lib/types';
 
 const ORDER: Record<Application['status'], number> = { needs_you: 0, uncertain: 1, draft: 2, confirmed: 3, interview: 4, submitted: 5, closed: 6 };
@@ -30,6 +30,8 @@ function holdText(reason: string): string {
   if (HOLD_LABEL[reason]) return HOLD_LABEL[reason];
   if (reason.startsWith('question:')) return `A question with no stored answer: “${reason.slice(9)}”. Answer it on the review page.`;
   if (reason.startsWith('sensitive:')) return `A ${reason.slice(10).replace(/-/g, ' ')} question that only you answer.`;
+  if (reason.startsWith('steps-saved:')) return `OpennJob filled and saved the first ${reason.slice(12)} step(s) on the employer’s site and left it open in a tab: finish from the step it stopped at.`;
+  if (reason.startsWith('step-refused:')) return `The employer’s site did not move to the next step. It said: “${reason.slice(13)}”`;
   return reason;
 }
 
@@ -43,7 +45,7 @@ export default function TrackerPage() {
   const [agent, setAgent] = useState<AgentStatus>();
 
   const replace = (updated: Application) => setApps((list) => list?.map((x) => (x.id === updated.id ? updated : x)));
-  async function act(id: string, path: 'skip' | 'outcome', body?: object) {
+  async function act(id: string, path: 'skip' | 'outcome' | 'retry', body?: object) {
     setBusyId(id);
     setError('');
     try {
@@ -243,6 +245,16 @@ export default function TrackerPage() {
                   <li key={r}>{holdText(r)}</li>
                 ))}
               </ul>
+            ) : null}
+            {a.status === 'needs_you' && a.attemptedAt === undefined && a.holdReasons?.some((r) => RETRYABLE_HOLD.test(r)) ? (
+              <div className="row">
+                <a className="btn" href={a.applyUrl} target="_blank" rel="noopener noreferrer">
+                  Open the employer’s site
+                </a>
+                <button type="button" className="btn" disabled={busyId === a.id} onClick={() => act(a.id, 'retry')} data-testid="retry">
+                  {a.holdReasons.includes('login-wall') ? 'I have signed in: try again' : 'Try again'}
+                </button>
+              </div>
             ) : null}
             {a.receipt ? (
               <div className="small" data-testid="receipt">

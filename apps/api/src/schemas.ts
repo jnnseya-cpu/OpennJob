@@ -318,6 +318,11 @@ export const applicationSystemSchema = z
     termsCheckedAt: z.string().datetime().optional(),
     supervisedSubmissionAt: z.string().datetime().optional(),
     note: z.string().trim().max(500).optional(),
+    // The employer's own domains running this system, e.g. "jobs.example.org".
+    extraHosts: z
+      .array(z.string().trim().toLowerCase().regex(/^(?=.{3,253}$)([a-z0-9-]+\.)+[a-z]{2,}$/, 'a host name such as jobs.example.org'))
+      .max(100)
+      .optional(),
   })
   .strict();
 

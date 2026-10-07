@@ -137,7 +137,7 @@ export class ApplyingService {
     if (input.enabled && (!input.termsCheckedAt || !input.supervisedSubmissionAt)) {
       throw new BadRequestException('Enabling an application system needs termsCheckedAt and supervisedSubmissionAt');
     }
-    const setting: ApplicationSystemSetting = { enabled: input.enabled, ...(input.termsCheckedAt ? { termsCheckedAt: input.termsCheckedAt } : {}), ...(input.supervisedSubmissionAt ? { supervisedSubmissionAt: input.supervisedSubmissionAt } : {}), ...(input.note ? { note: input.note } : {}) };
+    const setting: ApplicationSystemSetting = { enabled: input.enabled, ...(input.termsCheckedAt ? { termsCheckedAt: input.termsCheckedAt } : {}), ...(input.supervisedSubmissionAt ? { supervisedSubmissionAt: input.supervisedSubmissionAt } : {}), ...(input.note ? { note: input.note } : {}), ...(input.extraHosts?.length ? { extraHosts: [...new Set(input.extraHosts)] } : {}) };
     await this.deps.repository.setPlatformSetting(systemKey(id), setting);
     return { id, label: system.label, ...setting };
   }
@@ -147,7 +147,12 @@ export class ApplyingService {
   }
 
   private async systemEnabledFor(url: string): Promise<boolean> {
-    const system = applicationSystemFor(url);
+    const extra: Record<string, string[]> = {};
+    for (const s of APPLICATION_SYSTEMS) {
+      const hosts = (await this.systemSetting(s.id)).extraHosts;
+      if (hosts?.length) extra[s.id] = hosts;
+    }
+    const system = applicationSystemFor(url, extra);
     if (!system || (system.testOnly && this.deps.config.production)) return false;
     return (await this.systemSetting(system.id)).enabled;
   }

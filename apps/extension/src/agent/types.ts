@@ -1,6 +1,7 @@
-import type { FieldKey, FillValues, Mode, PolicyDecision, SensitiveCategory, WorkRightsContext } from '@opennjob/core/browser';
+import type { FieldKey, FillValue, FillValues, Mode, PolicyDecision, PolicyField, SensitiveCategory, WorkRightsContext } from '@opennjob/core/browser';
 
-export type FieldKind = 'text' | 'textarea' | 'select' | 'checkbox' | 'radio';
+/** 'listbox': a button that opens a list of options (Workday's drop-downs), chosen by clicking. */
+export type FieldKind = 'text' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'listbox';
 
 /** A fillable control (or radio group) found on the page. */
 export interface DetectedField {
@@ -70,6 +71,21 @@ export interface RunRequest {
   cv?: { fileName: string; text: string };
   /** The cover letter, attached as a PDF to a field that asks for a cover letter (files.ts). */
   coverLetter?: { fileName: string; text: string };
+  /**
+   * A multi-step application: the fields of the steps already completed, as the policy sees them.
+   * The final submit is judged over these and the last step's fields together, as one form.
+   */
+  priorFields?: PolicyField[];
+}
+
+/** The step controls found on the page (steps.ts). */
+export interface StepReport {
+  flow: 'workday' | 'successfactors' | 'generic';
+  start: boolean;
+  next: boolean;
+  submit: boolean;
+  /** The step has nothing that waits for the person, so pressing next is allowed. */
+  canAdvance: boolean;
 }
 
 export interface RunReport {
@@ -89,6 +105,14 @@ export interface RunReport {
   coverLetterAttached?: number;
   fields: FieldReport[];
   message: string;
+  /** This step's fields as the policy sees them (the queue keeps them for the final decision). */
+  policyFields?: PolicyField[];
+  /**
+   * Drop-down buttons to choose afterwards (they need to wait for their list to open), with the
+   * value the policy already allowed for each. Never a value for a field that was not allowed.
+   */
+  pendingListboxes?: { id: string; value: FillValue }[];
+  step?: StepReport;
 }
 
 /** The answer to OPENNJOB_SUBMIT. */

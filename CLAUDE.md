@@ -92,7 +92,8 @@ apps/web/                     candidate web app: Next.js 14 App Router, static e
   src/lib/declarations.ts       what the review screen asks the user to confirm (from the pack registry)
   test/e2e/                     Playwright: built site served statically + built API process (PostgreSQL if DATABASE_URL)
 apps/extension/               Chrome MV3 extension, bundled by esbuild into dist/
-  src/agent/                    scan, blockers (CAPTCHA / login wall), fill, apply the policy
+  src/agent/                    scan, blockers (CAPTCHA / login wall), fill, apply the policy;
+                                steps.ts: multi-step systems (Workday, SuccessFactors): Apply, Save and Continue, Submit
   src/popup/                    popup UI: API address, sign-in, mode, scan, fill
   test/fixtures/                fictional application forms
   test/e2e/                     Playwright tests

@@ -7,6 +7,9 @@ import type { RunReport } from '../agent/types';
  *   question:<label>              a required ordinary question with no stored answer (SCR-2)
  *   file-upload                   a required file (CV) the agent does not attach
  *   no-submit-button              no single submit button to press
+ *   step-refused[:<message>]      a multi-step site did not move on after "Next" (its message, if any)
+ *   steps-saved:<n>               added when it stopped part-way: n steps were saved on the site, tab left open
+ *   too-many-steps                more steps than the queue goes through
  * An empty list means the policy allows submitting this page.
  */
 export function holdReasonsOf(report: RunReport): string[] {
@@ -19,4 +22,10 @@ export function holdReasonsOf(report: RunReport): string[] {
   if (reasons.length === 0 && report.fields.length === 0) reasons.push('no-form');
   if (reasons.length === 0 && report.readyToSubmit !== true) reasons.push('no-submit-button');
   return [...new Set(reasons)];
+}
+
+/** Why a step of a multi-step application waits: the same reasons, without "no submit button" (it has a next one). */
+export function stepHoldReasons(report: RunReport): string[] {
+  const reasons = holdReasonsOf(report).filter((r) => r !== 'no-submit-button' && r !== 'no-form');
+  return reasons.length > 0 ? reasons : ['step-waits'];
 }

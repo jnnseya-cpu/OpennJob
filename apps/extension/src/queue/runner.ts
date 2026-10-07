@@ -1,7 +1,7 @@
-import type { FillValues, WorkRightsContext } from '@opennjob/core/browser';
+import type { FillValues, PolicyField, WorkRightsContext } from '@opennjob/core/browser';
 import type { Confirmation } from '../agent/confirmation';
 import type { RunReport, SubmitReport } from '../agent/types';
-import { holdReasonsOf } from './reasons';
+import { holdReasonsOf, stepHoldReasons } from './reasons';
 
 /**
  * The queue, in the person's own browser (APP-3, OD-4). Started by the person from the
@@ -12,6 +12,12 @@ import { holdReasonsOf } from './reasons';
  *   4. asks the API for the go (authorisation, pauses and the daily limit are checked again)
  *   5. presses submit and reads the site's confirmation; with none it records "uncertain"
  * It stops at the first reason to wait, and never retries an attempted application.
+ *
+ * Multi-step applications (Workday, SuccessFactors, any form split over pages): it presses the
+ * start control ("Apply", "Apply Manually"), fills each step and presses "Save and Continue" only
+ * when the step has nothing that waits for the person, and judges the final submit over the fields
+ * of every step together. When it stops part-way, or at a sign-in page, the tab is left open so the
+ * person can sign in, or finish the step it stopped at, where it is.
  */
 
 export interface QueueState {
@@ -40,6 +46,8 @@ interface NextReply {
 }
 
 const STEP_LIMIT = 25;
+/** Steps (pages or screens) of one application, at most. */
+const MAX_STEPS = 15;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function setState(state: Partial<QueueState>): Promise<QueueState> {
@@ -108,6 +116,32 @@ async function awaitConfirmation(tabId: number, timeoutMs = 10_000): Promise<Con
   return undefined;
 }
 
+async function send<T>(tabId: number, message: object): Promise<T> {
+  return (await chrome.tabs.sendMessage(tabId, message)) as T;
+}
+
+/** Waits until the step on screen changes (a new page, or a new screen of a single-page app). */
+async function settle(tabId: number, before: string, timeoutMs = 10_000): Promise<{ changed: boolean; errors: string[] }> {
+  const deadline = Date.now() + timeoutMs;
+  let errors: string[] = [];
+  while (Date.now() < deadline) {
+    await sleep(300);
+    try {
+      await waitForLoad(tabId, 3_000);
+      await inject(tabId);
+      const state = await send<{ signature: string; errors: string[] }>(tabId, { type: 'OPENNJOB_STEP_STATE' });
+      errors = state.errors;
+      if (state.signature !== before) {
+        await sleep(400); // let the new step finish drawing
+        return { changed: true, errors: [] };
+      }
+    } catch {
+      // The page was navigating; look again.
+    }
+  }
+  return { changed: false, errors };
+}
+
 let running = false;
 
 export async function runQueue(): Promise<QueueState> {
@@ -131,12 +165,58 @@ export async function runQueue(): Promise<QueueState> {
 
       const tab = await chrome.tabs.create({ url: app.applyUrl, active: false });
       const tabId = tab.id as number;
+      // Left open when the person has something to do in it: sign in, or finish a step part-way.
+      let keepTab = false;
       try {
         await waitForLoad(tabId);
-        await inject(tabId);
-        const report = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true, ...(next.workRights ? { workRights: next.workRights } : {}), ...(next.cv ? { cv: next.cv } : {}), ...(next.coverLetter ? { coverLetter: next.coverLetter } : {}) })) as RunReport;
-        const reasons = holdReasonsOf(report);
+        const runRequest = { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true, ...(next.workRights ? { workRights: next.workRights } : {}), ...(next.cv ? { cv: next.cv } : {}), ...(next.coverLetter ? { coverLetter: next.coverLetter } : {}) };
+        const prior: PolicyField[] = [];
+        let stepsDone = 0;
+        let report: RunReport | undefined;
+        let reasons: string[] = [];
+        for (let s = 0; s < MAX_STEPS; s += 1) {
+          await inject(tabId);
+          report = await send<RunReport>(tabId, { ...runRequest, priorFields: prior });
+          if (report.status === 'blocked') {
+            reasons = holdReasonsOf(report);
+            keepTab = report.blockers.includes('login-wall'); // sign in once, here, and the queue goes on next time
+            break;
+          }
+          if (report.readyToSubmit) break; // the final step: submit after the go, below
+          if (report.step?.next) {
+            if (!report.step.canAdvance) {
+              reasons = stepHoldReasons(report);
+              break;
+            }
+            const before = await send<{ signature: string }>(tabId, { type: 'OPENNJOB_STEP_STATE' });
+            const pressed = await send<{ advanced: boolean }>(tabId, { type: 'OPENNJOB_NEXT' });
+            if (!pressed.advanced) {
+              reasons = stepHoldReasons(report);
+              break;
+            }
+            const moved = await settle(tabId, before.signature);
+            if (!moved.changed) {
+              reasons = [moved.errors[0] ? `step-refused:${moved.errors[0].slice(0, 200)}` : 'step-refused'];
+              break;
+            }
+            prior.push(...(report.policyFields ?? []).map((f) => ({ ...f, id: `step${s}:${f.id}` })));
+            stepsDone += 1;
+            continue;
+          }
+          if (report.step?.start) {
+            const before = await send<{ signature: string }>(tabId, { type: 'OPENNJOB_STEP_STATE' });
+            const pressed = await send<{ pressed: boolean }>(tabId, { type: 'OPENNJOB_START' });
+            if (pressed.pressed && (await settle(tabId, before.signature)).changed) continue;
+          }
+          reasons = holdReasonsOf(report);
+          break;
+        }
+        if (!report?.readyToSubmit && reasons.length === 0) reasons = ['too-many-steps'];
         if (reasons.length > 0) {
+          if (stepsDone > 0) {
+            reasons.push(`steps-saved:${stepsDone}`);
+            keepTab = true;
+          }
           await api(`/agent/queue/${app.id}/result`, { method: 'POST', body: { outcome: 'held', reasons } });
           state = await setState({ held: state.held + 1 });
           continue;
@@ -146,7 +226,7 @@ export async function runQueue(): Promise<QueueState> {
           state = await setState({ message: go.message ?? 'Stopped.' });
           break;
         }
-        const submitted = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_SUBMIT' })) as SubmitReport;
+        const submitted = await send<SubmitReport>(tabId, { type: 'OPENNJOB_SUBMIT', priorFields: prior });
         if (!submitted.submitted) {
           await api(`/agent/queue/${app.id}/result`, { method: 'POST', body: { outcome: 'held', reasons: ['form-changed'] } });
           state = await setState({ held: state.held + 1 });
@@ -162,7 +242,7 @@ export async function runQueue(): Promise<QueueState> {
           state = await setState({ uncertain: state.uncertain + 1 });
         }
       } finally {
-        await chrome.tabs.remove(tabId).catch(() => undefined);
+        if (!keepTab) await chrome.tabs.remove(tabId).catch(() => undefined);
       }
     }
   } catch (err) {

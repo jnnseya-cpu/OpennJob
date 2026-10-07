@@ -48,14 +48,19 @@ export function createReedSearch(options: { apiKey: string; fetch: FetchLike; de
   };
 }
 
-/** The full advert text for one Reed job, or undefined when the call fails. */
-async function reedFullDescription(apiKey: string, fetchFn: FetchLike, jobId: string): Promise<string | undefined> {
+/**
+ * The full advert for one Reed job: its text, and the employer's own application address when the
+ * job is applied for on the employer's site (externalUrl, as remembered from Reed's API; unverified).
+ * That address is what lets the queue apply on the employer's Workday or SuccessFactors site.
+ */
+async function reedDetails(apiKey: string, fetchFn: FetchLike, jobId: string): Promise<{ text?: string; externalUrl?: string }> {
   try {
     const body = obj(await getJson(fetchFn, 'reed', `https://www.reed.co.uk/api/1.0/jobs/${encodeURIComponent(jobId)}`, { Authorization: reedAuthHeader(apiKey) }));
     const text = tidy(decodeEntities(stripTags(str(body.jobDescription).replace(/<\/(p|li|div|h\d)>|<br\s*\/?>/gi, '\n'))));
-    return text || undefined;
+    const external = str(body.externalUrl);
+    return { ...(text ? { text } : {}), ...(/^https:\/\//i.test(external) ? { externalUrl: external } : {}) };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -67,10 +72,13 @@ async function reedSearch(apiKey: string, fetchFn: FetchLike, keywords: string, 
   const body = obj(await getJson(fetchFn, label, url, { Authorization: reedAuthHeader(apiKey) }));
   const items = arr(body.results).map((item) => obj(item));
   const full = new Map<string, string>();
+  const external = new Map<string, string>();
   for (const j of items.slice(0, details)) {
     const id = str(j.jobId);
-    const text = id ? await reedFullDescription(apiKey, fetchFn, id) : undefined;
-    if (text) full.set(id, text);
+    if (!id) continue;
+    const d = await reedDetails(apiKey, fetchFn, id);
+    if (d.text) full.set(id, d.text);
+    if (d.externalUrl) external.set(id, d.externalUrl);
   }
   return items
     .map((j) => {
@@ -88,7 +96,8 @@ async function reedSearch(apiKey: string, fetchFn: FetchLike, keywords: string, 
         // Reed is treated as a UK board. An assumption, not something the API states per job.
         country: 'GB',
         url: str(j.jobUrl),
-        applyUrl: str(j.jobUrl),
+        // Applied for on the employer's own site: that address, so the queue can apply there.
+        applyUrl: external.get(str(j.jobId)) ?? str(j.jobUrl),
         description: whole && whole.length > snippet.length ? whole : snippet,
         ...(salaryMin !== undefined ? { salaryMin } : {}),
         ...(salaryMax !== undefined ? { salaryMax } : {}),
