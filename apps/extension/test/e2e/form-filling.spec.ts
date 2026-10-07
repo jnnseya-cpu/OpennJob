@@ -366,3 +366,23 @@ test.describe('pages the agent must stop on', () => {
     expect((await fixtureLog(page)).submitClicks).toBe(0);
   });
 });
+
+test.describe('older portals: labels written beside the box, not linked to it', () => {
+  test('reads the label from the table cell or the text before the box, fills ordinary fields, leaves the declaration', async ({ page }) => {
+    await openFixture(page, 'sf-classic.html');
+    const report = await runAgent(page, 'hybrid');
+    const byId = Object.fromEntries(report.fields.map((f) => [f.id, f]));
+    expect(byId['c-first']).toMatchObject({ label: 'First Name *', key: 'firstName', state: 'filled' });
+    expect(byId['c-last']).toMatchObject({ key: 'lastName', state: 'filled' });
+    expect(byId['c-email']).toMatchObject({ key: 'email', state: 'filled' });
+    expect(byId['c-phone']?.key).toBe('phone');
+    expect(byId['c-post']?.key).toBe('postcode');
+    // A conviction question stays the person's, however its label is written.
+    expect(byId['c-conv']).toMatchObject({ sensitive: true, category: 'convictions' });
+    expect(byId['c-conv']?.state).not.toBe('filled');
+    expect(byId['c-statement']?.label).toBe('Cover letter');
+    const values = await formSnapshot(page);
+    expect(values['c-first']).toBe(PROFILE.firstName);
+    expect(values['c-conv']).toBe('');
+  });
+});

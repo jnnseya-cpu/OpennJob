@@ -30,7 +30,46 @@ function ownLabel(el: Control): string {
   const labelledBy = (el.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
   const fromIds = labelledBy.map((id) => clean(doc.getElementById(id)?.textContent)).filter(Boolean).join(' ');
   if (fromIds) return fromIds;
-  return clean(el.getAttribute('title'));
+  return clean(el.getAttribute('title')) || nearbyLabel(el);
+}
+
+/** Text that reads like a label: short, not just punctuation. */
+const labelLike = (s: string): string => {
+  const t = clean(s).replace(/\s*:\s*$/, '');
+  return t.length >= 2 && t.length <= 120 && /[\p{L}]/u.test(t) ? t : '';
+};
+
+/**
+ * Older application systems (the classic SAP SuccessFactors career portal, many in-house forms) write
+ * the label as plain text next to the box instead of a <label> linked to it: in the table cell to its
+ * left, or just before it. Used only when the box has no label of its own.
+ */
+function nearbyLabel(el: HTMLElement): string {
+  const cell = el.closest('td, th');
+  if (cell) {
+    // The cell before this one in the same row, or (label above the box) the same column one row up.
+    let prev = cell.previousElementSibling;
+    while (prev && !labelLike(prev.textContent ?? '')) prev = prev.previousElementSibling;
+    if (prev) return labelLike(prev.textContent ?? '');
+    const row = cell.parentElement;
+    const index = row ? Array.from(row.children).indexOf(cell) : -1;
+    const above = row?.previousElementSibling?.children[index];
+    if (above && !above.querySelector('input, select, textarea')) {
+      const t = labelLike(above.textContent ?? '');
+      if (t) return t;
+    }
+  }
+  // Text just before the box among its siblings (a <span>, <b>, <div> or a bare text node).
+  for (let node: Node | null = el.previousSibling, steps = 0; node && steps < 4; node = node.previousSibling, steps++) {
+    if (node instanceof HTMLElement && node.querySelector('input, select, textarea')) break;
+    if (node instanceof HTMLElement && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(node.tagName)) break;
+    const t = labelLike(node.textContent ?? '');
+    if (t) return t;
+  }
+  // The box's own container, when it holds only this box and a few words.
+  const parent = el.parentElement;
+  if (parent && parent.querySelectorAll('input, select, textarea').length === 1) return labelLike(parent.textContent ?? '');
+  return '';
 }
 
 /** Legend of the enclosing fieldset (for a radio group this is the question itself). */
