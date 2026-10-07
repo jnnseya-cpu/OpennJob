@@ -34,6 +34,10 @@
 	handle {
 		@immutable path /_next/static/*
 		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		# Pages, the config and theme.js: always ask the server first, so a new version shows at the
+		# next open (the hashed files above never change, so they may be kept for a year).
+		@pages not path /_next/static/*
+		header @pages Cache-Control "no-cache"
 		root * /srv
 		try_files {path} {path}/index.html /404.html
 		file_server
