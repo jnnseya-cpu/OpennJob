@@ -44,7 +44,7 @@ Paths: `api/` is `apps/api/test/`, `web/` is `apps/web/test/e2e/`, `ext/` is
 | ID | Status | Evidence |
 |---|---|---|
 | DIS-1 no feature depends on employers | Tested | `api/spec-p4.test.ts` (T-19) |
-| DIS-2 adapters checked against recorded live responses | **Not done** | The job boards could not be reached from the build environment. Fixtures are still written from public documentation. |
+| DIS-2 adapters checked against recorded live responses | **Partly** | 2026-10-07, owner's server, `deploy/check-sources.sh` ("electrical engineer"): Adzuna returned and parsed 50 jobs each in GB, FR, BE and CA; Reed 100 in GB; Jooble 30 in AE. So those endpoints and response shapes work. No response was recorded as a test fixture, and Greenhouse, Lever, Ashby and ReliefWeb have not been seen live. Fixtures are still written from public documentation. |
 | DIS-3 contract type, country, city, language, pack, origin on every job | Tested | `core/preferences.test.ts`, `core/sources.test.ts`, `api/repository.contract.ts` |
 | DIS-4 discovery daily for each active account | Tested | `api/spec-p4.test.ts` (DIS-4: 06:00 London, once per day across instances). Runs only with `OPENNJOB_SCHEDULER=true`. |
 | DIS-5 terms check recorded in docs/sources.md | Partly | `core/sources-register.test.ts` fails if an adapter has no row. **No source's terms have been checked.** |

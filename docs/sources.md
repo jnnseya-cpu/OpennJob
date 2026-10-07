@@ -21,9 +21,10 @@ operator's responsibility.
 | `jooble` | `POST https://{cc}.jooble.org/api/{key}` (USA: `jooble.org`) | Aggregator API; each country's site issues its own free key, valid only for that country | not checked | About 60 countries, including the UAE and the Gulf. Asked only for the countries that have a key in `JOOBLE_API_KEYS` (`AE:key,SA:key`; request each at `{cc}.jooble.org/api/about`). Adverts are snippets; the full text is on the linked site. Check the API terms (attribution, linking, caching) before turning it on. **Live check 2026-10-07 (owner's server, `deploy/check-sources.sh`):** `ae.jooble.org` with a UAE key returned 30 jobs for "electrical engineer", parsed into titles and employers, so the endpoint and response shape work for the UAE. |
 | `sample` | none (in the code) | Fictional demonstration jobs | not needed | Fictional data only. Off unless `OPENNJOB_DEMO_JOBS=true`. |
 
-Response shapes for the seven live adapters were written from public documentation. Only Jooble
-(UAE) has been seen working against the live API (see its row); the others are **not verified
-against the live APIs** (DIS-2). Nothing in this repository calls them in tests.
+Response shapes for the seven live adapters were written from public documentation. On 2026-10-07 the owner's server
+(`deploy/check-sources.sh`, "electrical engineer") got and parsed real results from Adzuna (50 jobs
+each in GB, FR, BE, CA), Reed (100 in GB) and Jooble (30 in AE). Greenhouse, Lever, Ashby and
+ReliefWeb are **not verified against the live APIs** (DIS-2). Nothing in this repository calls them in tests.
 
 ## What the job-search APIs are asked
 
