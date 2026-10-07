@@ -8,7 +8,7 @@
 #   bash deploy/set-keys.sh reed       # Reed job search API (free developer key)
 #   bash deploy/set-keys.sh boards     # employers' own boards on Greenhouse / Lever / Ashby (no key)
 #   bash deploy/set-keys.sh reliefweb  # ReliefWeb jobs API (UN OCHA): DR Congo and other countries the others miss
-#   bash deploy/set-keys.sh jooble     # Jooble job search API (free key on request): UAE, Gulf, Ireland...
+#   bash deploy/set-keys.sh jooble     # Jooble job search API: one free key per country site (UAE, Gulf, Ireland...)
 #
 # Secrets are typed without being shown and stored only in .env.production (root only).
 # The Claude key is checked with a model lookup, which costs nothing. Job sources are not called
@@ -93,11 +93,19 @@ c.models.retrieve(process.env.OPENNJOB_MODEL).then(
     restart; echo "Saved. Record the terms check in docs/sources.md (date and your name)."
     ;;
   jooble)
-    confirm_terms "Jooble" "https://jooble.org/api/about (API terms)"
-    KEY="$(ask_secret 'Jooble API key')"
+    confirm_terms "Jooble" "the API terms on each country's site, e.g. https://ae.jooble.org/api/about"
+    echo "Each Jooble country site gives its own key, valid only for that country (jooble.org = USA)."
+    echo "Get one per country at https://<code>.jooble.org/api/about, e.g. ae for the UAE, uk for the UK."
+    CC="$(ask 'Country code (two letters, e.g. AE)')"
+    CC="$(printf '%s' "$CC" | tr '[:lower:]' '[:upper:]')"
+    [[ "$CC" =~ ^[A-Z]{2}$ ]] || { echo "A two-letter country code is needed. Nothing changed." >&2; exit 1; }
+    KEY="$(ask_secret "Jooble API key for $CC")"
     [ -n "$KEY" ] || { echo "No key given. Nothing changed." >&2; exit 1; }
-    set_values JOOBLE_API_KEY "$KEY"
-    unset KEY; restart; echo "Saved. Record the terms check in docs/sources.md (date and your name)."
+    case "$KEY" in *[,:]*) echo "A key cannot contain ',' or ':'. Nothing changed." >&2; exit 1 ;; esac
+    # Keep the other countries' keys; replace this country's.
+    REST="$(current JOOBLE_API_KEYS | tr ',' '\n' | grep -v "^$CC:" | grep . | paste -sd, - || true)"
+    set_values JOOBLE_API_KEYS "${REST:+$REST,}$CC:$KEY"
+    unset KEY; restart; echo "Saved the key for $CC. Run again to add another country. Record the terms check in docs/sources.md."
     ;;
   *)
     sed -n '2,16p' "$0"; exit 1 ;;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JOOBLE_COUNTRIES, createJoobleSearch, createReliefWebSearch, recruiterEmailIn } from '../src';
+import { createJoobleSearch, createReliefWebSearch, joobleHost, parseJoobleKeys, recruiterEmailIn } from '../src';
 import type { FetchLike } from '../src';
 
 /**
@@ -54,17 +54,27 @@ describe('reliefweb search', () => {
 });
 
 describe('jooble search', () => {
-  it('asks for the title in the place (city and country name) and normalises the snippets', async () => {
+  it('sends each country to its own Jooble site with that country\'s key', async () => {
     const { fetch, calls } = fakeFetch({
       totalCount: 1,
       jobs: [{ id: 778899, title: 'Electrical Engineer <b>HV</b> (fictional)', location: 'Abu Dhabi', snippet: 'Substation commissioning, 132kV.', type: 'Full-time', link: 'https://example.org/jooble/778899', company: 'Example Grid Contracting (fictional)', updated: '2026-10-04T00:00:00.0000000' }],
     });
-    const source = createJoobleSearch({ apiKey: 'key-not-a-secret', fetch });
-    expect(source.countries).toContain('AE');
-    expect(source.countries).not.toContain('GB'); // Adzuna and Reed cover it
+    const source = createJoobleSearch({ keys: parseJoobleKeys('AE:ae-key-not-a-secret, gb:uk-key-not-a-secret'), fetch });
+    expect(source.countries).toEqual(['AE', 'GB']);
     const jobs = await source.search({ what: 'electrical engineer', where: 'Abu Dhabi', country: 'AE' });
-    expect(calls[0]).toMatchObject({ url: 'https://jooble.org/api/key-not-a-secret', method: 'POST', body: { keywords: 'electrical engineer', location: 'Abu Dhabi, United Arab Emirates' } });
+    expect(calls[0]).toMatchObject({ url: 'https://ae.jooble.org/api/ae-key-not-a-secret', method: 'POST', body: { keywords: 'electrical engineer', location: 'Abu Dhabi' } });
     expect(jobs[0]).toMatchObject({ id: 'jooble:778899', source: 'jooble', title: 'Electrical Engineer HV (fictional)', employer: 'Example Grid Contracting (fictional)', country: 'AE', url: 'https://example.org/jooble/778899' });
-    expect(JOOBLE_COUNTRIES).toEqual(expect.arrayContaining(['AE', 'SA', 'QA', 'IE']));
+    await source.search({ what: 'electrical engineer', country: 'GB' });
+    expect(calls[1]?.url).toBe('https://uk.jooble.org/api/uk-key-not-a-secret'); // the UK site is uk., not gb.
+    // No key for a country: nothing is asked.
+    expect(await source.search({ what: 'electrical engineer', country: 'SA' })).toEqual([]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('the USA is jooble.org itself; malformed key entries are ignored', () => {
+    expect(joobleHost('US')).toBe('jooble.org');
+    expect(joobleHost('ae')).toBe('ae.jooble.org');
+    expect(parseJoobleKeys('AE:k1,,bad,USA:k2, sa : k3')).toEqual({ AE: 'k1', SA: 'k3' });
+    expect(parseJoobleKeys(undefined)).toEqual({});
   });
 });
