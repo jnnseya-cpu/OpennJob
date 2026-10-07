@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { STANDING_SCOPE_VERSION } from '@opennjob/core';
 import type { Application, ApplicationOutcome, Job } from '@opennjob/core';
+import { ApplyingService } from '../src/applying.service';
 import type { EmailMessage, EmailSender } from '../src/notifications';
 import { PASSPORT, PROFILE, USER_ID, createTestApp } from './helpers';
 import type { TestApp } from './helpers';
@@ -92,8 +93,8 @@ describe('interview rate', () => {
     await t.deps.repository.createApplication(app('high', high, 97));
     await t.deps.repository.createApplication(app('known', known, 91));
 
-    const run = (await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200)).body;
-    expect(run.emailed).toMatchObject({ sent: 2, failed: 0 });
+    // The sending step on its own (the agent run would first score these hand-made drafts again).
+    expect(await t.app.get(ApplyingService).sendByEmail(USER_ID)).toMatchObject({ sent: 2, failed: 0 });
     expect(sent.filter((m) => m.to.endsWith('@example.org') && m.attachments?.length).map((m) => m.to)).toEqual(['known@example.org', 'high@example.org']);
     // The one below the bar stays a draft the person can still send.
     expect((await t.deps.repository.getApplication(USER_ID, 'low'))?.status).toBe('draft');

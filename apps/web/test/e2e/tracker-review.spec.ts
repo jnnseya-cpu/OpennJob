@@ -50,12 +50,15 @@ async function openTracker(page: import('@playwright/test').Page) {
   await expect(page.getByRole('heading', { name: 'Tracker' })).toBeVisible();
 }
 
-test('the daily review lists what will go out automatically, and Skip keeps it from going', async ({ page }) => {
+test('an application with no automatic route is listed for the person to apply, not as going out; Skip closes it', async ({ page }) => {
   await openTracker(page);
-  const outgoing = page.getByTestId('outgoing');
-  await expect(outgoing).toContainText('Going out automatically · 1');
-  await outgoing.getByRole('button', { name: 'Skip' }).click();
+  // The fictional advert gives no recruiter address and its site is not enabled: nothing can send it.
   await expect(page.getByTestId('outgoing')).toHaveCount(0);
+  const mine = page.getByTestId('no-route');
+  await expect(mine).toContainText('Ready, but you apply · 1');
+  await expect(mine.getByRole('link', { name: 'Open advert' })).toHaveAttribute('target', '_blank');
+  await mine.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.getByTestId('no-route')).toHaveCount(0);
   const skipped = (await (await fetch(`${api.url}/applications/${outgoingId}`, { headers: auth() })).json()) as { status: string; skippedAt?: string };
   expect(skipped).toMatchObject({ status: 'closed', skippedAt: expect.any(String) });
 });

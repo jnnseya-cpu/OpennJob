@@ -102,7 +102,12 @@ export interface MatchResult {
   unmetEssential: string[];
   /** The job title checked against the CV. Absent when the job has no title. */
   role?: RoleFit;
+  /** The keyword reader found fewer than four requirements in the advert, so the score is capped (THIN_EVIDENCE_CAP). */
+  thinEvidence?: true;
 }
+
+/** The highest score a job can get, by how many requirements its advert gave (four or more: no cap). */
+export const THIN_EVIDENCE_CAP: Readonly<Record<number, number>> = { 1: 60, 2: 75, 3: 85 };
 
 /**
  * Scores a job against the CV.
@@ -113,7 +118,7 @@ export interface MatchResult {
  * empty list excludes nothing).
  */
 export function matchJob(
-  job: Pick<Job, 'criteria' | 'requiresRegistration'> & Partial<Pick<Job, 'requiredCredential' | 'title' | 'language'>>,
+  job: Pick<Job, 'criteria' | 'requiresRegistration'> & Partial<Pick<Job, 'requiredCredential' | 'title' | 'language' | 'criteriaSource'>>,
   cvText: string,
   passport: Pick<Passport, 'nmcPin' | 'credentials'> | undefined,
   preferences?: Pick<Preferences, 'languages'>,
@@ -146,8 +151,15 @@ export function matchJob(
   const required = requiredCredentialOf(job);
   const eligible = required === undefined || credentialOf(passport, required).length > 0;
   const raw = totalWeight === 0 ? 0 : Math.round((100 * matchedWeight) / totalWeight);
+  // Requirements read from a short advert by the keyword reader (no AI) are often one or two generic
+  // ones: a CV meeting "project management" alone is not shown to fit the post. Such a score is
+  // capped by how many requirements it rests on. Requirements an employer gave, or the AI read from
+  // the whole advert, are not capped.
+  const evidenceCap = job.criteriaSource === 'fallback' ? (THIN_EVIDENCE_CAP[job.criteria.length] ?? 100) : 100;
+  const capped = Math.min(raw, evidenceCap);
   return {
-    score: role && !role.fits ? Math.min(raw, OTHER_FIELD_MAX_SCORE) : raw,
+    score: role && !role.fits ? Math.min(capped, OTHER_FIELD_MAX_SCORE) : capped,
+    ...(evidenceCap < 100 && job.criteria.length > 0 ? { thinEvidence: true } : {}),
     eligible,
     ...(eligible || required === undefined ? {} : { missingCredential: required }),
     matchedWeight,

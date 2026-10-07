@@ -6,7 +6,7 @@ import { useApp } from '../../components/AppShell';
 import { StageBar, StatTiles } from '../../components/Charts';
 import { api, errorText } from '../../lib/api';
 import { HOLD_LABEL, STATUS_LABEL } from '../../lib/labels';
-import type { Application, InterviewRates } from '../../lib/types';
+import type { AgentStatus, Application, InterviewRates } from '../../lib/types';
 
 const ORDER: Record<Application['status'], number> = { needs_you: 0, uncertain: 1, draft: 2, confirmed: 3, interview: 4, submitted: 5, closed: 6 };
 const MODE_NAME: Record<Application['mode'], string> = { review: 'review all', hybrid: 'hybrid', auto: 'auto' };
@@ -40,6 +40,7 @@ export default function TrackerPage() {
   const [showClosed, setShowClosed] = useState(false);
   const [busyId, setBusyId] = useState('');
   const [rates, setRates] = useState<InterviewRates>();
+  const [agent, setAgent] = useState<AgentStatus>();
 
   const replace = (updated: Application) => setApps((list) => list?.map((x) => (x.id === updated.id ? updated : x)));
   async function act(id: string, path: 'skip' | 'outcome', body?: object) {
@@ -57,7 +58,12 @@ export default function TrackerPage() {
   const sent = (apps ?? []).filter((a) => a.submittedAt);
   // Once results have raised the bar, only applications at or above it go out on their own.
   const raised = rates && rates.bar.bar > rates.bar.base ? rates.bar.bar : 0;
-  const outgoing = (apps ?? []).filter((a) => goesOutAutomatically(a) && a.score >= raised);
+  const ready = (apps ?? []).filter((a) => goesOutAutomatically(a) && a.score >= raised);
+  // Only what has a way out goes out on its own: an e-mail address in the advert, or an enabled application system.
+  const autoRouteOf = (a: Application) => agent?.routes?.[a.id] ?? 'none';
+  const outgoing = ready.filter((a) => autoRouteOf(a) !== 'none');
+  const noRoute = ready.filter((a) => autoRouteOf(a) === 'none');
+  const ROUTE_LABEL = { email: 'by e-mail to the recruiter', form: 'on the form, through the extension', none: '' } as const;
 
   useEffect(() => {
     api<Application[]>('/applications')
@@ -66,6 +72,9 @@ export default function TrackerPage() {
     api<InterviewRates>('/agent/interview-rates')
       .then(setRates)
       .catch((err) => setError(errorText(err)));
+    api<AgentStatus>('/agent/status')
+      .then(setAgent)
+      .catch(() => undefined);
   }, []);
 
   return (
@@ -98,15 +107,48 @@ export default function TrackerPage() {
       {outgoing.length ? (
         <section className="card" aria-label="Going out automatically" data-testid="outgoing">
           <span className="label">Going out automatically · {outgoing.length}</span>
-          <p className="small muted">These go out without you (by e-mail to the recruiter, or on an enabled form) unless you skip them. Skipped ones are closed.</p>
+          <p className="small muted">These go out without you unless you skip them. Skipped ones are closed.</p>
+          {agent && !agent.authorisation.enabled ? (
+            <p className="small note" data-testid="authorisation-off">
+              Standing authorisation is off, so nothing goes out yet. <Link href="/account/">Turn it on in Account</Link>
+            </p>
+          ) : agent?.message ? (
+            <p className="small note">{agent.message}</p>
+          ) : null}
           <ul className="plain review-list">
             {outgoing.map((a) => (
               <li key={a.id} className="row">
                 <span className="grow">
-                  <b>{a.jobTitle}</b> · {a.employer} · {a.score}%
+                  <b>{a.jobTitle}</b> · {a.employer} · {a.score}% · <span className="muted">{ROUTE_LABEL[autoRouteOf(a)]}</span>
                 </span>
                 <Link className="small" href={`/review/?job=${encodeURIComponent(a.jobId)}`}>
                   Check
+                </Link>
+                <button type="button" className="btn" disabled={busyId === a.id} onClick={() => act(a.id, 'skip')}>
+                  Skip
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {noRoute.length ? (
+        <section className="card" aria-label="Ready, but you apply" data-testid="no-route">
+          <span className="label">Ready, but you apply · {noRoute.length}</span>
+          <p className="small muted">
+            These adverts give no recruiter e-mail address and their application site is not switched on for OpennJob, so it cannot send them. Open the advert and apply there; your tailored CV and cover letter are on the review page. Then press “I have submitted it” there so the Tracker and the report count it.
+          </p>
+          <ul className="plain review-list">
+            {noRoute.map((a) => (
+              <li key={a.id} className="row">
+                <span className="grow">
+                  <b>{a.jobTitle}</b> · {a.employer} · {a.score}%
+                </span>
+                <a className="small" href={a.applyUrl} target="_blank" rel="noopener noreferrer">
+                  Open advert
+                </a>
+                <Link className="small" href={`/review/?job=${encodeURIComponent(a.jobId)}`}>
+                  Documents
                 </Link>
                 <button type="button" className="btn" disabled={busyId === a.id} onClick={() => act(a.id, 'skip')}>
                   Skip

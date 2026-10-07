@@ -195,6 +195,23 @@ export class ApplyingService {
     return { ready, systemOff };
   }
 
+  /**
+   * How each application that would go out on its own actually can: 'email' (the advert names a
+   * recruiter's address), 'form' (its application system is enabled, through the extension's queue),
+   * or 'none' (no automatic route: the person applies on the site). The Tracker shows only the first
+   * two as going out automatically.
+   */
+  async routes(userId: string): Promise<Record<string, 'email' | 'form' | 'none'>> {
+    const bar = await this.raisedBar(userId);
+    const out: Record<string, 'email' | 'form' | 'none'> = {};
+    for (const a of await this.deps.repository.listApplications(userId)) {
+      if (!ApplyingService.queueable(a) || a.score < bar) continue;
+      const job = await this.deps.repository.getJob(a.jobId);
+      out[a.id] = job && recruiterEmailIn(job.description) ? 'email' : (await this.systemEnabledFor(a.applyUrl)) ? 'form' : 'none';
+    }
+    return out;
+  }
+
   async status(userId: string) {
     const all = await this.deps.repository.listApplications(userId);
     const { ready, systemOff } = await this.ready(userId);
@@ -206,6 +223,7 @@ export class ApplyingService {
       queue: { ready: ready.length, waitingForSystem: systemOff, needsYou: all.filter((a) => a.status === 'needs_you').length },
       ...(block ? { wait: block.wait, message: WAIT_MESSAGE[block.wait], ...(block.resetsAt ? { resetsAt: block.resetsAt } : {}) } : {}),
       systems: (await this.systems()).map((s) => ({ id: s.id, label: s.label, enabled: s.enabled })),
+      routes: await this.routes(userId),
     };
   }
 

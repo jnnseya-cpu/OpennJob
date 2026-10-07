@@ -5,8 +5,8 @@
 #
 # 1. Puts the code on the pilot branch (claude/busy-fermat-9hhn11, or OPENNJOB_BRANCH) and pulls
 #    every change pushed to it. Local edits to tracked files stop it (nothing is overwritten).
-# 2. Raises settings that older versions of .env.production set too low (searches per person).
-#    Keys and passwords are not touched.
+# 2. Raises settings that older versions of .env.production set too low (searches per person,
+#    daily AI limits). Keys and passwords are not touched.
 # 3. Rebuilds and restarts (database migrations run on start), and checks the API is healthy.
 # 4. Turns on automatic updates: every 10 minutes, with rollback if a new version is unhealthy.
 # 5. Lists what changed since the version that was running.
@@ -38,6 +38,21 @@ raise() { # raise KEY MIN: set KEY to MIN when it is missing or lower
 }
 raise OPENNJOB_SEARCH_MAX_QUERIES_PER_USER 40
 raise OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH 150
+# The owner asked for no AI limits (7 October 2026): a number left from an older settings file
+# would hold drafts without AI ("the daily AI spending limit was reached"). Spending still shows on
+# the Anthropic Console, where a monthly limit can be set.
+unlimit() {
+  local v; v="$(value "$1")"
+  if [[ "$v" =~ ^[0-9]+$ ]]; then
+    grep -vE "^$1=" "$F" > "$F.new" || true
+    printf "%s='unlimited'\n" "$1" >> "$F.new"
+    cat "$F.new" > "$F"; rm -f "$F.new"; chmod 600 "$F"
+    echo "   $1: $v -> unlimited"
+  fi
+}
+unlimit OPENNJOB_LLM_DAILY_ACU_PER_USER
+unlimit OPENNJOB_LLM_DAILY_ACU_TOTAL
+unlimit OPENNJOB_LLM_CRITERIA_MAX_JOBS
 
 OPENNJOB_VERSION="$(git log -1 --format='%h %cs')"
 export OPENNJOB_VERSION

@@ -432,7 +432,7 @@ describe('POST /agent/run: the 80% rule', () => {
     await t.api.post('/agent/run').send({ threshold: 10 }).expect(400); // the threshold is the operator's setting, not a request field
     await t.api.post('/agent/run').send({}).expect(200);
     const event = (await t.deps.repository.listEvents('dev-user')).find((e) => e.type === 'agent.run');
-    expect(event?.payload).toEqual({ threshold: 80, considered: 28, prepared: 4, outOfScope: 0, belowThreshold: 24, ineligible: 0, alreadyPrepared: 0, closedOtherField: 0, closedDuplicates: 0 });
+    expect(event?.payload).toEqual({ threshold: 80, considered: 28, prepared: 4, outOfScope: 0, belowThreshold: 24, ineligible: 0, alreadyPrepared: 0, closedOtherField: 0, closedDuplicates: 0, closedBelowBar: 0, redrafted: 0 });
     await t.raw().post('/agent/run').send({}).expect(401);
   });
 });

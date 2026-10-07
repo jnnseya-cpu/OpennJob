@@ -54,6 +54,13 @@ describe('applications by e-mail', () => {
   it('sends the tailored CV and statement to the recruiter, in the person\'s name, replies to them, once', async () => {
     const sender = capturing();
     const { withAddress, withoutAddress } = await setUp(sender);
+    // Before the run: drafts exist only after it, so prepare them first and read the routes.
+    await t.api.post('/agent/run').send({ mode: 'hybrid' }).expect(200);
+    const before = (await t.api.get('/applications').expect(200)).body as Application[];
+    for (const a of before) await t.deps.repository.updateApplication({ ...a, mode: 'auto' });
+    const routes = (await t.api.get('/agent/status').expect(200)).body.routes as Record<string, string>;
+    expect(routes[before.find((a) => a.jobId === withAddress.id)?.id ?? '']).toBe('email');
+    expect(routes[before.find((a) => a.jobId === withoutAddress.id)?.id ?? '']).toBe('none');
     const run = (await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200)).body as { prepared: Application[]; emailed: { sent: number; failed: number } };
     expect(run.emailed).toEqual({ sent: 1, failed: 0 });
     const toRecruiter = sender.sent.filter((m) => m.to === RECRUITER);

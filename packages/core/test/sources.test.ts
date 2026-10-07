@@ -248,7 +248,7 @@ describe('de-duplication across sources', () => {
     id, source: 'sample', externalId: id, title, employer, location, url: '', description: '', criteria: [], criteriaSource: 'fallback', requiresRegistration: false,
   });
 
-  it('treats the same normalised title + employer + location as one vacancy', () => {
+  it('treats the same normalised title + employer as one vacancy, however the place is written', () => {
     expect(dedupeKey(job('1', 'Healthcare Assistant', 'Example Care', 'Leeds, UK'))).toBe(dedupeKey(job('2', '  healthcare   assistant ', 'EXAMPLE CARE', 'Leeds UK')));
     expect(dedupeKey(job('1', 'Nurse', 'Smith & Sons', 'York'))).toBe(dedupeKey(job('2', 'Nurse', 'Smith and Sons', 'York')));
     // Sources spell the same employer and place differently (fictional employers).
@@ -257,11 +257,17 @@ describe('de-duplication across sources', () => {
     expect(dedupeKey(job('1', 'Quantity Surveyor', 'Example Build', 'Leeds'))).not.toBe(dedupeKey(job('2', 'Quantity Surveyor', 'Sample Build', 'Leeds')));
   });
 
-  it('keeps jobs that differ in title, employer or location', () => {
+  it('keeps jobs that differ in title, employer or country', () => {
     const base = job('1', 'Healthcare Assistant', 'Example Care', 'Leeds');
-    const r = dedupeJobs([base, job('2', 'Senior Healthcare Assistant', 'Example Care', 'Leeds'), job('3', 'Healthcare Assistant', 'Other Care', 'Leeds'), job('4', 'Healthcare Assistant', 'Example Care', 'York')]);
+    const r = dedupeJobs([base, job('2', 'Senior Healthcare Assistant', 'Example Care', 'Leeds'), job('3', 'Healthcare Assistant', 'Other Care', 'Leeds'), { ...job('4', 'Healthcare Assistant', 'Example Care', 'Dublin'), country: 'IE' }]);
     expect(r.jobs).toHaveLength(4);
     expect(r.duplicates).toHaveLength(0);
+  });
+
+  it('one vacancy that two sources place differently is one vacancy (Reed "London", Adzuna "Central London")', () => {
+    const reed = { ...job('r', 'Senior Project Manager', 'Example Housing (fictional)', 'London'), country: 'GB' };
+    const adzuna = { ...job('a', 'Senior Project Manager', 'Example Housing Group (fictional)', 'Central London'), country: 'GB' };
+    expect(dedupeJobs([reed, adzuna]).jobs.map((j) => j.id)).toEqual(['r']);
   });
 
   it('keeps the first occurrence', () => {

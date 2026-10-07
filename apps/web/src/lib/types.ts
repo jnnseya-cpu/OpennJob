@@ -34,6 +34,8 @@ export interface MatchView {
   targetEmployer?: { name: string; how: 'employer' | 'named' };
   /** The CV does not show this kind of post: the score is capped. */
   otherField?: { role: string; missing: string[] };
+  /** The advert gave too few readable requirements: the score is capped. */
+  thinEvidence?: boolean;
   hits: { label: string; essential: boolean; matched: boolean; evidence?: string; statedLanguage?: string }[];
 }
 
@@ -85,6 +87,8 @@ export interface AgentStatus {
   wait?: string;
   message?: string;
   systems: { id: string; label: string; enabled: boolean }[];
+  /** For each application that would go out on its own: how it can ('none': the person applies on the site). */
+  routes?: Record<string, 'email' | 'form' | 'none'>;
 }
 
 /** Ordinary screening answers, stored once and reused. Never declarations. */

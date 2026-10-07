@@ -296,6 +296,8 @@ export class OpennJobService {
       ...(target ? { targetEmployer: target } : {}),
       // The job title checked against the CV: otherField means the CV does not show this kind of post.
       ...(match.role && !match.role.fits ? { otherField: { role: match.role.role, missing: match.role.missing } } : {}),
+      // The advert gave too few readable requirements for a full score (capped).
+      ...(match.thinEvidence ? { thinEvidence: true } : {}),
       hits: match.hits.map((h) => ({ label: h.criterion.label, essential: h.criterion.essential, matched: h.matched, evidence: h.evidence, statedLanguage: h.statedLanguage })),
     };
   }
@@ -537,6 +539,45 @@ export class OpennJobService {
       closedDuplicates += 1;
     }
 
+    // Unsent drafts are scored again with today's matcher: one that no longer reaches the bar is
+    // closed (it was prepared under an older, looser score). The person's approved ones are left alone.
+    let closedBelowBar = 0;
+    for (const a of [...existing]) {
+      if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined) continue;
+      const job = jobsById.get(a.jobId);
+      if (!job) continue;
+      const now = matchJob(job, profile.cvText, passport, preferences);
+      if (now.score >= threshold) {
+        if (now.score !== a.score) {
+          const rescored: Application = { ...a, score: now.score };
+          await this.deps.repository.updateApplication(rescored);
+          existing.splice(existing.indexOf(a), 1, rescored);
+        }
+        continue;
+      }
+      const closed: Application = { ...a, status: 'closed', score: now.score };
+      await this.deps.repository.updateApplication(closed);
+      existing.splice(existing.indexOf(a), 1, closed);
+      closedBelowBar += 1;
+    }
+
+    // Drafts written without AI because the daily AI budget was used up are written again with AI
+    // once it is available: the old draft is closed and a new one takes its place.
+    let redrafted = 0;
+    for (const a of [...existing]) {
+      if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined || !a.holdReasons?.includes('llm-ceiling')) continue;
+      if (!this.deps.llm || (await this.llmCeilingReached(userId))) break;
+      const job = jobsById.get(a.jobId);
+      if (!job) continue;
+      const match = matchJob(job, profile.cvText, passport, preferences);
+      if (!match.eligible) continue;
+      const closed: Application = { ...a, status: 'closed' };
+      await this.deps.repository.updateApplication(closed);
+      existing.splice(existing.indexOf(a), 1, closed);
+      existing.push(await this.draftFor(userId, job, profile, passport, match, a.mode));
+      redrafted += 1;
+    }
+
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
@@ -562,8 +603,8 @@ export class OpennJobService {
       prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
     }
 
-    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates });
-    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates };
+    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted });
+    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted };
   }
 
   /** The score the agent needs before it prepares or sends an application on its own, and why. */

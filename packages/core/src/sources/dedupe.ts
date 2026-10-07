@@ -12,13 +12,15 @@ const norm = (s: string) =>
 const firstWord = (s: string) => norm(s).replace(/^the /, '').split(' ')[0] ?? '';
 
 /**
- * Same normalised title + employer + place = the same vacancy. The employer and the place are
- * compared on their first word, because sources spell them differently: "Clarion" and "Clarion
- * Housing", "Ernest Gordon Recruitment" and "... Limited", "Hays Specialist Recruitment" and
- * "Hays Construction and Property", "Birmingham" and "Birmingham, West Midlands".
+ * Same normalised title + employer (+ country) = the same vacancy. The employer is compared on its
+ * first word, because sources spell it differently: "Clarion" and "Clarion Housing", "Ernest Gordon
+ * Recruitment" and "... Limited", "Hays Specialist Recruitment" and "Hays Construction and Property".
+ * The town is not compared: Reed and Adzuna write it differently ("London", "Central London",
+ * "City of London"), which let one vacancy through twice. One application per title per employer
+ * per country is also what an employer expects from one person.
  */
-export function dedupeKey(job: Pick<Job, 'title' | 'employer' | 'location'>): string {
-  return `${norm(job.title)}|${firstWord(job.employer)}|${firstWord(job.location)}`;
+export function dedupeKey(job: Pick<Job, 'title' | 'employer' | 'location'> & Partial<Pick<Job, 'country'>>): string {
+  return `${norm(job.title)}|${firstWord(job.employer)}|${(job.country ?? '').toUpperCase()}`;
 }
 
 /** Keeps the first occurrence of each vacancy (so list your preferred sources first). */
