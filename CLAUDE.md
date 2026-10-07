@@ -194,7 +194,8 @@ as needing explicit sign-off from the owner.
   extension and the built process. Add tests with the change. Do not skip or delete a
   test to get green; fix the code or say why the test is wrong.
 - Web app: no `console` calls; no `dangerouslySetInnerHTML`; nothing personal in
-  `localStorage` (mode, pack and theme only). It never submits anything to an employer, never
+  `localStorage` (mode, pack and theme; and, when the person ticks "Keep me signed in", a revocable
+  refresh token, `opennjob.keep`, which holds no personal data). It never submits anything to an employer, never
   pre-ticks a declaration and offers no "tick all" for them. A new API call goes through
   `src/lib/api.ts`. Imports from core only via `@core/web` (`packages/core/src/web.ts`).
 - A new job source needs a row in `docs/sources.md`; `packages/core/test/sources-register.test.ts`

@@ -68,6 +68,8 @@ export interface Repository {
   saveAuthToken(token: AuthToken): Promise<void>;
   /** Marks an unused, unexpired token of this kind used, atomically. Returns its owner, or undefined. */
   consumeAuthToken(kind: AuthToken['kind'], tokenHash: string, at: string): Promise<string | undefined>;
+  /** Marks every unused token of this kind for the user as used. Returns how many. */
+  revokeAuthTokens(userId: string, kind: AuthToken['kind'], at: string): Promise<number>;
 
   // ----- applying -----
   deleteApplication(userId: string, id: string): Promise<boolean>;
@@ -93,7 +95,8 @@ export interface Repository {
 export interface AuthToken {
   id: string;
   userId: string;
-  kind: 'verify-email' | 'reset-password';
+  /** 'refresh': "Keep me signed in". Used once, replaced on each use, revoked on sign-out and password reset. */
+  kind: 'verify-email' | 'reset-password' | 'refresh';
   /** SHA-256 hex of the token sent by e-mail. */
   tokenHash: string;
   expiresAt: string;
@@ -247,6 +250,16 @@ export class InMemoryRepository implements Repository {
     if (!t) return undefined;
     t.usedAt = at;
     return t.userId;
+  }
+  async revokeAuthTokens(userId: string, kind: AuthToken['kind'], at: string) {
+    let n = 0;
+    for (const t of this.tokens) {
+      if (t.userId === userId && t.kind === kind && !t.usedAt) {
+        t.usedAt = at;
+        n += 1;
+      }
+    }
+    return n;
   }
   async deleteApplication(userId: string, id: string) {
     const a = this.applications.get(id);

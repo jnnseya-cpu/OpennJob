@@ -5,9 +5,11 @@ import { createHash, randomBytes } from 'node:crypto';
 import { hashPassword, passwordProblems, passwordVersion, signAccessToken, verifyPassword } from './auth';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
-import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
+import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput, RefreshInput } from './schemas';
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+/** "Keep me signed in" lasts 60 days from the last use. */
+const REFRESH_TTL_MS = 60 * 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 60 * 60 * 1000;
 const tokenHash = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
 
@@ -45,7 +47,7 @@ export class AccountService {
   }
 
   /** A fresh one-time token: only its SHA-256 is stored. The token itself goes into one e-mail and nowhere else. */
-  private async newToken(userId: string, kind: 'verify-email' | 'reset-password', ttlMs: number): Promise<string> {
+  private async newToken(userId: string, kind: 'verify-email' | 'reset-password' | 'refresh', ttlMs: number): Promise<string> {
     const token = randomBytes(32).toString('base64url');
     const at = this.deps.clock();
     await this.deps.repository.saveAuthToken({ id: this.deps.newId(), userId, kind, tokenHash: tokenHash(token), expiresAt: new Date(at.getTime() + ttlMs).toISOString(), createdAt: at.toISOString() });
@@ -117,8 +119,27 @@ export class AccountService {
     const ok = await verifyPassword(input.password, user?.passwordHash ?? (await this.dummyHash));
     // One message for "no such account" and "wrong password".
     if (!user || !ok) throw new UnauthorizedException('Email address or password is incorrect');
-    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.signed_in', userId: user.id, occurredAt: this.now(), payload: {} });
-    return { user: publicUser(user), ...this.token(user) };
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.signed_in', userId: user.id, occurredAt: this.now(), payload: { remember: input.remember === true } });
+    return { user: publicUser(user), ...this.token(user), ...(input.remember ? { refreshToken: await this.newToken(user.id, 'refresh', REFRESH_TTL_MS) } : {}) };
+  }
+
+  /**
+   * "Keep me signed in": a refresh token gives a new access token and a new refresh token. The old
+   * one is used up (rotation), so a copied token works once at most; a used, revoked or expired
+   * one is refused. A password reset or signing out revokes them all.
+   */
+  async refresh(input: RefreshInput) {
+    const userId = await this.deps.repository.consumeAuthToken('refresh', tokenHash(input.refreshToken), this.now());
+    const user = userId ? await this.deps.repository.getUserById(userId) : undefined;
+    if (!user) throw new UnauthorizedException('Your session has ended. Sign in again.');
+    return { user: publicUser(user), ...this.token(user), refreshToken: await this.newToken(user.id, 'refresh', REFRESH_TTL_MS) };
+  }
+
+  /** Signing out: the refresh token, and with it every other one for this account, stops working. */
+  async logout(input: RefreshInput) {
+    const userId = await this.deps.repository.consumeAuthToken('refresh', tokenHash(input.refreshToken), this.now());
+    if (userId) await this.deps.repository.revokeAuthTokens(userId, 'refresh', this.now());
+    return { signedOut: true };
   }
 
   /** ACC-2: the link from the e-mail confirms the address. A used or expired link does nothing. */
@@ -168,6 +189,8 @@ export class AccountService {
     if (problems.length > 0) throw refuse(problems);
     const hash = await hashPassword(input.password, this.deps.config.bcryptRounds);
     await this.deps.repository.updatePasswordHash(userId, hash);
+    // Every "keep me signed in" device has to sign in again with the new password.
+    await this.deps.repository.revokeAuthTokens(userId, 'refresh', this.now());
     // Following the link proves the address too.
     if (!user.emailVerifiedAt) await this.deps.repository.markEmailVerified(userId, this.now());
     await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.password_changed', userId, occurredAt: this.now(), payload: {} });

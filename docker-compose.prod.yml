@@ -39,6 +39,7 @@ services:
       default:
         aliases: [opennjob-api]
     environment:
+      OPENNJOB_VERSION: ${OPENNJOB_VERSION:-unknown}
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 8080

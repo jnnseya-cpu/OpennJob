@@ -442,6 +442,7 @@ test('an expired session sends the user back to sign in; sign-in works and is re
   await expect(page.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password/');
 
   await page.getByLabel('Password', { exact: true }).fill(other.password);
+  await page.getByTestId('keep-signed-in').uncheck(); // this test is about a session that is not kept
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/dashboard\/$/);
   await expect(page.getByText('Add your CV first')).toBeVisible(); // no profile yet: nothing of the deleted account shows
@@ -458,6 +459,7 @@ test('an expired session sends the user back to sign in; sign-in works and is re
   // A token the API no longer accepts (here: altered) ends the session at the next call.
   await page.getByLabel('Email address', { exact: true }).fill(other.email);
   await page.getByLabel('Password', { exact: true }).fill(other.password);
+  await page.getByTestId('keep-signed-in').uncheck(); // this test is about a session that is not kept
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/dashboard\/$/);
   await page.evaluate(() => {
@@ -470,6 +472,7 @@ test('an expired session sends the user back to sign in; sign-in works and is re
   // Sign out from the Account page.
   await page.getByLabel('Email address', { exact: true }).fill(other.email);
   await page.getByLabel('Password', { exact: true }).fill(other.password);
+  await page.getByTestId('keep-signed-in').uncheck(); // this test is about a session that is not kept
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('link', { name: 'Account' }).click();
   await page.getByRole('button', { name: 'Sign out on this device' }).click();

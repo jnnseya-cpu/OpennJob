@@ -341,6 +341,11 @@ export class PostgresRepository implements Repository {
     return rows[0] ? (rows[0].user_id as string) : undefined;
   }
 
+  async revokeAuthTokens(userId: string, kind: AuthToken['kind'], at: string): Promise<number> {
+    const res = await this.db.query('UPDATE auth_tokens SET used_at = $3 WHERE user_id = $1 AND kind = $2 AND used_at IS NULL', [userId, kind, at]);
+    return res.rowCount ?? 0;
+  }
+
   // ----- applying -------------------------------------------------------------------
 
   async deleteApplication(userId: string, id: string): Promise<boolean> {

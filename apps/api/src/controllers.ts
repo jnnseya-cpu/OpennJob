@@ -34,9 +34,10 @@ import {
   screeningSchema,
   submittedSchema,
   outcomeSchema,
+  refreshSchema,
 } from './schemas';
 import type { ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput, OutcomeInput } from './schemas';
-import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
+import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RefreshInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
 // Note: every constructor parameter uses an explicit @Inject(...) so the app does not
@@ -55,7 +56,9 @@ export class HealthController {
       () => 'down' as const,
     );
     if (database === 'down') res.status(503);
-    return { status: database === 'up' ? 'ok' : 'degraded', persistence: this.deps.persistence, database };
+    // The commit the server was started from (deploy/update.sh and auto-update set OPENNJOB_VERSION).
+    const version = (process.env.OPENNJOB_VERSION ?? '').trim() || 'unknown';
+    return { status: database === 'up' ? 'ok' : 'degraded', persistence: this.deps.persistence, database, version };
   }
 }
 
@@ -85,6 +88,24 @@ export class AuthController {
   @HttpCode(200)
   login(@Body(new ZodPipe(loginSchema)) body: LoginInput) {
     return this.accounts.login(body);
+  }
+
+  /** "Keep me signed in": a refresh token for a new session (rotated on every use). */
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Body(new ZodPipe(refreshSchema)) body: RefreshInput) {
+    return this.accounts.refresh(body);
+  }
+
+  /** Signing out on a "keep me signed in" device: every refresh token of the account stops working. */
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @Post('logout')
+  @HttpCode(200)
+  logout(@Body(new ZodPipe(refreshSchema)) body: RefreshInput) {
+    return this.accounts.logout(body);
   }
 
   /** ACC-2: the link from the verification e-mail. */

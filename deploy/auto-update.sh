@@ -49,6 +49,7 @@ if ! git merge -q --ff-only "$TARGET"; then
   log "a tracked file was edited on this server, so the update would overwrite it; not updating. See: git status"
   exit 1
 fi
+export OPENNJOB_VERSION="$(git log -1 --format='%h %cs' "$TARGET")"
 if ./oj up -d --build --remove-orphans >/dev/null 2>&1 && healthy; then
   log "updated to ${TARGET:0:7}; healthy"
   rm -f .auto-update.rejected
@@ -58,6 +59,7 @@ fi
 log "update to ${TARGET:0:7} failed its health check; going back to ${CURRENT:0:7}"
 echo "$TARGET" > .auto-update.rejected
 git reset -q --hard "$CURRENT"
+export OPENNJOB_VERSION="$(git log -1 --format='%h %cs' "$CURRENT")"
 ./oj up -d --build --remove-orphans >/dev/null 2>&1
 if healthy; then log "rolled back to ${CURRENT:0:7}; healthy"; else log "rolled back to ${CURRENT:0:7}, but it is NOT healthy: check ./oj ps and ./oj logs api"; fi
 exit 1

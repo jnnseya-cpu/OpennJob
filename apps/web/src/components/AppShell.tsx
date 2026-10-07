@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api, errorText, isSignedIn, onSessionChange, takeNextPath } from '../lib/api';
+import { api, errorText, isSignedIn, onSessionChange, restoreSession, takeNextPath } from '../lib/api';
 import { PACKS } from '../lib/core';
 import { ThemeToggle } from './ThemeToggle';
 import type { Application, Mode, PackId, PublicUser } from '../lib/types';
@@ -90,7 +90,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     const p = readPref('opennjob.pack');
     if (p === 'all' || PACKS.some((x) => x.id === p)) setPackState(p as PackChoice);
     const update = () => setSignedIn(isSignedIn());
-    update();
+    // "Keep me signed in": with no live session, renew it from the kept token before deciding.
+    if (isSignedIn()) update();
+    else void restoreSession().then(update);
     return onSessionChange(update);
   }, []);
 

@@ -196,7 +196,7 @@ describe('POST /auth/login', () => {
     expect(wrong.body).toEqual(unknown.body);
     expect(wrong.body.message).toBe('Email address or password is incorrect');
     await t.raw().post('/auth/login').send({ email: USER_EMAIL }).expect(400);
-    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD, remember: true }).expect(400);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD, isAdmin: true }).expect(400); // unknown keys are refused
   });
 });
 

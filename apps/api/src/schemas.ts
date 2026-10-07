@@ -230,7 +230,11 @@ export const registerSchema = z
   .object({ email: accountEmail, password: z.string().min(1).max(1000), acceptedTermsVersion: version, acceptedPrivacyVersion: version })
   .strict();
 
-export const loginSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000) }).strict();
+export const loginSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000), remember: z.boolean().optional() }).strict();
+
+/** "Keep me signed in": the refresh token issued at sign-in (base64url, 43 characters). */
+export const refreshSchema = z.object({ refreshToken: z.string().trim().regex(/^[A-Za-z0-9_-]{32,128}$/, 'not a valid session') }).strict();
+export type RefreshInput = z.infer<typeof refreshSchema>;
 
 export const deleteAccountSchema = z.object({ password: z.string().min(1).max(1000) }).strict();
 

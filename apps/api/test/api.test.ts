@@ -39,7 +39,7 @@ describe('auth guard', () => {
 
   it('accepts the configured token and leaves /health public', async () => {
     t = await createTestApp();
-    await t.raw().get('/health').expect(200, { status: 'ok', persistence: 'memory', database: 'up' });
+    await t.raw().get('/health').expect(200, { status: 'ok', persistence: 'memory', database: 'up', version: 'unknown' });
     await t.api.get('/applications').expect(200, []);
   });
 

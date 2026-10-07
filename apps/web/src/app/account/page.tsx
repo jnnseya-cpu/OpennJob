@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { api, clearSession, errorText } from '../../lib/api';
+import { api, errorText, signOut as endSession } from '../../lib/api';
 import type { AgentStatus, Authorisation, PublicUser } from '../../lib/types';
 
 interface Prefs {
@@ -29,6 +29,13 @@ export default function AccountPage() {
   const [authMsg, setAuthMsg] = useState('');
   const [prefs, setPrefs] = useState<Prefs>();
   const [reportMsg, setReportMsg] = useState('');
+
+  const [serverVersion, setServerVersion] = useState('');
+  useEffect(() => {
+    api<{ version?: string }>('/health', { auth: false })
+      .then((h) => setServerVersion(h.version ?? 'unknown'))
+      .catch(() => setServerVersion('not reachable'));
+  }, []);
 
   useEffect(() => {
     api<PublicUser>('/account')
@@ -114,7 +121,7 @@ export default function AccountPage() {
     setDeleteError('');
     try {
       await api('/account', { method: 'DELETE', body: { password }, passwordCheck: true });
-      clearSession('/signin/?notice=deleted');
+      void endSession('/signin/?notice=deleted');
     } catch (err) {
       setDeleteError(errorText(err));
       setBusy(false);
@@ -122,7 +129,7 @@ export default function AccountPage() {
   }
 
   function signOut() {
-    clearSession('/signin/?notice=signedout');
+    void endSession('/signin/?notice=signedout');
   }
 
   return (
@@ -144,7 +151,8 @@ export default function AccountPage() {
             <button type="button" className="btn" onClick={signOut}>
               Sign out on this device
             </button>
-            <p className="small muted">Signing out removes the token from this browser. There is no server-side sign-out yet, so a copied token works until it expires.</p>
+            <p className="small muted">Signing out ends the session here and, if you kept this device signed in, stops that on every device. A copied access token still works until it expires (at most an hour).</p>
+            <p className="small muted" data-testid="server-version">Server version: {serverVersion || '…'}</p>
           </section>
         ) : null}
 

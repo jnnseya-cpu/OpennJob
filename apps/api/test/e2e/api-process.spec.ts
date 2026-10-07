@@ -88,7 +88,7 @@ test('production: refuses to start without OPENNJOB_DATA_KEY, and with a malform
 test('production: starts with both, logs JSON lines only, never prints a secret, and stops cleanly on SIGTERM', async () => {
   const proc = await start(MAIN, { NODE_ENV: 'production', OPENNJOB_JWT_SECRET: SECRET, OPENNJOB_DATA_KEY: KEY, OPENNJOB_DEMO_JOBS: 'true' });
   await waitForHealth(proc);
-  expect(await (await fetch(`${proc.url}/health`)).json()).toEqual({ status: 'ok', persistence: 'memory', database: 'up' });
+  expect(await (await fetch(`${proc.url}/health`)).json()).toEqual({ status: 'ok', persistence: 'memory', database: 'up', version: 'unknown' });
 
   // A whole user journey over HTTP, so the request log has something to get wrong.
   const json = { 'Content-Type': 'application/json' };

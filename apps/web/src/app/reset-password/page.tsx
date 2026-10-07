@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import type { FormEvent } from 'react';
-import { api, clearSession, errorText } from '../../lib/api';
+import { api, signOut, errorText } from '../../lib/api';
 
 /** ACC-3: a new password from the one-time link or code. Every earlier session ends. */
 function Reset() {
@@ -27,7 +27,7 @@ function Reset() {
     try {
       await api('/auth/password/reset', { method: 'POST', body: { token: code.trim(), password }, auth: false });
       // Every earlier session has ended: this browser's too.
-      clearSession();
+      void signOut();
       router.replace('/signin/?notice=reset');
     } catch (err) {
       setError(errorText(err));

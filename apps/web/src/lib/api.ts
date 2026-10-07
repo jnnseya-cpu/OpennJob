@@ -5,11 +5,16 @@
  *   deploys it), else NEXT_PUBLIC_OPENNJOB_API_BASE at build time, else http://127.0.0.1:3000.
  * - The access token is kept in sessionStorage: it goes when the tab closes. The password
  *   is never stored.
+ * - "Keep me signed in on this device": the API also issues a refresh token, kept in
+ *   localStorage (opennjob.keep). It holds no personal data; it is used once and replaced on
+ *   every use, lasts 60 days, and signing out or a password reset revokes it on the server.
+ *   When the app opens with no live session, it is exchanged for a new one silently.
  * - Nothing here logs anything. Error messages shown to the user come from the API's own
  *   wording (which never repeats submitted values) or from this file.
  */
 
 const SESSION_KEY = 'opennjob.session';
+const KEEP_KEY = 'opennjob.keep';
 const DEFAULT_API_BASE = process.env.NEXT_PUBLIC_OPENNJOB_API_BASE ?? 'http://127.0.0.1:3000';
 
 export class ApiError extends Error {
@@ -70,8 +75,83 @@ export function takeNextPath(): string | undefined {
   return p;
 }
 
-export function setSession(session: Session, next?: string): void {
+function keepStore(): Storage | undefined {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+function readKeep(): string | undefined {
+  try {
+    const v = keepStore()?.getItem(KEEP_KEY);
+    return v && /^[A-Za-z0-9_-]{32,128}$/.test(v) ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function writeKeep(token: string | undefined): void {
+  try {
+    if (token) keepStore()?.setItem(KEEP_KEY, token);
+    else keepStore()?.removeItem(KEEP_KEY);
+  } catch {
+    // storage refused: the person signs in again next time
+  }
+}
+
+/** Is a "keep me signed in" token stored on this device? */
+export const isKept = (): boolean => readKeep() !== undefined;
+
+let restoring: Promise<boolean> | undefined;
+
+/**
+ * With no live session, swaps the kept refresh token for a new session and a new refresh token.
+ * Returns whether the person is now signed in. A refused token is forgotten.
+ */
+export function restoreSession(): Promise<boolean> {
+  if (currentSession()) return Promise.resolve(true);
+  const keep = readKeep();
+  if (!keep) return Promise.resolve(false);
+  restoring ??= (async () => {
+    try {
+      const base = await apiBase();
+      const res = await fetch(`${base}/auth/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: keep }), credentials: 'omit', cache: 'no-store' });
+      if (res.status === 401 || res.status === 400) {
+        writeKeep(undefined);
+        return false;
+      }
+      if (!res.ok) return false;
+      const r = (await res.json()) as { accessToken?: unknown; expiresAt?: unknown; refreshToken?: unknown };
+      if (typeof r.accessToken !== 'string' || typeof r.expiresAt !== 'string') return false;
+      setSession({ accessToken: r.accessToken, expiresAt: r.expiresAt }, undefined, typeof r.refreshToken === 'string' ? r.refreshToken : undefined);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      restoring = undefined;
+    }
+  })();
+  return restoring;
+}
+
+/** Signing out: the session goes, and the kept token is revoked on the server and forgotten here. */
+export async function signOut(next?: string): Promise<void> {
+  const keep = readKeep();
+  writeKeep(undefined);
+  if (keep) {
+    try {
+      const base = await apiBase();
+      await fetch(`${base}/auth/logout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: keep }), credentials: 'omit', cache: 'no-store' });
+    } catch {
+      // offline: the token expires on its own
+    }
+  }
+  clearSession(next);
+}
+
+export function setSession(session: Session, next?: string, refreshToken?: string): void {
   nextPath = next;
+  if (refreshToken) writeKeep(refreshToken);
   try {
     storage()?.setItem(SESSION_KEY, JSON.stringify(session));
   } catch {
@@ -133,6 +213,8 @@ export interface RequestOptions {
   auth?: boolean;
   /** A 401 here means a wrong password, not an ended session (DELETE /account). */
   passwordCheck?: boolean;
+  /** Internal: already retried once after renewing the session. */
+  retried?: boolean;
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -140,7 +222,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (auth) {
-    const session = currentSession();
+    const session = currentSession() ?? ((await restoreSession()) ? currentSession() : undefined);
     if (!session) {
       clearSession('/signin/?notice=expired');
       throw new ApiError(401, 'Your session has ended. Sign in again.');
@@ -169,6 +251,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
   if (!res.ok) {
     if (res.status === 401 && auth && !passwordCheck) {
+      // The access token ended mid-session: renew it once from the kept token and try again.
+      if (isKept() && !options.retried) {
+        clearSession();
+        if (await restoreSession()) return api<T>(path, { ...options, retried: true });
+      }
       clearSession('/signin/?notice=expired');
       throw new ApiError(401, 'Your session has ended. Sign in again.');
     }

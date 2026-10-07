@@ -48,7 +48,7 @@ describe('start-up', () => {
     const logger = memoryLogger();
     server = await startServer({ ...BASE, NODE_ENV: 'production', OPENNJOB_JWT_SECRET: SECRET, OPENNJOB_DATA_KEY: KEY }, logger);
     expect(server.deps.repository).toBeInstanceOf(InMemoryRepository);
-    expect(await json(await fetch(`${server.url}/health`))).toEqual({ status: 200, body: { status: 'ok', persistence: 'memory', database: 'up' } });
+    expect(await json(await fetch(`${server.url}/health`))).toEqual({ status: 200, body: { status: 'ok', persistence: 'memory', database: 'up', version: 'unknown' } });
     expect(logger.lines.some((l) => l.level === 'warn' && /held in memory/.test(String(l.msg)))).toBe(true);
     expect(JSON.stringify(logger.lines)).not.toContain(SECRET);
     expect(JSON.stringify(logger.lines)).not.toContain(KEY);
@@ -115,7 +115,7 @@ describe.skipIf(!hasPostgres)('start-up with DATABASE_URL (live PostgreSQL)', ()
     try {
       server = await startServer(env, memoryLogger());
       expect(server.deps.repository).toBeInstanceOf(PostgresRepository);
-      expect(await json(await fetch(`${server.url}/health`))).toEqual({ status: 200, body: { status: 'ok', persistence: 'postgres', database: 'up' } });
+      expect(await json(await fetch(`${server.url}/health`))).toEqual({ status: 200, body: { status: 'ok', persistence: 'postgres', database: 'up', version: 'unknown' } });
       const token = (await json(await post(`${server.url}/auth/register`, ACCOUNT))).body.accessToken as string;
       const put = await fetch(`${server.url}/profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(PROFILE) });
       expect(put.status).toBe(200);
@@ -138,7 +138,7 @@ describe.skipIf(!hasPostgres)('start-up with DATABASE_URL (live PostgreSQL)', ()
 
       // The database goes away underneath the running API: /health says so with 503.
       await server.deps.close?.();
-      expect(await json(await fetch(`${server.url}/health`))).toEqual({ status: 503, body: { status: 'degraded', persistence: 'postgres', database: 'down' } });
+      expect(await json(await fetch(`${server.url}/health`))).toEqual({ status: 503, body: { status: 'degraded', persistence: 'postgres', database: 'down', version: 'unknown' } });
       await server.app.close();
       server = undefined;
     } finally {

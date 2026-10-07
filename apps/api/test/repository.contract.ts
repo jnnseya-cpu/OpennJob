@@ -463,6 +463,20 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         expect(await repo.listUserIds()).toEqual(expect.arrayContaining([a, b]));
       });
 
+      it('"keep me signed in": refresh tokens are revoked for one account and one kind only', async () => {
+        const later = '2026-12-01T00:00:00.000Z';
+        const [r1, r2, rb, verify] = ['d', 'e', 'f', '1'].map((c) => c.repeat(64)) as [string, string, string, string];
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'refresh', tokenHash: r1, expiresAt: later, createdAt: NOW });
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'refresh', tokenHash: r2, expiresAt: later, createdAt: NOW });
+        await repo.saveAuthToken({ id: unique('tok'), userId: b, kind: 'refresh', tokenHash: rb, expiresAt: later, createdAt: NOW });
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'verify-email', tokenHash: verify, expiresAt: later, createdAt: NOW });
+        expect(await repo.revokeAuthTokens(a, 'refresh', NOW)).toBe(2);
+        expect(await repo.consumeAuthToken('refresh', r1, NOW)).toBeUndefined();
+        expect(await repo.consumeAuthToken('refresh', r2, NOW)).toBeUndefined();
+        expect(await repo.consumeAuthToken('refresh', rb, NOW)).toBe(b); // B's untouched
+        expect(await repo.consumeAuthToken('verify-email', verify, NOW)).toBe(a); // other kinds untouched
+      });
+
       it('platform settings, one-off claims and shared rate-limit windows', async () => {
         const key = unique('setting');
         expect(await repo.getPlatformSetting(key)).toBeUndefined();

@@ -20,14 +20,16 @@ function SignIn() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // On by default: the app is used as an installed app, and closing it should not sign the person out.
+  const [keep, setKeep] = useState(true);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError('');
     try {
-      const r = await api<AuthResult>('/auth/login', { method: 'POST', body: { email, password }, auth: false });
-      setSession({ accessToken: r.accessToken, expiresAt: r.expiresAt }, '/dashboard/');
+      const r = await api<AuthResult & { refreshToken?: string }>('/auth/login', { method: 'POST', body: { email, password, remember: keep }, auth: false });
+      setSession({ accessToken: r.accessToken, expiresAt: r.expiresAt }, '/dashboard/', keep ? r.refreshToken : undefined);
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -46,6 +48,14 @@ function SignIn() {
         <label className="field">
           <span>Password</span>
           <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        <label className={`confirm ${keep ? 'on' : ''}`}>
+          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} data-testid="keep-signed-in" />
+          <span>
+            Keep me signed in on this device
+            <br />
+            <span className="muted small">For 60 days, until you sign out. Untick on a shared computer.</span>
+          </span>
         </label>
         {error ? <div className="note bad" role="alert">{error}</div> : null}
         <button className="btn primary" type="submit" disabled={busy}>
