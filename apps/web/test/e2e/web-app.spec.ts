@@ -145,13 +145,19 @@ test('profile: details, CV, preferences and the credential passport are saved th
   await page.getByLabel('Another city').fill('Atlantis');
   await page.getByRole('button', { name: 'Add city' }).click();
   await expect(page.getByText('Write the city with its country code')).toBeVisible();
+  // A company typed by hand, then a ready-made list added in one click (no duplicates).
+  await page.getByLabel('Companies to search for').fill('National Grid\nExample Build (fictional)');
+  await page.getByRole('button', { name: /Add: National Grid and contractors/ }).click();
   await page.getByRole('button', { name: 'Save profile' }).click();
   await expect(page.getByText('Profile saved.')).toBeVisible();
 
   const profile = await call<{ firstName: string; cvText: string; preferences: unknown }>('GET', '/profile');
   expect(profile.firstName).toBe(FIRST);
   expect(profile.cvText).toBe(CV);
-  expect(profile.preferences).toEqual({ languages: ['English'], countries: ['GB', 'IE'], cities: ['Birmingham'] });
+  const { targetEmployers, ...prefs } = profile.preferences as { targetEmployers: string[] };
+  expect(prefs).toEqual({ languages: ['English'], countries: ['GB', 'IE'], cities: ['Birmingham'] });
+  expect(targetEmployers.slice(0, 3)).toEqual(['National Grid', 'Example Build (fictional)', "Laing O'Rourke"]);
+  expect(targetEmployers.filter((n) => n === 'National Grid')).toHaveLength(1);
 
   // Passport: the healthcare pack's lines. Right to work starts unticked.
   await page.getByLabel('Industry pack').selectOption('hc');
@@ -177,6 +183,7 @@ test('profile: details, CV, preferences and the credential passport are saved th
   await expect(page.getByLabel('CV', { exact: true })).toHaveValue(CV);
   await expect(page.getByRole('group', { name: 'Cities' }).getByRole('button', { name: 'Birmingham' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('Training', { exact: true })).toHaveValue('Basic life support');
+  await expect(page.getByLabel('Companies to search for')).toHaveValue(/^National Grid\nExample Build \(fictional\)\nLaing O'Rourke/);
   await noSideScroll();
 });
 

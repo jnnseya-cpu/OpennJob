@@ -6,6 +6,7 @@ import { useApp } from '../../components/AppShell';
 import { BarList } from '../../components/Charts';
 import { ScreeningForm } from '../../components/ScreeningForm';
 import { ApiError, api, errorText, upload } from '../../lib/api';
+import { EMPLOYER_LISTS } from '../../lib/employer-lists';
 import { COUNTRIES, KNOWN_CITIES, LANGUAGES, PACKS, WORK_RIGHTS_BASES, cityCountry, countryName, getPack } from '../../lib/core';
 import type { PackCredentialField } from '../../lib/core';
 import type { CvExtraction, Passport, PassportView, Profile, PublicUser } from '../../lib/types';
@@ -443,6 +444,13 @@ export default function ProfilePage() {
               </span>
               <textarea aria-label="Companies to search for" rows={5} placeholder={'For example:\nNational Grid\nBalfour Beatty'} value={employersText} onChange={(e) => setEmployersText(e.target.value)} />
             </label>
+            <div className="row">
+              {EMPLOYER_LISTS.map((list) => (
+                <button key={list.id} type="button" className="btn" title={`Compiled ${list.compiled}`} onClick={() => setEmployersText((t) => employerList([t, ...list.names].join('\n')).join('\n'))}>
+                  Add: {list.label}
+                </button>
+              ))}
+            </div>
             <p className="small muted">
               Every day OpennJob also searches Adzuna and Reed for each company by name: its own jobs, and contractors’ adverts that name it. They are scored against your CV like any other job. {employerList(employersText).length ? `${employerList(employersText).length} of 60.` : ''}
             </p>
