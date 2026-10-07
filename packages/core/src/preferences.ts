@@ -13,6 +13,7 @@ export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined)
     searchTypes: [...(p?.searchTypes ?? [])],
     ...(typeof p?.minScore === 'number' ? { minScore: p.minScore } : {}),
     ...(p?.targetEmployers?.length ? { targetEmployers: [...p.targetEmployers] } : {}),
+    ...(typeof p?.targetInterviewRate === 'number' ? { targetInterviewRate: p.targetInterviewRate } : {}),
   };
 }
 

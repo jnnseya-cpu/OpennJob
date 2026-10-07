@@ -6,7 +6,7 @@ import { useApp } from '../../components/AppShell';
 import { StageBar, StatTiles } from '../../components/Charts';
 import { api, errorText } from '../../lib/api';
 import { HOLD_LABEL, STATUS_LABEL } from '../../lib/labels';
-import type { Application } from '../../lib/types';
+import type { Application, InterviewRates } from '../../lib/types';
 
 const ORDER: Record<Application['status'], number> = { needs_you: 0, uncertain: 1, draft: 2, confirmed: 3, interview: 4, submitted: 5, closed: 6 };
 const MODE_NAME: Record<Application['mode'], string> = { review: 'review all', hybrid: 'hybrid', auto: 'auto' };
@@ -18,6 +18,12 @@ const goesOutAutomatically = (a: Application) =>
 type Route = 'email' | 'form' | 'you';
 const ROUTE_NAME: Record<Route, string> = { email: 'By e-mail to the recruiter', form: 'On a form, by the agent', you: 'Sent by you' };
 const routeOf = (a: Application): Route => (a.receipt?.pageUrl.startsWith('mailto:') ? 'email' : a.receipt?.automatic || a.automatic ? 'form' : 'you');
+const BAR_TEXT: Record<InterviewRates['bar']['reason'], (r: InterviewRates['bar']) => string> = {
+  'no-target': (r) => `Automatic applications need a ${r.bar}% match. Set a target interview rate on your Profile and the bar will adjust itself from your results.`,
+  learning: (r) => `Aiming for ${r.target}% of applications to lead to an interview. Learning: ${r.outcomes} of ${r.needed} outcomes recorded. Until then automatic applications need a ${r.bar}% match.`,
+  'meets-target': (r) => `Aiming for ${r.target}%: applications at ${r.bar}% or more reached ${r.rateAtBar}% interviews, so only those go out on their own.`,
+  'below-target': (r) => `Aiming for ${r.target}%: no score band has reached it yet${r.rateAtBar !== undefined ? ` (${r.rateAtBar}% at ${r.bar}%+)` : ''}, so only the closest matches (${r.bar}% or more) go out on their own. The rest wait for you.`,
+};
 const OUTCOME_NAME: Record<NonNullable<Application['outcome']>, string> = { interview: 'Interview', rejected: 'Rejected', 'no-reply': 'No reply' };
 
 function holdText(reason: string): string {
@@ -33,6 +39,7 @@ export default function TrackerPage() {
   const [error, setError] = useState('');
   const [showClosed, setShowClosed] = useState(false);
   const [busyId, setBusyId] = useState('');
+  const [rates, setRates] = useState<InterviewRates>();
 
   const replace = (updated: Application) => setApps((list) => list?.map((x) => (x.id === updated.id ? updated : x)));
   async function act(id: string, path: 'skip' | 'outcome', body?: object) {
@@ -40,6 +47,7 @@ export default function TrackerPage() {
     setError('');
     try {
       replace(await api<Application>(`/applications/${encodeURIComponent(id)}/${path}`, { method: 'POST', ...(body ? { body } : {}) }));
+      if (path === 'outcome') setRates(await api<InterviewRates>('/agent/interview-rates'));
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -47,11 +55,16 @@ export default function TrackerPage() {
     }
   }
   const sent = (apps ?? []).filter((a) => a.submittedAt);
-  const outgoing = (apps ?? []).filter(goesOutAutomatically);
+  // Once results have raised the bar, only applications at or above it go out on their own.
+  const raised = rates && rates.bar.bar > rates.bar.base ? rates.bar.bar : 0;
+  const outgoing = (apps ?? []).filter((a) => goesOutAutomatically(a) && a.score >= raised);
 
   useEffect(() => {
     api<Application[]>('/applications')
       .then((list) => setApps([...list].sort((a, b) => ORDER[a.status] - ORDER[b.status] || b.createdAt.localeCompare(a.createdAt))))
+      .catch((err) => setError(errorText(err)));
+    api<InterviewRates>('/agent/interview-rates')
+      .then(setRates)
       .catch((err) => setError(errorText(err)));
   }, []);
 
@@ -134,6 +147,39 @@ export default function TrackerPage() {
             </tbody>
           </table>
           <p className="small muted">Counted from what you record on each sent application below. OpennJob does not read your e-mail.</p>
+        </section>
+      ) : null}
+      {rates ? (
+        <section className="card" aria-label="Interview rate by match score" data-testid="interview-rates">
+          <span className="label">Interview rate by match score</span>
+          <p className="small" data-testid="automatic-bar">{BAR_TEXT[rates.bar.reason](rates.bar)}</p>
+          {rates.bands.some((b) => b.sent) ? (
+            <table className="routes">
+              <thead>
+                <tr>
+                  <th scope="col">Match</th>
+                  <th scope="col">Sent</th>
+                  <th scope="col">Outcome recorded</th>
+                  <th scope="col">Interviews</th>
+                  <th scope="col">Interview rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rates.bands
+                  .filter((b) => b.sent)
+                  .map((b) => (
+                    <tr key={b.label}>
+                      <th scope="row">{b.label}</th>
+                      <td>{b.sent}</td>
+                      <td>{b.outcomes}</td>
+                      <td>{b.interviews}</td>
+                      <td>{b.rate === undefined ? '–' : `${b.rate}%`}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          ) : null}
+          <p className="small muted">Record Interview, Rejected or No reply on each sent application: the bar learns only from what you record.</p>
         </section>
       ) : null}
       {apps && !apps.length ? <div className="empty">No applications yet. Open a match, or tap Run agent on the Matches tab.</div> : null}

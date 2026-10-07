@@ -62,6 +62,8 @@ export const preferencesSchema = z
     minScore: z.number().int().min(50).max(100).optional(),
     // Companies searched for by name on the job-search APIs, on top of the CV's titles.
     targetEmployers: z.array(text(80)).max(60).optional().transform((v) => (v?.length ? unique(v) : undefined)),
+    // The interview rate the person aims for: the automatic bar rises toward it as outcomes come in.
+    targetInterviewRate: z.number().int().min(5).max(100).optional(),
   })
   .strict();
 

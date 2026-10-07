@@ -24,3 +24,4 @@ export * from './adapters';
 export * from './email-apply';
 export * from './notifications';
 export * from './sources';
+export * from './outcomes';

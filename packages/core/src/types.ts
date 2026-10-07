@@ -82,6 +82,11 @@ export interface Preferences {
    * contractors it works with). Their jobs are still scored against the CV like any other.
    */
   targetEmployers?: string[];
+  /**
+   * The interview rate the person aims for (0-100). With enough recorded outcomes, the agent's
+   * score bar for automatic applications rises until applications at or above it reach this.
+   */
+  targetInterviewRate?: number;
 }
 
 export interface Profile {

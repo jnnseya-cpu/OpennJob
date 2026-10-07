@@ -160,3 +160,9 @@ export interface SearchPlanView {
   searchSources: { label: string; countries: string[] | null }[];
   boards: number;
 }
+
+/** GET /agent/interview-rates */
+export interface InterviewRates {
+  bands: { label: string; from: number; to: number; sent: number; outcomes: number; interviews: number; rate?: number }[];
+  bar: { bar: number; base: number; target?: number; reason: 'no-target' | 'learning' | 'meets-target' | 'below-target'; outcomes: number; needed: number; rateAtBar?: number };
+}

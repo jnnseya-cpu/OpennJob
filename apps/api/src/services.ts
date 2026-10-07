@@ -15,6 +15,10 @@ import {
   queryKey,
   searchPlan,
   targetEmployerOf,
+  automaticBar,
+  automaticOrder,
+  interviewRates,
+  interviewedEmployers,
   findPackQuestion,
   findQuestion,
   inScope,
@@ -476,9 +480,10 @@ export class OpennJobService {
     const profile = await this.getProfile(userId);
     const preferences = preferencesOf(profile);
     const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
-    // The higher of the platform's threshold and the person's own bar (Profile).
-    const threshold = Math.max(applyThresholdOf(this.deps.config), preferences.minScore ?? 0);
+    // The higher of the platform's threshold and the person's own bar (Profile), raised further
+    // toward the person's target interview rate once their recorded outcomes show where it is met.
     const existing = await this.deps.repository.listApplications(userId);
+    const threshold = automaticBar(existing, Math.max(applyThresholdOf(this.deps.config), preferences.minScore ?? 0), preferences.targetInterviewRate).bar;
     const jobs = await this.deps.repository.listJobs();
 
     const jobsById = new Map(jobs.map((j) => [j.id, j]));
@@ -541,6 +546,26 @@ export class OpennJobService {
 
     await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates });
     return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates };
+  }
+
+  /** The score the agent needs before it prepares or sends an application on its own, and why. */
+  async automaticBar(userId: string) {
+    const preferences = preferencesOf(await this.deps.repository.getProfile(userId));
+    const applications = await this.deps.repository.listApplications(userId);
+    return automaticBar(applications, Math.max(applyThresholdOf(this.deps.config), preferences.minScore ?? 0), preferences.targetInterviewRate);
+  }
+
+  /** Interviews out of recorded outcomes, by match-score band, with the automatic bar. */
+  async interviewRates(userId: string) {
+    const applications = await this.deps.repository.listApplications(userId);
+    return { bands: interviewRates(applications), bar: await this.automaticBar(userId) };
+  }
+
+  /** Ready applications in the order the agent sends them (employers that interviewed the person first). */
+  async automaticOrder(userId: string) {
+    const preferences = preferencesOf(await this.deps.repository.getProfile(userId));
+    const interviewed = interviewedEmployers(await this.deps.repository.listApplications(userId));
+    return automaticOrder(interviewed, (a) => targetEmployerOf({ employer: a.employer, description: '' }, preferences.targetEmployers) !== undefined);
   }
 
   private async mustGetApplication(userId: string, id: string): Promise<Application> {

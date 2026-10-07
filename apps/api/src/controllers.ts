@@ -259,6 +259,12 @@ export class AgentController {
     return this.applying.status(userId);
   }
 
+  /** Interviews out of recorded outcomes by match score, and the bar for automatic applications. */
+  @Get('interview-rates')
+  interviewRates(@CurrentUser() userId: string) {
+    return this.service.interviewRates(userId);
+  }
+
   /** The queue in the person's browser (APP-3, OD-4). */
   @Get('queue/next')
   next(@CurrentUser() userId: string) {

@@ -171,15 +171,27 @@ export class ApplyingService {
     return a.mode === 'auto' && (a.status === 'draft' || a.status === 'confirmed') && !(a.holdReasons?.length) && !(a.traceFailures?.length) && a.attemptedAt === undefined;
   }
 
+  /**
+   * Once the person's recorded outcomes have raised the automatic bar toward their target
+   * interview rate, only applications at or above it go out on their own; the rest stay as drafts
+   * the person can still send. Until then (no target, or still learning) nothing is filtered here:
+   * the agent's own threshold already chose what it prepared.
+   */
+  private async raisedBar(userId: string): Promise<number> {
+    const { bar, base } = await this.service.automaticBar(userId);
+    return bar > base ? bar : 0;
+  }
+
   private async ready(userId: string): Promise<{ ready: Application[]; systemOff: number }> {
     const ready: Application[] = [];
     let systemOff = 0;
+    const bar = await this.raisedBar(userId);
     for (const a of await this.deps.repository.listApplications(userId)) {
-      if (!ApplyingService.queueable(a)) continue;
+      if (!ApplyingService.queueable(a) || a.score < bar) continue;
       if (await this.systemEnabledFor(a.applyUrl)) ready.push(a);
       else systemOff += 1;
     }
-    ready.sort((x, y) => y.score - x.score || x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id));
+    ready.sort(await this.service.automaticOrder(userId));
     return { ready, systemOff };
   }
 
@@ -213,7 +225,8 @@ export class ApplyingService {
     if (!sender?.live) return { sent, failed };
     const first = await this.blocked(userId);
     if (first) return { sent, failed, wait: first.wait };
-    const candidates = (await this.deps.repository.listApplications(userId)).filter(ApplyingService.queueable).sort((x, y) => y.score - x.score || x.createdAt.localeCompare(y.createdAt));
+    const bar = await this.raisedBar(userId);
+    const candidates = (await this.deps.repository.listApplications(userId)).filter((a) => ApplyingService.queueable(a) && a.score >= bar).sort(await this.service.automaticOrder(userId));
     for (const candidate of candidates) {
       const block = await this.blocked(userId);
       if (block) return { sent, failed, wait: block.wait };

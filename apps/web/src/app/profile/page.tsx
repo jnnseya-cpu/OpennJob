@@ -7,7 +7,7 @@ import { BarList } from '../../components/Charts';
 import { ScreeningForm } from '../../components/ScreeningForm';
 import { ApiError, api, errorText, upload } from '../../lib/api';
 import { EMPLOYER_LISTS } from '../../lib/employer-lists';
-import { COUNTRIES, KNOWN_CITIES, LANGUAGES, PACKS, WORK_RIGHTS_BASES, cityCountry, countryName, getPack } from '../../lib/core';
+import { COUNTRIES, KNOWN_CITIES, LANGUAGES, OUTCOMES_BEFORE_LEARNING, PACKS, WORK_RIGHTS_BASES, cityCountry, countryName, getPack } from '../../lib/core';
 import type { PackCredentialField } from '../../lib/core';
 import type { CvExtraction, Passport, PassportView, Profile, PublicUser } from '../../lib/types';
 
@@ -20,6 +20,7 @@ interface Prefs {
   cities: string[];
   searchTypes?: string[];
   minScore?: number | undefined;
+  targetInterviewRate?: number | undefined;
 }
 
 /** One company per line (or comma-separated), blanks dropped, each once. */
@@ -118,6 +119,7 @@ export default function ProfilePage() {
             cities: preferences?.cities ?? [],
             ...(preferences?.searchTypes?.length ? { searchTypes: preferences.searchTypes } : {}),
             ...(typeof preferences?.minScore === 'number' ? { minScore: preferences.minScore } : {}),
+            ...(typeof preferences?.targetInterviewRate === 'number' ? { targetInterviewRate: preferences.targetInterviewRate } : {}),
           });
           setEmployersText((preferences?.targetEmployers ?? []).join('\n'));
         } else {
@@ -240,7 +242,7 @@ export default function ProfilePage() {
     setProfileMsg(undefined);
     try {
       const { addressLine2, ...rest } = details;
-      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: { languages: prefs.languages, countries: prefs.countries, cities: prefs.cities, ...(prefs.searchTypes?.length ? { searchTypes: prefs.searchTypes } : {}), ...(prefs.minScore ? { minScore: prefs.minScore } : {}), ...(employerList(employersText).length ? { targetEmployers: employerList(employersText) } : {}) } } });
+      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: { languages: prefs.languages, countries: prefs.countries, cities: prefs.cities, ...(prefs.searchTypes?.length ? { searchTypes: prefs.searchTypes } : {}), ...(prefs.minScore ? { minScore: prefs.minScore } : {}), ...(prefs.targetInterviewRate ? { targetInterviewRate: prefs.targetInterviewRate } : {}), ...(employerList(employersText).length ? { targetEmployers: employerList(employersText) } : {}) } } });
       setProfileMsg({ ok: true, text: 'Profile saved. Your matches use it from now on.' });
     } catch (err) {
       setProfileMsg({ ok: false, text: errorText(err) });
@@ -438,6 +440,22 @@ export default function ProfilePage() {
               </select>
             </label>
             <p className="small muted">Fewer, better-matched applications get more replies than many weak ones. The agent never goes below the platform’s threshold.</p>
+            <label className="field">
+              <span>
+                <b>Aim for this share of applications to lead to an interview</b>
+              </span>
+              <select aria-label="Target interview rate" value={prefs.targetInterviewRate ?? ''} onChange={(e) => setPrefs((p) => ({ ...p, targetInterviewRate: e.target.value ? Number(e.target.value) : undefined }))}>
+                <option value="">No target</option>
+                {[20, 40, 60, 80].map((n) => (
+                  <option key={n} value={n}>
+                    {n}%
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="small muted">
+              After {OUTCOMES_BEFORE_LEARNING} recorded outcomes, automatic applications go only to matches whose score band has reached this rate for you; if none has, only the closest matches go. A higher target means fewer applications. No setting can promise interviews: employers decide.
+            </p>
             <label className="field">
               <span>
                 <b>Companies to search for</b> <span className="muted">(one per line)</span>

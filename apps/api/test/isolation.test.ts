@@ -22,6 +22,7 @@ const ROUTES = [
   'GET /account',
   'GET /account/export',
   'GET /agent/authorisation',
+  'GET /agent/interview-rates',
   'GET /agent/queue/next',
   'GET /agent/status',
   'GET /applications',
@@ -303,6 +304,10 @@ for (const backend of BACKENDS) {
       expect((await b.get('/agent/authorisation').expect(200)).body.enabled).toBe(false);
       expect((await b.get('/agent/status').expect(200)).body).toMatchObject({ authorisation: { enabled: false }, queue: { ready: 0, needsYou: 0 } });
       expect((await b.get('/agent/queue/next').expect(200)).body).toMatchObject({ wait: 'not-authorised' });
+      // B's interview rates are B's own: none of A's applications are counted.
+      const rates = (await b.get('/agent/interview-rates').expect(200)).body as { bands: { sent: number; outcomes: number }[]; bar: { outcomes: number } };
+      expect(rates.bands.every((band) => band.sent === 0 && band.outcomes === 0)).toBe(true);
+      expect(rates.bar.outcomes).toBe(0);
       await b.put('/agent/authorisation').send({ enabled: false }).expect(200);
       await b.put('/agent/pause').send({ paused: true }).expect(200);
       expect((await t.api.get('/agent/authorisation').expect(200)).body).toMatchObject({ enabled: true, paused: false });

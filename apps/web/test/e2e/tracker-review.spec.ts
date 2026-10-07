@@ -66,6 +66,10 @@ test('recording an interview on a sent application shows in replies by route', a
   await page.getByRole('group', { name: 'What came of it' }).getByRole('button', { name: 'Interview' }).click();
   const row = page.getByTestId('replies-by-route').getByRole('row', { name: /Sent by you/ });
   await expect(row).toContainText('100%');
+  // The same outcome counts in the interview rate by match score, and the bar explains itself.
+  const rates = page.getByTestId('interview-rates');
+  await expect(rates.getByTestId('automatic-bar')).toContainText('Set a target interview rate on your Profile');
+  await expect(rates.getByRole('row').filter({ hasText: '100%' })).toHaveCount(1);
   const sent = (await (await fetch(`${api.url}/applications/${sentId}`, { headers: auth() })).json()) as { status: string; outcome?: string };
   expect(sent).toMatchObject({ status: 'interview', outcome: 'interview' });
 });
