@@ -23,7 +23,7 @@ describe('DIS-5: the job-source terms register', () => {
   }
 
   it('says plainly that no live source has been checked, while that is true', () => {
-    const live = register.split('\n').filter((l) => /^\| `(greenhouse|lever|ashby|adzuna|reed)` \|/.test(l));
+    const live = register.split('\n').filter((l) => /^\| `(greenhouse|lever|ashby|adzuna|reed|reliefweb|jooble)` \|/.test(l));
     if (live.every((l) => l.includes('| not checked |'))) expect(register).toContain('No source has had its terms checked.');
   });
 });

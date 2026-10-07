@@ -17,9 +17,11 @@ operator's responsibility.
 | `ashby` | `GET https://api.ashbyhq.com/posting-api/job-board/{name}` | An employer's public job board API | not checked | Check Ashby's public job posting API terms. |
 | `adzuna` | `GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page}` | Aggregator API with a free key | not checked | The API terms set attribution, caching and permitted use. The web app shows "Jobs by Adzuna" (linked) on matches and the review screen, and applies through Adzuna's own redirect link. Needs `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`. |
 | `reed` | `GET https://www.reed.co.uk/api/1.0/search` | Aggregator API with a free key | not checked | Check the Reed API terms (attribution, caching). Needs `REED_API_KEY`. |
+| `reliefweb` | `POST https://api.reliefweb.int/v2/jobs?appname={appname}` | UN OCHA's humanitarian and development jobs API; free; needs an appname ReliefWeb approved (since 1 November 2025) | not checked | Covers countries the commercial APIs do not, such as DR Congo. Its documentation says anyone can use the API, and that jobs are contributed by partners and may be copyrighted. Check the terms (attribution, caching, use of job content) before turning it on with `OPENNJOB_RELIEFWEB_APPNAME`. Asked for the countries in its ISO3 table. |
+| `jooble` | `POST https://jooble.org/api/{key}` | Aggregator API with a free key on request | not checked | About 60 countries, including the UAE and the Gulf. Asked only for the countries in `JOOBLE_COUNTRIES` (those Adzuna and Reed do not cover). Adverts are snippets; the full text is on the linked site. Check the API terms (attribution, linking, caching) before turning it on with `JOOBLE_API_KEY`. |
 | `sample` | none (in the code) | Fictional demonstration jobs | not needed | Fictional data only. Off unless `OPENNJOB_DEMO_JOBS=true`. |
 
-Response shapes for the five live adapters were written from public documentation and are
+Response shapes for the seven live adapters were written from public documentation and are
 **not verified against the live APIs** (DIS-2). Nothing in this repository calls them in tests.
 
 ## What the job-search APIs are asked

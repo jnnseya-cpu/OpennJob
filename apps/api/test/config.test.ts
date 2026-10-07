@@ -80,6 +80,9 @@ describe('buildSearchSources: the job-search APIs take only keys; what they are 
     expect(buildSearchSources({}, noFetch)).toEqual([]);
     expect(buildSearchSources({ ADZUNA_APP_ID: 'id' }, noFetch)).toEqual([]);
     expect(buildSearchSources({ ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key', REED_API_KEY: 'k' }, noFetch).map((s) => s.label)).toEqual(['adzuna', 'reed']);
+    // ReliefWeb and Jooble only when configured.
+    expect(buildSearchSources({ OPENNJOB_RELIEFWEB_APPNAME: 'approved-name', JOOBLE_API_KEY: 'k' }, noFetch).map((s) => s.label)).toEqual(['reliefweb', 'jooble']);
+    expect(buildSearchSources({ OPENNJOB_RELIEFWEB_APPNAME: '  ', JOOBLE_API_KEY: '' }, noFetch)).toEqual([]);
   });
 
   it('ignores the old server-wide search settings: the query is the one it is given', async () => {

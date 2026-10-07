@@ -4,5 +4,7 @@ export * from './lever';
 export * from './ashby';
 export * from './adzuna';
 export * from './reed';
+export * from './reliefweb';
+export * from './jooble';
 export * from './sample';
 export * from './dedupe';

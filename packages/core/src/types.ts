@@ -12,7 +12,7 @@ export interface Criterion {
   keywords: string[];
 }
 
-export type JobSource = 'greenhouse' | 'lever' | 'ashby' | 'adzuna' | 'reed' | 'sample' | 'employer';
+export type JobSource = 'greenhouse' | 'lever' | 'ashby' | 'adzuna' | 'reed' | 'reliefweb' | 'jooble' | 'sample' | 'employer';
 
 /** Industry packs. See packs.ts. */
 export type PackId = 'con' | 'dc' | 'en' | 'rail' | 'fr' | 'hc';

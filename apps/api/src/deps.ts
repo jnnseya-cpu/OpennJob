@@ -13,6 +13,8 @@ import {
   createGreenhouseSource,
   createLeverSource,
   createReedSearch,
+  createReliefWebSearch,
+  createJoobleSearch,
   createSampleSource,
   systemClock,
 } from '@opennjob/core';
@@ -297,6 +299,10 @@ export function buildSearchSources(env: Env, fetchFn: FetchLike): SearchSource[]
     out.push(createAdzunaSearch({ appId: env.ADZUNA_APP_ID, appKey: env.ADZUNA_APP_KEY, ...(Number.isFinite(perPage) ? { resultsPerPage: perPage } : {}), fetch: fetchFn }));
   }
   if (env.REED_API_KEY) out.push(createReedSearch({ apiKey: env.REED_API_KEY, fetch: fetchFn }));
+  // ReliefWeb (UN OCHA): humanitarian and development jobs, e.g. DR Congo. Needs an appname ReliefWeb approved.
+  if (env.OPENNJOB_RELIEFWEB_APPNAME?.trim()) out.push(createReliefWebSearch({ appName: env.OPENNJOB_RELIEFWEB_APPNAME.trim(), fetch: fetchFn }));
+  // Jooble: an aggregator for countries Adzuna and Reed do not cover, e.g. the UAE.
+  if (env.JOOBLE_API_KEY?.trim()) out.push(createJoobleSearch({ apiKey: env.JOOBLE_API_KEY.trim(), fetch: fetchFn }));
   return out;
 }
 

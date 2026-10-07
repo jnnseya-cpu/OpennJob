@@ -7,7 +7,7 @@ import { classifyPack } from '../packs';
 /** Minimal fetch shape so adapters can be driven by fixtures in tests. Global fetch satisfies it. */
 export type FetchLike = (
   url: string,
-  init?: { method?: string; headers?: Record<string, string> },
+  init?: { method?: string; headers?: Record<string, string>; body?: string },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 export interface JobSourceAdapter {
@@ -44,6 +44,22 @@ export class SourceError extends Error {
   ) {
     super(`${source}: ${message}`);
     this.name = 'SourceError';
+  }
+}
+
+/** POST a JSON body and read JSON back, with the same error handling as getJson. */
+export async function postJson(fetchFn: FetchLike, source: string, url: string, body: unknown, headers?: Record<string, string>): Promise<unknown> {
+  let res;
+  try {
+    res = await fetchFn(url, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  } catch (err) {
+    throw new SourceError(source, `request failed (${err instanceof Error ? err.message : 'unknown error'})`);
+  }
+  if (!res.ok) throw new SourceError(source, `HTTP ${res.status}`, res.status);
+  try {
+    return await res.json();
+  } catch {
+    throw new SourceError(source, 'response was not JSON');
   }
 }
 
