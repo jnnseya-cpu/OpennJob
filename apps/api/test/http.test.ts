@@ -61,6 +61,9 @@ describe('CORS allow-list', () => {
     expect(originAllowed('https://other.example.org', strict)).toBe(false);
     expect(originAllowed('chrome-extension://abc', strict)).toBe(false);
     expect(originAllowed('chrome-extension://abc', { corsOrigins: [], corsAllowAnyExtension: true })).toBe(true);
+    // The OpennJob extension (fixed ID) is always allowed, whatever the settings file lists.
+    expect(originAllowed('chrome-extension://hempmcajfhphflmemhidmgbfookifiim', strict)).toBe(true);
+    expect(originAllowed('chrome-extension://hempmcajfhphflmemhidmgbfookifiimx', strict)).toBe(false);
   });
 });
 
@@ -191,5 +194,17 @@ describe('GET /health', () => {
       throw new Error('connection refused');
     };
     await t.raw().get('/health').expect(503, { status: 'degraded', persistence: 'memory', database: 'down', version: 'unknown' });
+  });
+});
+
+describe('the extension origin the API allows is the one the manifest key gives', () => {
+  it('matches apps/extension/manifest.json', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { createHash } = await import('node:crypto');
+    const { join } = await import('node:path');
+    const { OPENNJOB_EXTENSION_ORIGIN } = await import('../src/http');
+    const key = (JSON.parse(readFileSync(join(__dirname, '../../extension/manifest.json'), 'utf8')) as { key: string }).key;
+    const id = [...createHash('sha256').update(Buffer.from(key, 'base64')).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+    expect(OPENNJOB_EXTENSION_ORIGIN).toBe(`chrome-extension://${id}`);
   });
 });

@@ -7,9 +7,17 @@ import { AppModule } from './app.module';
 import type { OpennJobConfig, OpennJobDeps } from './deps';
 import { nestLogger, requestLogger } from './logging';
 
+/**
+ * The OpennJob extension's own origin. Its ID is fixed by the public key in
+ * apps/extension/manifest.json, so it is the same on every computer it is loaded on.
+ * The API takes bearer tokens, not cookies, so allowing it exposes nothing without a token.
+ */
+export const OPENNJOB_EXTENSION_ORIGIN = 'chrome-extension://hempmcajfhphflmemhidmgbfookifiim';
+
 /** Is this browser origin allowed to call the API? Requests with no Origin (curl, server to server) are not CORS requests. */
 export function originAllowed(origin: string | undefined, config: Pick<OpennJobConfig, 'corsOrigins' | 'corsAllowAnyExtension'>): boolean {
   if (!origin) return true;
+  if (origin === OPENNJOB_EXTENSION_ORIGIN) return true;
   if (config.corsOrigins.includes(origin.replace(/\/+$/, ''))) return true;
   return config.corsAllowAnyExtension && origin.startsWith('chrome-extension://');
 }
