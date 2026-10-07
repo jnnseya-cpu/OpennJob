@@ -103,6 +103,18 @@ in the dump. Without the key, a restored database cannot be read.
 
 ## 7. Updates
 
+**Catch up and stay up to date (one command, as root):**
+
+```bash
+cd /opt/opennjob && git fetch origin claude/busy-fermat-9hhn11 && git checkout claude/busy-fermat-9hhn11 && git pull --ff-only && bash deploy/catch-up.sh
+```
+
+`deploy/catch-up.sh` pulls every change on the pilot branch, raises search settings that older
+versions of `.env.production` set too low, rebuilds and restarts (migrations run on start), checks
+the API's health, turns on automatic updates (every 10 minutes, with rollback) and lists what
+changed. It never touches keys or passwords. New job sources are added separately with
+`bash deploy/set-keys.sh reliefweb` or `bash deploy/set-keys.sh jooble`, after reading their terms.
+
 Automatic (recommended once the site is running):
 
 ```bash

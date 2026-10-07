@@ -7,6 +7,8 @@
 #   bash deploy/set-keys.sh adzuna     # Adzuna job search API (free developer key)
 #   bash deploy/set-keys.sh reed       # Reed job search API (free developer key)
 #   bash deploy/set-keys.sh boards     # employers' own boards on Greenhouse / Lever / Ashby (no key)
+#   bash deploy/set-keys.sh reliefweb  # ReliefWeb jobs API (UN OCHA): DR Congo and other countries the others miss
+#   bash deploy/set-keys.sh jooble     # Jooble job search API (free key on request): UAE, Gulf, Ireland...
 #
 # Secrets are typed without being shown and stored only in .env.production (root only).
 # The Claude key is checked with a model lookup, which costs nothing. Job sources are not called
@@ -82,6 +84,21 @@ c.models.retrieve(process.env.OPENNJOB_MODEL).then(
     set_values OPENNJOB_GREENHOUSE_BOARDS "$GH" OPENNJOB_LEVER_COMPANIES "$LV" OPENNJOB_ASHBY_BOARDS "$AS"
     restart; echo "Saved. Record the terms check in docs/sources.md."
     ;;
+  reliefweb)
+    confirm_terms "ReliefWeb" "https://apidoc.reliefweb.int and https://reliefweb.int/terms-conditions"
+    echo "ReliefWeb needs an appname it approved for you (request it on apidoc.reliefweb.int)."
+    NAME="$(ask 'Approved appname' "$(current OPENNJOB_RELIEFWEB_APPNAME)")"
+    [ -n "$NAME" ] || { echo "No appname given. Nothing changed." >&2; exit 1; }
+    set_values OPENNJOB_RELIEFWEB_APPNAME "$NAME"
+    restart; echo "Saved. Record the terms check in docs/sources.md (date and your name)."
+    ;;
+  jooble)
+    confirm_terms "Jooble" "https://jooble.org/api/about (API terms)"
+    KEY="$(ask_secret 'Jooble API key')"
+    [ -n "$KEY" ] || { echo "No key given. Nothing changed." >&2; exit 1; }
+    set_values JOOBLE_API_KEY "$KEY"
+    unset KEY; restart; echo "Saved. Record the terms check in docs/sources.md (date and your name)."
+    ;;
   *)
-    sed -n '2,14p' "$0"; exit 1 ;;
+    sed -n '2,16p' "$0"; exit 1 ;;
 esac
