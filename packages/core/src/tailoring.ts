@@ -24,7 +24,7 @@ import { escapeRegExp, splitSentences, unwrapLines } from './text';
 /** Why an application is held for the person (status needs_you). */
 export const HOLD_REASONS = {
   'trace-check': 'A sentence in the documents could not be traced to your CV. Read it and correct it.',
-  'llm-ceiling': 'The daily AI spending limit was reached, so this was drafted without AI. Read it before use.',
+  'llm-ceiling': 'OpennJob’s own daily AI limit (a setting on the server, not your Claude credit) was reached, so this was drafted without AI. It is rewritten with AI at the next agent run.',
   'daily-limit': "Today's application limit was reached. It goes out tomorrow.",
 } as const;
 export type HoldReason = keyof typeof HOLD_REASONS;
