@@ -53,6 +53,15 @@ unlimit() {
 unlimit OPENNJOB_LLM_DAILY_ACU_PER_USER
 unlimit OPENNJOB_LLM_DAILY_ACU_TOTAL
 unlimit OPENNJOB_LLM_CRITERIA_MAX_JOBS
+# The OpennJob extension must be allowed to call the API (its ID is fixed in its manifest).
+EXT_ORIGIN=chrome-extension://hempmcajfhphflmemhidmgbfookifiim
+CORS="$(value OPENNJOB_CORS_ORIGINS)"
+if [ -n "$CORS" ] && [[ ",$CORS," != *",$EXT_ORIGIN,"* ]]; then
+  grep -vE "^OPENNJOB_CORS_ORIGINS=" "$F" > "$F.new" || true
+  printf "OPENNJOB_CORS_ORIGINS='%s'\n" "$CORS,$EXT_ORIGIN" >> "$F.new"
+  cat "$F.new" > "$F"; rm -f "$F.new"; chmod 600 "$F"
+  echo "   OPENNJOB_CORS_ORIGINS: added the extension"
+fi
 
 OPENNJOB_VERSION="$(git log -1 --format='%h %cs')"
 export OPENNJOB_VERSION

@@ -3,6 +3,7 @@
   "name": "OpennJob (development build)",
   "version": "0.1.0",
   "description": "Fills job application forms from your OpennJob profile, in your own browser. Sensitive fields wait for your confirmation.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HoRtUtz9GrqUtJbNh8JPnQ1jL/GQtnojcV8QcNnzazRlGD2CbSFxWWQXCrGi5Bd26MRfNRBDDajhV5eupBRqHfHVvXq5Jgc9m4pVi9bRHxMNOKN2G42Krl8JpfW/Cqy6qBuTAo3zPW8q8XCg3lfWNObTPpDTryKeqnboaJgCLtooHKMxuKEeEtZrFbe1mMxlVX1Wps7+IBjd8cbdN3e4OY1r8M4gKgxBSGspbMDckaViAgXr9WsB5q9I2Ul5uLcAaJgXb/0zB1HokHWxEXH6gFQMGwBKXqIMJDlrnMaFCLe/ZqJ+Ju6ok7vRDciHSNa8wqsarOtdWTkvsyNzl616wIDAQAB",
   "action": {
     "default_title": "OpennJob",
     "default_popup": "popup.html",

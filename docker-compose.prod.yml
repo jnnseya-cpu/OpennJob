@@ -51,7 +51,8 @@ services:
       OPENNJOB_REGISTRATION_ALLOWLIST: ${OPENNJOB_REGISTRATION_ALLOWLIST:?Set the invited addresses (private pilot)}
       OPENNJOB_TERMS_VERSION: ${OPENNJOB_TERMS_VERSION:-draft-1}
       OPENNJOB_PRIVACY_VERSION: ${OPENNJOB_PRIVACY_VERSION:-draft-1}
-      OPENNJOB_CORS_ORIGINS: ${OPENNJOB_CORS_ORIGINS:-}
+      # The OpennJob extension (its ID is fixed by the public key in apps/extension/manifest.json).
+      OPENNJOB_CORS_ORIGINS: ${OPENNJOB_CORS_ORIGINS:-chrome-extension://hempmcajfhphflmemhidmgbfookifiim}
       OPENNJOB_CORS_ALLOW_ANY_EXTENSION: "false"
       OPENNJOB_APPLY_THRESHOLD: ${OPENNJOB_APPLY_THRESHOLD:-80}
       OPENNJOB_DEMO_JOBS: ${OPENNJOB_DEMO_JOBS:-false}

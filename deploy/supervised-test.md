@@ -31,10 +31,12 @@ first check against the real thing.
 6. Record the check in `docs/sources.md` / `GO-LIVE.md` with the date and your name.
 
 ## After it is on
-- Each morning the queue opens the application in your browser (Chrome must be open with the
-  extension signed in), presses Apply, fills each step, presses Save and Continue only when the step
-  has nothing that waits for you, and submits at the end after the API's go, with the site's
-  confirmation as the receipt.
+- When you press **Start the queue** in the extension (Chrome open, extension signed in), it opens
+  each ready application in a background tab, presses Apply, fills each step, presses Save and
+  Continue only when the step has nothing that waits for you, and submits at the end after the API's
+  go, with the site's confirmation as the receipt. It does not start by itself: a daily start needs
+  the extension's "alarms" permission, which is an owner decision (the permissions are fixed in
+  CLAUDE.md). Applications by e-mail need no browser and do go out by themselves at 06:00.
 - It stops, and leaves the tab open, at a sign-in page (sign in once, then **I have signed in: try
   again** in the Tracker) and at any declaration step (equality monitoring, "I consent", convictions).
   The steps before it are already saved on the employer's site: you finish only the last one.
