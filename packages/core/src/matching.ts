@@ -1,6 +1,7 @@
 import type { Criterion, Job, Passport, Preferences } from './types';
 import type { LlmPort } from './llm';
 import { languagesAskedBy } from './languages';
+import { cvShowsTranslatedTitle } from './title-translations';
 import { classifyPack } from './packs';
 import { credentialOf, requiredCredentialOf } from './passport';
 import { extractJsonObject, keywordInText, splitSentences } from './text';
@@ -67,7 +68,9 @@ export function roleFit(title: string, cvText: string): RoleFit {
   const words = titleFieldWords(title);
   const cvLower = cvText.toLowerCase();
   const missing = words.filter((w) => !cvHasWord(w, cvLower));
-  return { role, fits: words.length === 0 || (words.length - missing.length) * 2 > words.length, missing };
+  // A title in another language ("Ingénieur électricien", "Bauleiter") fits when the CV shows its English title.
+  const fits = words.length === 0 || (words.length - missing.length) * 2 > words.length || cvShowsTranslatedTitle(title, cvText);
+  return { role, fits, missing: fits ? [] : missing };
 }
 
 export interface CriterionHit {

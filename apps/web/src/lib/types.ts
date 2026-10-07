@@ -159,6 +159,10 @@ export interface SearchPlanView {
   queries: { what: string; where?: string; country: string }[];
   searchSources: { label: string; countries: string[] | null }[];
   boards: number;
+  /** Per country: searches made and the job-search APIs that cover it. */
+  coverage?: { country: string; searches: number; sources: string[] }[];
+  /** Profile settings that hide jobs abroad: 'search-types-uk-only', 'french-not-selected'. */
+  warnings?: string[];
 }
 
 /** GET /agent/interview-rates */

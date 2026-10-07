@@ -85,11 +85,25 @@ describe('job search from the CV (no server keywords)', () => {
     expect(plan.searchSources.map((s: { label: string }) => s.label)).toEqual(['adzuna', 'reed']);
 
     const res = (await t.api.post('/jobs/refresh').expect(200)).body;
-    expect(adzuna.asked).toEqual([{ what: 'site manager', where: 'London', country: 'GB' }, { what: 'site manager', country: 'FR' }]);
+    // In France the French title is asked too.
+    expect(adzuna.asked).toEqual([{ what: 'site manager', where: 'London', country: 'GB' }, { what: 'site manager', country: 'FR' }, { what: 'conducteur de travaux', country: 'FR' }]);
     expect(reed.asked).toEqual([{ what: 'site manager', where: 'London', country: 'GB' }]);
-    expect(res).toMatchObject({ searches: 3, errors: [] });
+    expect(res).toMatchObject({ searches: 4, errors: [] });
+    expect(plan.coverage).toEqual([
+      { country: 'GB', searches: 1, sources: ['adzuna', 'reed'] },
+      { country: 'FR', searches: 2, sources: ['adzuna'] },
+    ]);
+    expect(plan.warnings).toEqual([]);
     const matches = (await t.api.get('/jobs/matches?min=0').expect(200)).body as { job: { title: string } }[];
     expect(matches.map((m) => m.job.title)).toContain('site manager (fictional)');
+  });
+
+  it('the plan names countries no source covers, and settings that hide jobs abroad', async () => {
+    t = await createTestApp({ sources: [], searchSources: [recordingSource('adzuna', ['GB', 'FR']), recordingSource('reed', ['GB'])] });
+    await t.api.put('/profile').send({ ...SITE_MANAGER, preferences: { languages: ['English'], countries: ['GB', 'FR', 'IE'], cities: [], searchTypes: ['uk-permanent'] } }).expect(200);
+    const plan = (await t.api.get('/jobs/search-plan').expect(200)).body;
+    expect(plan.coverage.find((c: { country: string }) => c.country === 'IE')).toEqual({ country: 'IE', searches: 1, sources: [] });
+    expect(plan.warnings).toEqual(['search-types-uk-only', 'french-not-selected']);
   });
 
   it('a CV with no recognisable job title makes no search and says so in the plan', async () => {

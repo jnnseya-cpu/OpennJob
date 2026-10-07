@@ -128,6 +128,30 @@ export default function MatchesPage() {
               your CV, for example "Site Manager", then save your profile. <Link href="/profile/">Go to Profile</Link>
             </p>
           )}
+          {plan.coverage && plan.coverage.length > 1 ? (
+            <ul className="plain small" data-testid="coverage">
+              {plan.coverage.map((c) => (
+                <li key={c.country}>
+                  <b>{countryName(c.country) ?? c.country}</b>:{' '}
+                  {c.sources.length === 0
+                    ? 'no job source covers this country yet, so OpennJob cannot search there. Jobs come only from employers who post them here.'
+                    : c.searches === 0
+                      ? 'not searched this time: the search limit was used up by the places before it. Remove a city, or ask the operator to raise the limit.'
+                      : `${c.searches} search${c.searches === 1 ? '' : 'es'} on ${c.sources.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' and ')}`}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {plan.warnings?.includes('search-types-uk-only') ? (
+            <p className="small note" data-testid="warning-search-types">
+              Jobs outside the UK are found but hidden: your search types do not include “International”. <Link href="/profile/">Change on Profile</Link>
+            </p>
+          ) : null}
+          {plan.warnings?.includes('french-not-selected') ? (
+            <p className="small note" data-testid="warning-french">
+              Adverts written in French are hidden: French is not among your languages. <Link href="/profile/">Change on Profile</Link>
+            </p>
+          ) : null}
           <div className="row">
             <button type="button" className="btn" onClick={refresh} disabled={busy !== '' || !plan.titles.length}>
               {busy === 'refresh' ? 'Looking…' : 'Look for jobs now'}

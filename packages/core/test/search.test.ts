@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homeCountry, queryKey, searchPlan, targetEmployerOf, titlesFromCv } from '../src';
+import { englishTitlesOf, homeCountry, localTitles, queryKey, roleFit, searchPlan, targetEmployerOf, titlesFromCv } from '../src';
 
 /** Searches come from the person's CV and preferences, never from a server setting. Fictional CVs. */
 const SITE_MANAGER_CV = [
@@ -78,5 +78,30 @@ describe('target employers', () => {
     expect(targetEmployerOf({ employer: 'Other Co', description: 'Client: Northgrid. Fictional.' }, names)).toEqual({ name: 'Northgrid', how: 'named' });
     expect(targetEmployerOf({ employer: 'Northgridshire Homes', description: '' }, names)).toBeUndefined();
     expect(targetEmployerOf({ employer: 'Other Co', description: '' }, undefined)).toBeUndefined();
+  });
+});
+
+describe('job titles in the language of the country', () => {
+  it('asks for the local title too where adverts are written in another language', () => {
+    expect(localTitles('site manager', 'FR')).toEqual(['conducteur de travaux']);
+    expect(localTitles('electrical engineer', 'BE')).toEqual(['ingénieur électricien', 'ingénieur électrique', 'elektrotechnisch ingenieur']);
+    expect(localTitles('site manager', 'GB')).toEqual([]);
+    expect(localTitles('a title nobody translated', 'FR')).toEqual([]);
+    const plan = searchPlan({ cvText: 'Site Manager (fictional)\nSite manager on housing schemes.', city: 'Leeds', preferences: { languages: [], countries: ['GB', 'FR', 'DE'], cities: [] } }, 10);
+    expect(plan.queries).toEqual([
+      { what: 'site manager', country: 'GB' },
+      { what: 'site manager', country: 'FR' },
+      { what: 'conducteur de travaux', country: 'FR' },
+      { what: 'site manager', country: 'DE' },
+      { what: 'bauleiter', country: 'DE' },
+    ]);
+  });
+
+  it('a title in another language fits a CV that shows the English title', () => {
+    const cv = 'Electrical Engineer (fictional)\nElectrical engineer on 400kV substations.';
+    expect(englishTitlesOf('Ingénieur Électricien H/F')).toEqual(['electrical engineer']);
+    expect(roleFit('Ingénieur électricien H/F', cv).fits).toBe(true);
+    expect(roleFit('Elektroingenieur (m/w/d)', cv).fits).toBe(true);
+    expect(roleFit('Infirmier de nuit', cv).fits).toBe(false); // a nurse post is still not this CV's field
   });
 });

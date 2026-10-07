@@ -15,6 +15,7 @@ import {
   queryKey,
   searchPlan,
   targetEmployerOf,
+  COUNTRY_LANGUAGES,
   automaticBar,
   automaticOrder,
   interviewRates,
@@ -163,10 +164,27 @@ export class OpennJobService {
   async searchPlan(userId: string) {
     const profile = await this.deps.repository.getProfile(userId);
     const plan = profile ? searchPlan(profile, this.deps.config.searchMaxQueriesPerUser ?? 6) : { titles: [], places: [], employers: [], queries: [] };
+    const sources = this.deps.searchSources ?? [];
+    const prefs = preferencesOf(profile);
+    const countries = [...new Set(plan.places.map((p) => p.country))];
+    // Per country: how many searches it gets, and which job-search APIs cover it at all.
+    const coverage = countries.map((country) => ({
+      country,
+      searches: plan.queries.filter((q) => q.country === country).length,
+      sources: sources.filter((s) => !s.countries || s.countries.includes(country)).map((s) => s.label),
+    }));
+    // Settings that hide jobs abroad even when they are found.
+    const warnings: string[] = [];
+    const abroad = countries.filter((c) => c !== 'GB');
+    if (abroad.length && prefs.searchTypes?.length && !prefs.searchTypes.includes('international')) warnings.push('search-types-uk-only');
+    const francophone = abroad.some((c) => (COUNTRY_LANGUAGES[c] ?? []).includes('fr'));
+    if (francophone && prefs.languages.length && !prefs.languages.some((l) => l.toLowerCase() === 'french')) warnings.push('french-not-selected');
     return {
       ...plan,
+      coverage,
+      warnings,
       hasProfile: Boolean(profile),
-      searchSources: (this.deps.searchSources ?? []).map((s) => ({ label: s.label, countries: s.countries ?? null })),
+      searchSources: sources.map((s) => ({ label: s.label, countries: s.countries ?? null })),
       boards: this.deps.sources.length,
     };
   }

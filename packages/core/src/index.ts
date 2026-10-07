@@ -25,3 +25,4 @@ export * from './email-apply';
 export * from './notifications';
 export * from './sources';
 export * from './outcomes';
+export * from './title-translations';

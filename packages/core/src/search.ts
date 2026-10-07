@@ -13,6 +13,7 @@
  */
 import { cityCountry } from './geo';
 import type { SearchQuery } from './sources/common';
+import { localTitles } from './title-translations';
 import type { Profile } from './types';
 
 /**
@@ -101,7 +102,13 @@ export function searchPlan(profile: Pick<Profile, 'cvText' | 'city' | 'preferenc
   for (const c of chosenCountries) if (!countriesWithCity.has(c)) places.push({ country: c });
   if (places.length === 0) places.push({ country: homeCountry(profile) });
   const queries: SearchQuery[] = [];
-  for (const what of titles) for (const p of places) if (queries.length < maxQueries) queries.push({ what, ...p });
+  // Each title in every place before the next title, so every chosen country gets the best title.
+  // Where adverts are written in another language, the local title is asked as well.
+  for (const title of titles) {
+    for (const p of places) {
+      for (const what of [title, ...localTitles(title, p.country)]) if (queries.length < maxQueries) queries.push({ what, ...p });
+    }
+  }
   // Companies: once per country (a company's jobs are fewer, so a city would miss most of them).
   const firstSpelling = new Map<string, string>();
   for (const e of (prefs?.targetEmployers ?? []).map((n) => n.trim()).filter(Boolean)) if (!firstSpelling.has(e.toLowerCase())) firstSpelling.set(e.toLowerCase(), e);
