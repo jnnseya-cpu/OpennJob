@@ -2,7 +2,7 @@ import type { LlmPort } from './llm';
 import type { MatchResult } from './matching';
 import { FRENCH_FALLBACK_OPENING } from './statement';
 import type { Job, Passport } from './types';
-import { escapeRegExp, splitSentences } from './text';
+import { escapeRegExp, splitSentences, unwrapLines } from './text';
 
 /**
  * Truthful tailoring (TAI-2) and the trace check (TAI-3).
@@ -29,18 +29,17 @@ export const HOLD_REASONS = {
 } as const;
 export type HoldReason = keyof typeof HOLD_REASONS;
 
-export function tailorCv(cvText: string, match: Pick<MatchResult, 'hits'>): string {
-  const lines = cvText.split(/\r?\n/).filter((l) => l.trim() !== '');
-  const ordered = [...match.hits.filter((h) => h.criterion.essential), ...match.hits.filter((h) => !h.criterion.essential)];
-  const first: number[] = [];
-  for (const hit of ordered) {
-    if (!hit.matched || !hit.evidence) continue;
-    const evidence = hit.evidence;
-    const i = lines.findIndex((l, n) => !first.includes(n) && l.includes(evidence));
-    if (i !== -1) first.push(i);
-  }
-  const rest = lines.map((_, n) => n).filter((n) => !first.includes(n));
-  return [...first, ...rest].map((n) => lines[n] as string).join('\n');
+/**
+ * The CV sent when it cannot be rewritten by AI (no AI, or a rewrite that did not trace): the
+ * person's own CV as written, with lines a PDF or Word conversion broke mid-sentence joined again.
+ * It is not reordered: moving lines across sections put a profile sentence above the name and
+ * bullets under the wrong employer, which reads as a broken CV. Nothing is added or dropped.
+ */
+export function tailorCv(cvText: string, _match?: Pick<MatchResult, 'hits'>): string {
+  return unwrapLines(cvText)
+    .split(/\r?\n/)
+    .filter((l) => l.trim() !== '')
+    .join('\n');
 }
 
 /** The usual CV section headings, in any case. Only these are exempt from the fact check. */

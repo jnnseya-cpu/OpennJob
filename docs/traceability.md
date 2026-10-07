@@ -59,7 +59,7 @@ Paths: `api/` is `apps/api/test/`, `web/` is `apps/web/test/e2e/`, `ext/` is
 | ID | Status | Evidence |
 |---|---|---|
 | TAI-1 statements use only CV, passport and languages | Tested | `core/statement.test.ts`, `core/preferences.test.ts` (T-03) |
-| TAI-2 tailored CV adds nothing | Tested | `core/tailoring.test.ts`, `core/cv-tailoring.test.ts`. Since 6 October 2026 (owner request) the CV is rewritten for each advert by the LLM and checked at fact level: a rewrite that adds a figure, employer, qualification or other name falls back to the CV's own lines reordered. The cover letter is the traced statement as a dated letter (`core/email-apply.test.ts`). Checked with a scripted LLM only; no real rewrite has been reviewed by a person. |
+| TAI-2 tailored CV adds nothing | Tested | `core/tailoring.test.ts`, `core/cv-tailoring.test.ts`. Since 6 October 2026 (owner request) the CV is rewritten for each advert by the LLM and checked at fact level: a rewrite that adds a figure, employer, qualification or other name falls back to the person's own CV as written (since 7 October 2026 it is no longer reordered: moving lines put a profile sentence above the name and bullets under the wrong employer). Lines a PDF conversion broke mid-sentence are joined again. The cover letter is the traced statement as a dated letter (`core/email-apply.test.ts`). Checked with a scripted LLM only; no real rewrite has been reviewed by a person. |
 | TAI-3 trace check holds failures | Tested | `core/tailoring.test.ts` (T-05), `api/spec-applying.test.ts` |
 | TAI-4 French documents for French adverts | Tested | `core/french.test.ts` |
 | TAI-5 gaps listed, not written around | Tested | `core/statement.test.ts`, `api/api.test.ts` |

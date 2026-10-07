@@ -29,9 +29,26 @@ export function keywordInText(keyword: string, text: string): boolean {
  * substring of the input (only leading bullet markers and surrounding whitespace are dropped),
  * which is what lets the fallback statement drafter guarantee it never invents text.
  */
+/**
+ * Joins lines that a PDF or Word conversion broke in the middle of a sentence: a line that does
+ * not end a sentence (no . ! ? : ;) followed by a line starting in lower case is one sentence.
+ * "leading multidisciplinary teams through the full" + "project lifecycle across ..." -> one line.
+ */
+export function unwrapLines(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const prev = out[out.length - 1];
+    if (prev !== undefined && prev.trim() && !/[.!?:;]$/.test(prev.trim()) && /^\s*\p{Ll}/u.test(line)) out[out.length - 1] = `${prev.trimEnd()} ${line.trim()}`;
+    else out.push(line);
+  }
+  return out.join('\n');
+}
+
 export function splitSentences(text: string): string[] {
   const out: string[] = [];
-  for (const line of text.split(/\r?\n+/)) {
+  for (const line of unwrapLines(text).split(/\r?\n+/)) {
     for (const part of line.split(/(?<=[.!?])\s+(?=[A-Z0-9"'(])/)) {
       const s = part.replace(/^[\s\-*•–—·]+/, '').trim();
       if (s) out.push(s);

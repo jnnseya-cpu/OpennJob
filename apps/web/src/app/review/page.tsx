@@ -272,7 +272,7 @@ function Review() {
               <details>
                 <summary>
                   CV for this job ·{' '}
-                  {app.tailoredCvSource === 'llm' ? 'rewritten by AI for this advert, every fact checked against your CV' : 'your own CV, the lines this advert asks for first'}
+                  {app.tailoredCvSource === 'llm' ? 'rewritten by AI for this advert, every fact checked against your CV' : 'your own CV as written (AI was not available to rewrite it)'}
                 </summary>
                 <pre className="fb" data-testid="tailored-cv">{app.tailoredCv}</pre>
               </details>

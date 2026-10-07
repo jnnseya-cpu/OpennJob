@@ -20,24 +20,16 @@ const MATCH = matchJob({ criteria: CRITERIA, requiresRegistration: false }, CV, 
 
 const lines = (s: string) => s.split('\n').filter(Boolean);
 
-describe('TAI-2: the tailored CV reorders the CV and adds nothing', () => {
-  it('puts the evidence for essential criteria first, then desirable, then the rest in order', () => {
+describe('TAI-2: without AI the CV sent is the person\'s own, as written, and adds nothing', () => {
+  it('keeps the CV in its own order (no line moved above the name or under another employer)', () => {
     const tailored = tailorCv(CV, MATCH);
-    expect(lines(tailored)).toEqual([
-      'Managed subcontractors and kept the programme on track.',
-      'Holds the SMSTS certificate and a CSCS black card.',
-      'Site manager with nine years on residential schemes.',
-      'Delivered a 40-home scheme for Hollin Homes (fictional) between 2019 and 2023.',
-      'Ran toolbox talks every Monday.',
-    ]);
-    // The same lines, each exactly once: nothing added, changed or dropped.
-    expect([...lines(tailored)].sort()).toEqual([...lines(CV)].sort());
+    expect(tailored).toBe(lines(CV).join('\n'));
     expect(traceCheck({ tailoredCv: tailored }, { cvText: CV })).toEqual([]);
   });
 
-  it('a CV with no evidence for any criterion comes back in its own order', () => {
-    const none = matchJob({ criteria: [crit('Tunnelling', true, ['tunnel'])], requiresRegistration: false }, CV, PASSPORT);
-    expect(tailorCv(CV, none)).toBe(lines(CV).join('\n'));
+  it('joins lines a PDF conversion broke mid-sentence, and changes nothing else', () => {
+    const broken = 'EXAMPLE PERSON (fictional)\nPROFILE\nChartered manager leading teams through the full\nproject lifecycle on rail schemes.\nEXPERIENCE\nExample Rail Ltd (fictional)';
+    expect(tailorCv(broken)).toBe('EXAMPLE PERSON (fictional)\nPROFILE\nChartered manager leading teams through the full project lifecycle on rail schemes.\nEXPERIENCE\nExample Rail Ltd (fictional)');
   });
 });
 
