@@ -14,6 +14,7 @@ import {
   SYSTEM_USER_ID,
   queryKey,
   searchPlan,
+  targetEmployerOf,
   findPackQuestion,
   findQuestion,
   inScope,
@@ -157,7 +158,7 @@ export class OpennJobService {
    */
   async searchPlan(userId: string) {
     const profile = await this.deps.repository.getProfile(userId);
-    const plan = profile ? searchPlan(profile, this.deps.config.searchMaxQueriesPerUser ?? 6) : { titles: [], places: [], queries: [] };
+    const plan = profile ? searchPlan(profile, this.deps.config.searchMaxQueriesPerUser ?? 6) : { titles: [], places: [], employers: [], queries: [] };
     return {
       ...plan,
       hasProfile: Boolean(profile),
@@ -240,7 +241,8 @@ export class OpennJobService {
     return summary;
   }
 
-  private static matchView(job: Job, match: MatchResult) {
+  private static matchView(job: Job, match: MatchResult, targetEmployers?: string[]) {
+    const target = targetEmployerOf(job, targetEmployers);
     return {
       job: {
         id: job.id,
@@ -268,6 +270,8 @@ export class OpennJobService {
       unmetEssential: match.unmetEssential,
       // The advert names a recruiter's e-mail address: the application can be sent by e-mail (no form).
       emailApply: recruiterEmailIn(job.description) !== undefined,
+      // One of the companies the person asked to search for: the advertiser, or named in the advert.
+      ...(target ? { targetEmployer: target } : {}),
       // The job title checked against the CV: otherField means the CV does not show this kind of post.
       ...(match.role && !match.role.fits ? { otherField: { role: match.role.role, missing: match.role.missing } } : {}),
       hits: match.hits.map((h) => ({ label: h.criterion.label, essential: h.criterion.essential, matched: h.matched, evidence: h.evidence, statedLanguage: h.statedLanguage })),
@@ -287,7 +291,7 @@ export class OpennJobService {
     return jobs
       .filter((job) => inScope(job, preferences))
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
-      .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences)))
+      .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
       .sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score || a.job.id.localeCompare(b.job.id))
       // The same vacancy from two sources is listed once (the first, best-scored copy).

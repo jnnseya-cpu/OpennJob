@@ -30,6 +30,8 @@ export interface MatchView {
   unmetEssential: string[];
   /** The advert names a recruiter's e-mail address, so the application can go by e-mail. */
   emailApply?: boolean;
+  /** One of the companies the person asked to search for: the advertiser, or named in the advert. */
+  targetEmployer?: { name: string; how: 'employer' | 'named' };
   /** The CV does not show this kind of post: the score is capped. */
   otherField?: { role: string; missing: string[] };
   hits: { label: string; essential: boolean; matched: boolean; evidence?: string; statedLanguage?: string }[];

@@ -4,7 +4,12 @@
  * they chose, or their home country when they chose none. Job-search APIs (Adzuna, Reed) are asked
  * these searches; employers' boards list everything and are filtered by matching instead.
  *
- * Only a job title and a place leave OpennJob in a search: no name, contact detail or CV text.
+ * The person may also name companies to search for (preferences.targetEmployers): each is asked as
+ * an exact phrase in each country searched, so adverts by that company, and adverts that name it
+ * (its contractors' jobs on its projects), are found. They are scored against the CV like any other.
+ *
+ * Only a job title or a company name, and a place, leave OpennJob in a search: no name of the
+ * person, contact detail or CV text.
  */
 import { cityCountry } from './geo';
 import type { SearchQuery } from './sources/common';
@@ -72,11 +77,16 @@ export interface SearchPlan {
   titles: string[];
   /** Places searched: chosen cities (with their country), chosen countries, else the home country. */
   places: { where?: string; country: string }[];
+  /** Companies the person asked to search for by name. */
+  employers: string[];
   queries: SearchQuery[];
 }
 
+/** At most this many company searches per person, on top of the title searches. */
+export const MAX_EMPLOYER_QUERIES = 60;
+
 /** The searches for one person, at most `maxQueries`: titles in rank order, each in every place. */
-export function searchPlan(profile: Pick<Profile, 'cvText' | 'city' | 'preferences'>, maxQueries = 6): SearchPlan {
+export function searchPlan(profile: Pick<Profile, 'cvText' | 'city' | 'preferences'>, maxQueries = 6, maxEmployerQueries = MAX_EMPLOYER_QUERIES): SearchPlan {
   const titles = titlesFromCv(profile.cvText ?? '', 5);
   const prefs = profile.preferences;
   const places: { where?: string; country: string }[] = [];
@@ -92,10 +102,30 @@ export function searchPlan(profile: Pick<Profile, 'cvText' | 'city' | 'preferenc
   if (places.length === 0) places.push({ country: homeCountry(profile) });
   const queries: SearchQuery[] = [];
   for (const what of titles) for (const p of places) if (queries.length < maxQueries) queries.push({ what, ...p });
-  return { titles, places, queries };
+  // Companies: once per country (a company's jobs are fewer, so a city would miss most of them).
+  const firstSpelling = new Map<string, string>();
+  for (const e of (prefs?.targetEmployers ?? []).map((n) => n.trim()).filter(Boolean)) if (!firstSpelling.has(e.toLowerCase())) firstSpelling.set(e.toLowerCase(), e);
+  const employers = [...firstSpelling.values()];
+  const countries = [...new Set(places.map((p) => p.country))];
+  let employerQueries = 0;
+  for (const what of employers) for (const country of countries) if (employerQueries < maxEmployerQueries) (queries.push({ what, country }), (employerQueries += 1));
+  return { titles, places, employers, queries };
 }
 
 /** The same search asked once, however many people need it. */
 export function queryKey(q: SearchQuery): string {
   return `${q.what.toLowerCase()}|${(q.where ?? '').toLowerCase()}|${q.country.toUpperCase()}`;
+}
+
+/**
+ * Which of the person's target companies a job belongs to: the advertiser itself ('employer'), or a
+ * company the advert names, such as the client of a contractor ('named'). Whole words, any case.
+ */
+export function targetEmployerOf(job: { employer: string; description: string }, names: readonly string[] | undefined): { name: string; how: 'employer' | 'named' } | undefined {
+  const re = (name: string) => new RegExp(`(?<![\\p{L}\\p{N}])${escape(name.trim()).replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'iu');
+  const list = (names ?? []).filter((n) => n.trim());
+  const own = list.find((n) => re(n).test(job.employer));
+  if (own) return { name: own, how: 'employer' };
+  const named = list.find((n) => re(n).test(job.description));
+  return named ? { name: named, how: 'named' } : undefined;
 }

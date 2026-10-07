@@ -44,6 +44,36 @@ function recordingSource(label: string, countries?: string[]): SearchSource & { 
 
 const SITE_MANAGER = { ...PROFILE, city: 'Leeds', cvText: 'Site Manager (fictional)\nSite manager for Example Homes on a 120-home scheme.\nSMSTS and CSCS Black Card.' };
 
+describe('companies the person asked to search for', () => {
+  it('each company is searched by name once per country, and its jobs are marked on Matches', async () => {
+    const adzuna = recordingSource('adzuna', ['GB']);
+    t = await createTestApp({ sources: [], searchSources: [adzuna] });
+    const preferences = { languages: [], countries: ['GB'], cities: ['London'], targetEmployers: ['Northgrid Power (fictional)', ' northgrid power (fictional) ', 'Example Build'] };
+    await t.api.put('/profile').send({ ...SITE_MANAGER, preferences }).expect(200);
+    const saved = (await t.api.get('/profile').expect(200)).body;
+    expect(saved.preferences.targetEmployers).toEqual(['Northgrid Power (fictional)', 'northgrid power (fictional)', 'Example Build']); // trimmed; the plan folds case
+    const plan = (await t.api.get('/jobs/search-plan').expect(200)).body;
+    expect(plan.employers).toEqual(['Northgrid Power (fictional)', 'Example Build']);
+    await t.api.post('/jobs/refresh').expect(200);
+    expect(adzuna.asked).toEqual([
+      { what: 'site manager', where: 'London', country: 'GB' },
+      { what: 'Northgrid Power (fictional)', country: 'GB' },
+      { what: 'Example Build', country: 'GB' },
+    ]);
+    const matches = (await t.api.get('/jobs/matches?min=0').expect(200)).body as { job: { title: string }; targetEmployer?: { name: string; how: string } }[];
+    // The fake source's adverts all come from "Example Build Ltd (fictional)".
+    expect(matches.every((m) => m.targetEmployer?.name === 'Example Build' && m.targetEmployer.how === 'employer')).toBe(true);
+  });
+
+  it('rejects too many companies or an over-long name', async () => {
+    t = await createTestApp({ sources: [] });
+    const send = (targetEmployers: string[]) => t.api.put('/profile').send({ ...SITE_MANAGER, preferences: { languages: [], countries: [], cities: [], targetEmployers } });
+    await send(Array.from({ length: 61 }, (_, i) => `Company ${i}`)).expect(400);
+    await send(['x'.repeat(81)]).expect(400);
+    await send(Array.from({ length: 60 }, (_, i) => `Company ${i}`)).expect(200);
+  });
+});
+
 describe('job search from the CV (no server keywords)', () => {
   it("a person's refresh asks for the titles in their CV, in their places; Reed only for the UK", async () => {
     const adzuna = recordingSource('adzuna', ['GB', 'FR']);

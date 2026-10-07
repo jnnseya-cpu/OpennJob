@@ -204,6 +204,7 @@ export default function MatchesPage() {
               <div className="row">
                 <span className="chip plain">{regionLabel(m.job.region)}</span>
                 <span className="chip plain">{m.job.origin === 'employer' ? 'Posted by employer' : isAdzuna(m.job) ? 'Jobs by Adzuna' : 'Found by OpennJob'}</span>
+                {m.targetEmployer ? <span className="chip">{m.targetEmployer.how === 'employer' ? m.targetEmployer.name : `Names ${m.targetEmployer.name}`}</span> : null}
                 {m.job.language === 'fr' ? <span className="chip plain">Applies in French</span> : null}
                 {m.otherField ? <span className="chip bad">Not your field: your CV does not mention {m.otherField.missing.join(', ')}</span> : null}
                 {!m.eligible ? (

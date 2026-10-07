@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homeCountry, queryKey, searchPlan, titlesFromCv } from '../src';
+import { homeCountry, queryKey, searchPlan, targetEmployerOf, titlesFromCv } from '../src';
 
 /** Searches come from the person's CV and preferences, never from a server setting. Fictional CVs. */
 const SITE_MANAGER_CV = [
@@ -54,5 +54,29 @@ describe('searchPlan', () => {
     expect(homeCountry({ city: 'Lyon' })).toBe('FR');
     expect(homeCountry({ city: 'Nowhere-in-particular' })).toBe('GB');
     expect(queryKey({ what: 'Site Manager', where: 'London', country: 'gb' })).toBe(queryKey({ what: 'site manager', where: 'london', country: 'GB' }));
+  });
+});
+
+describe('target employers', () => {
+  const cv = 'Electrical Engineer (fictional)\nElectrical engineer on 400kV substations.';
+  it('adds one search per company per country, after the titles, within its own limit', () => {
+    const plan = searchPlan({ cvText: cv, city: 'Leeds', preferences: { languages: [], countries: ['GB', 'FR'], cities: [], targetEmployers: ['Northgrid Power (fictional)', 'NORTHGRID POWER (fictional)', '  '] } }, 6);
+    expect(plan.employers).toEqual(['Northgrid Power (fictional)']);
+    expect(plan.queries.slice(-2)).toEqual([{ what: 'Northgrid Power (fictional)', country: 'GB' }, { what: 'Northgrid Power (fictional)', country: 'FR' }]);
+    const capped = searchPlan({ cvText: cv, city: 'Leeds', preferences: { languages: [], countries: [], cities: [], targetEmployers: ['A Ltd', 'B Ltd', 'C Ltd'] } }, 6, 2);
+    expect(capped.queries.filter((q) => q.what.endsWith('Ltd'))).toHaveLength(2);
+  });
+
+  it('no companies: the plan is as before', () => {
+    expect(searchPlan({ cvText: cv, city: 'Leeds' }).employers).toEqual([]);
+  });
+
+  it('tells the advertiser from a company the advert names, whole words only', () => {
+    const names = ['Northgrid', 'Example Build'];
+    expect(targetEmployerOf({ employer: 'Northgrid Power plc (fictional)', description: '' }, names)).toEqual({ name: 'Northgrid', how: 'employer' });
+    expect(targetEmployerOf({ employer: 'Example Build Ltd', description: 'Working for Northgrid on a substation.' }, names)).toEqual({ name: 'Example Build', how: 'employer' });
+    expect(targetEmployerOf({ employer: 'Other Co', description: 'Client: Northgrid. Fictional.' }, names)).toEqual({ name: 'Northgrid', how: 'named' });
+    expect(targetEmployerOf({ employer: 'Northgridshire Homes', description: '' }, names)).toBeUndefined();
+    expect(targetEmployerOf({ employer: 'Other Co', description: '' }, undefined)).toBeUndefined();
   });
 });

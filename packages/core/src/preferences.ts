@@ -12,6 +12,7 @@ export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined)
     cities: [...(p?.cities ?? [])],
     searchTypes: [...(p?.searchTypes ?? [])],
     ...(typeof p?.minScore === 'number' ? { minScore: p.minScore } : {}),
+    ...(p?.targetEmployers?.length ? { targetEmployers: [...p.targetEmployers] } : {}),
   };
 }
 

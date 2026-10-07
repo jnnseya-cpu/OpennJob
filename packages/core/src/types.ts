@@ -77,6 +77,11 @@ export interface Preferences {
   searchTypes?: SearchType[];
   /** The person's own minimum match score (50-100). The agent uses the higher of this and the platform's threshold. */
   minScore?: number;
+  /**
+   * Companies to search for by name, on top of the CV's job titles (for example an employer and the
+   * contractors it works with). Their jobs are still scored against the CV like any other.
+   */
+  targetEmployers?: string[];
 }
 
 export interface Profile {

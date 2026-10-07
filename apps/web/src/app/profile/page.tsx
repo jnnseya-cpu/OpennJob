@@ -21,6 +21,13 @@ interface Prefs {
   minScore?: number | undefined;
 }
 
+/** One company per line (or comma-separated), blanks dropped, each once. */
+function employerList(text: string): string[] {
+  const seen = new Map<string, string>();
+  for (const name of text.split(/[\n,]/).map((n) => n.trim()).filter(Boolean)) if (!seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name.slice(0, 80));
+  return [...seen.values()].slice(0, 60);
+}
+
 interface TrainingRow {
   name: string;
   completedOn: string;
@@ -68,6 +75,7 @@ export default function ProfilePage() {
   const [details, setDetails] = useState<Details>(EMPTY_DETAILS);
   const [prefs, setPrefs] = useState<Prefs>({ languages: [], countries: [], cities: [] });
   const [cityInput, setCityInput] = useState('');
+  const [employersText, setEmployersText] = useState('');
   const [cityError, setCityError] = useState('');
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string }>();
   const [savingProfile, setSavingProfile] = useState(false);
@@ -110,6 +118,7 @@ export default function ProfilePage() {
             ...(preferences?.searchTypes?.length ? { searchTypes: preferences.searchTypes } : {}),
             ...(typeof preferences?.minScore === 'number' ? { minScore: preferences.minScore } : {}),
           });
+          setEmployersText((preferences?.targetEmployers ?? []).join('\n'));
         } else {
           const me = await api<PublicUser>('/account');
           if (live) setDetails((d) => ({ ...d, email: me.email }));
@@ -230,7 +239,7 @@ export default function ProfilePage() {
     setProfileMsg(undefined);
     try {
       const { addressLine2, ...rest } = details;
-      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: { languages: prefs.languages, countries: prefs.countries, cities: prefs.cities, ...(prefs.searchTypes?.length ? { searchTypes: prefs.searchTypes } : {}), ...(prefs.minScore ? { minScore: prefs.minScore } : {}) } } });
+      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: { languages: prefs.languages, countries: prefs.countries, cities: prefs.cities, ...(prefs.searchTypes?.length ? { searchTypes: prefs.searchTypes } : {}), ...(prefs.minScore ? { minScore: prefs.minScore } : {}), ...(employerList(employersText).length ? { targetEmployers: employerList(employersText) } : {}) } } });
       setProfileMsg({ ok: true, text: 'Profile saved. Your matches use it from now on.' });
     } catch (err) {
       setProfileMsg({ ok: false, text: errorText(err) });
@@ -428,6 +437,15 @@ export default function ProfilePage() {
               </select>
             </label>
             <p className="small muted">Fewer, better-matched applications get more replies than many weak ones. The agent never goes below the platform’s threshold.</p>
+            <label className="field">
+              <span>
+                <b>Companies to search for</b> <span className="muted">(one per line)</span>
+              </span>
+              <textarea aria-label="Companies to search for" rows={5} placeholder={'For example:\nNational Grid\nBalfour Beatty'} value={employersText} onChange={(e) => setEmployersText(e.target.value)} />
+            </label>
+            <p className="small muted">
+              Every day OpennJob also searches Adzuna and Reed for each company by name: its own jobs, and contractors’ adverts that name it. They are scored against your CV like any other job. {employerList(employersText).length ? `${employerList(employersText).length} of 60.` : ''}
+            </p>
           </section>
 
           {profileMsg ? <div className={`note ${profileMsg.ok ? 'ok' : 'bad'}`} role={profileMsg.ok ? 'status' : 'alert'}>{profileMsg.text}</div> : null}
