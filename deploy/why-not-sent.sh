@@ -40,6 +40,7 @@ echo "      $withmail of your ready applications have an e-mail address in the a
 echo "== Route 2: on Workday / SuccessFactors forms (Chrome open, extension signed in, Start the queue)"
 q "select replace(key,'application-system.','') || ': ' || case when (value->>'enabled')='true' then 'ON' else 'off' end from platform_settings where key like 'application-system.%' order by 1" | sed 's/^/      /'
 echo "      Where your ready applications' links point:"
-q "select count(*) || '  ' || split_part(apply_url,'/',3) from applications where status in ('draft','confirmed') and mode='auto' group by 2 order by 1 desc limit 10" | sed 's/^/        /'
+hosts="$(q "select n || '  ' || host from (select split_part(apply_url,'/',3) as host, count(*) as n from applications where status in ('draft','confirmed') and mode='auto' group by host) h order by n desc limit 10")"
+if [ -n "$hosts" ]; then printf '%s\n' "$hosts" | sed 's/^/        /'; else echo "        (could not read them: run bash deploy/update.sh, then this again)"; fi
 echo "      Only links on myworkdayjobs.com / successfactors (with the system ON) go out on a form."
 echo "      For a Reed or Adzuna link: Tracker > 'Ready, but you apply' > paste the employer's application page."
