@@ -427,7 +427,7 @@ opennjob/
     src/fields.ts             form-field classification (sensitive? which data goes in?), English and French labels
     src/interview.ts          healthcare bank, per-pack bank, STAR prompt, heuristic scorer
     src/passport.ts           credential accessors, training-expiry checks (injectable clock)
-    src/llm.ts                LlmPort, AnthropicLlm, FakeLlm
+    src/llm.ts llm-gemini.ts  LlmPort, FakeLlm; GeminiLlm (Google Gemini, the only AI)
     src/usage.ts              UsageMeter (ACU), in-memory meter, BitriPayBillingPort (seam)
     src/events.ts             EventBus, in-process implementation
     src/repository.ts         Repository interface, in-memory implementation
@@ -737,8 +737,8 @@ employer accounts, and nothing checks who the employer is or moderates what is p
 | Candidate web app | `apps/web`, tested in headless Chromium against the built API. Never deployed, never used by a real person, never tried on a real phone. No content-security policy is configured for it (Next.js inlines scripts, so a policy needs `'unsafe-inline'` or nonces; not done). |
 | Encryption | CV text, passport and statements only, and only in PostgreSQL. One key, no rotation. |
 | Terms and privacy notice | The versions accepted at registration (`draft-1`) refer to documents that do not exist. |
-| LLM | `AnthropicLlm` uses the official `@anthropic-ai/sdk`, but **no real call to Anthropic has been made by this code** (no API key was available where it was built). Its request/response mapping is tested with a stub client. |
-| Model name | `OPENNJOB_MODEL`, default `claude-opus-5-5` (Claude Opus 5.5, the current default Claude model as of 6 October 2026), at `OPENNJOB_LLM_EFFORT` (default `medium`). Requests leave room for the model's thinking, use the server-side refusal fallback, and treat a refusal as a failed call, so the no-AI draft is used. Checked against the real SDK with a local stand-in server; no real Anthropic call has been made from this repository. `deploy/set-keys.sh claude` adds the key on the server and checks it with a model lookup (no cost). |
+| LLM | `GeminiLlm` (Google Gemini, the only AI since 8 October 2026; Claude was removed as too expensive) calls Gemini's OpenAI-compatible address with `fetch`. Its request and answer mapping is tested with a stub; `deploy/check-ai.sh` makes one real call on the server. |
+| Model name | `OPENNJOB_LLM_MODEL`, default `gemini-2.5-flash` (as remembered, not confirmed here). Requests leave room for the model's thinking; an error or an empty answer counts as a failed call, so the no-AI draft is used. `deploy/set-keys.sh gemini` adds the key on the server and makes one test call. |
 | Billing | `UsageMeter` records ACU per LLM call (in the `usage_records` table with PostgreSQL). The ACU formula (1 ACU per 1,000 tokens) is a placeholder. `BitriPayBillingPort` is an interface with **no implementation**; it states what OpennJob needs and does not describe BitriPay's real API. |
 | Events | In-process `EventBus`. Events are also appended to the event log (the `events` table with PostgreSQL). |
 | CV input | Pasted text, or a PDF or Word (.docx) file turned into text for the person to check (`pdfjs-dist`, `mammoth`). Scanned PDFs give no text; there is no OCR. |
@@ -808,7 +808,7 @@ employer accounts, and nothing checks who the employer is or moderates what is p
   `apps/extension/test/fixtures/`. It has not been tried on NHS Jobs, Trac, any NHS
   trust's site, any agency site or any applicant tracking system. Real forms will break
   it in ways the fixtures do not.
-- **A real Anthropic call**, as above.
+- **A real Gemini call**, as above (`deploy/check-ai.sh`).
 - **Chrome Web Store requirements.** Not reviewed.
 - **Node 20.** `engines` says Node 20 or newer and nothing newer is used on purpose, but
   it was only run on Node 22.22.
@@ -857,7 +857,7 @@ OpennJob handles personal data, and some of the most sensitive kinds.
   the user's behalf, with a plain explanation of each mode; write a privacy notice;
   register with the ICO if not already registered.
 - **LLM provider.** With an LLM configured, CV text and job adverts are sent to
-  Anthropic. That makes Anthropic a processor: a data processing agreement, a check on
+  Google (Gemini). That makes Google a processor: a data processing agreement, a check on
   where data is processed (international transfers), and their retention and training
   settings all need confirming. Tell users plainly that their CV is sent to an AI
   provider.
@@ -933,7 +933,7 @@ not copy:
 
 1. Check the five job-source adapters against the live APIs and their terms of use,
    including which countries Adzuna really supports.
-2. Make one real Anthropic call end to end; confirm the model name; review statement
+2. Make one real Gemini call end to end; confirm the model name; review statement
    quality with real nurses' CVs (with their consent).
 3. A real sending domain with SPF and DKIM, then one verification e-mail and one 09:00
    report to a real inbox. Try the web app on real phones; decide on the Next.js version

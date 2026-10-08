@@ -115,22 +115,21 @@ describe('createDefaultDeps', () => {
     expect(deps.sources).toEqual([]);
   });
 
-  it('configures the Anthropic LLM when a key and model are present (no call is made)', () => {
-    const deps = createDefaultDeps({ OPENNJOB_JWT_SECRET: 't', ANTHROPIC_API_KEY: 'sk-test-not-real', OPENNJOB_MODEL: 'some-model' }, noFetch, silentLogger);
+  it('configures Gemini when its key and model are present (no call is made); a Claude key alone configures nothing', () => {
+    const deps = createDefaultDeps({ OPENNJOB_JWT_SECRET: 't', GEMINI_API_KEY: 'g-test-not-real', OPENNJOB_LLM_MODEL: 'some-model' }, noFetch, silentLogger);
     expect((deps.llm as { model?: string } | undefined)?.model).toBe('some-model');
+    expect(createDefaultDeps({ OPENNJOB_JWT_SECRET: 't', ANTHROPIC_API_KEY: 'sk-test-not-real' }, noFetch, silentLogger).llm).toBeUndefined();
   });
 });
 
-describe('buildLlm: which AI the API uses', () => {
-  it('Gemini or OpenAI when chosen and keyed; Claude by default; none without a key', async () => {
-    const { AnthropicLlm, OpenAiCompatibleLlm } = await import('@opennjob/core');
-    const gemini = buildLlm({ OPENNJOB_LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'g-not-a-secret', ANTHROPIC_API_KEY: 'sk-ant-not-a-secret' });
-    expect(gemini).toBeInstanceOf(OpenAiCompatibleLlm);
-    expect(gemini).toMatchObject({ provider: 'gemini', model: 'gemini-2.5-flash' });
-    expect(buildLlm({ OPENNJOB_LLM_PROVIDER: 'OpenAI', OPENAI_API_KEY: 'o', OPENNJOB_LLM_MODEL: 'example-model', OPENNJOB_MODEL: 'claude-opus-5-5' })).toMatchObject({ provider: 'openai', model: 'example-model' });
-    expect(buildLlm({ OPENNJOB_LLM_PROVIDER: 'gemini' })).toBeUndefined(); // chosen but no key: no AI
-    expect(buildLlm({ ANTHROPIC_API_KEY: 'sk-ant-not-a-secret' })).toBeInstanceOf(AnthropicLlm);
+describe('buildLlm: Gemini is the only AI', () => {
+  it('Gemini when its key is set, with the chosen model; none without it; a Claude key does nothing', async () => {
+    const { GeminiLlm } = await import('@opennjob/core');
+    const gemini = buildLlm({ GEMINI_API_KEY: 'g-not-a-secret' });
+    expect(gemini).toBeInstanceOf(GeminiLlm);
+    expect(gemini).toMatchObject({ model: 'gemini-2.5-flash' });
+    expect(buildLlm({ GEMINI_API_KEY: 'g', OPENNJOB_LLM_MODEL: 'example-model' })).toMatchObject({ model: 'example-model' });
+    expect(buildLlm({ ANTHROPIC_API_KEY: 'sk-ant-not-a-secret' })).toBeUndefined();
     expect(buildLlm({})).toBeUndefined();
   });
 });
-

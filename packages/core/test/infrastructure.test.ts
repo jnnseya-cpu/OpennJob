@@ -1,17 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  AnthropicLlm,
   FakeLlm,
   InMemoryRepository,
   InMemoryUsageMeter,
   InProcessEventBus,
-  DEFAULT_MODEL,
-  LlmRefusalError,
-  THINKING_HEADROOM_TOKENS,
   computeAcu,
   meteredLlm,
 } from '../src';
-import type { AnthropicMessagesClient, Application, DomainEvent, Job } from '../src';
+import type { Application, DomainEvent, Job } from '../src';
 import { PASSPORT, PROFILE } from './fixtures/cv';
 
 describe('FakeLlm', () => {
@@ -22,76 +18,6 @@ describe('FakeLlm', () => {
     expect(a).toEqual(b);
     expect(a).toEqual({ text: 'reply to hello', inputTokens: 2, outputTokens: 4 });
     expect(llm.calls).toHaveLength(2);
-  });
-});
-
-describe('AnthropicLlm (stub client, no network)', () => {
-  const stub = (reply: { stop_reason?: string } = {}) => {
-    const create = vi.fn(async () => ({
-      content: [{ type: 'thinking' }, { type: 'text', text: 'Hello ' }, { type: 'tool_use' }, { type: 'text', text: 'world' }],
-      stop_reason: reply.stop_reason ?? 'end_turn',
-      usage: { input_tokens: 12, output_tokens: 3 },
-    }));
-    return { client: { beta: { messages: { create } } } as unknown as AnthropicMessagesClient, create };
-  };
-
-  it('sends the prompt with room for thinking, an explicit effort and the refusal fallback; returns only the text', async () => {
-    const { client, create } = stub();
-    const llm = new AnthropicLlm({ client, model: 'claude-opus-5-5' });
-    const res = await llm.complete({ system: 'SYS', prompt: 'PROMPT', maxTokens: 900 });
-    expect(create).toHaveBeenCalledWith({
-      model: 'claude-opus-5-5',
-      max_tokens: 900 + THINKING_HEADROOM_TOKENS,
-      system: 'SYS',
-      messages: [{ role: 'user', content: 'PROMPT' }],
-      output_config: { effort: 'medium' },
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-    });
-    expect(res).toEqual({ text: 'Hello world', inputTokens: 12, outputTokens: 3 });
-  });
-
-  it('sends no fallback for a model that does not take it', async () => {
-    const { client, create } = stub();
-    await new AnthropicLlm({ client, model: 'claude-haiku-4-5', effort: 'low' }).complete({ system: 'S', prompt: 'P', maxTokens: 10 });
-    const body = (create.mock.calls[0] as unknown[] | undefined)?.[0] as Record<string, unknown>;
-    expect(body).toMatchObject({ model: 'claude-haiku-4-5', output_config: { effort: 'low' } });
-    expect(body).not.toHaveProperty('fallbacks');
-    expect(body).not.toHaveProperty('betas');
-  });
-
-  it('a refusal is an error with no content in it, so callers use the no-AI path', async () => {
-    const { client } = stub({ stop_reason: 'refusal' });
-    const err = await new AnthropicLlm({ client }).complete({ system: 'S', prompt: 'P', maxTokens: 10 }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(LlmRefusalError);
-    expect((err as Error).message).toBe('The AI model declined this request');
-  });
-
-  it('reads the model and effort from OPENNJOB_MODEL and OPENNJOB_LLM_EFFORT', () => {
-    vi.stubEnv('OPENNJOB_MODEL', 'model-from-env');
-    vi.stubEnv('OPENNJOB_LLM_EFFORT', 'high');
-    try {
-      const llm = new AnthropicLlm({ client: stub().client });
-      expect(llm.model).toBe('model-from-env');
-      expect(llm.effort).toBe('high');
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it('defaults to Claude Opus 5.5 at medium effort; a bad effort value warns and uses medium', () => {
-    vi.stubEnv('OPENNJOB_MODEL', '');
-    vi.stubEnv('OPENNJOB_LLM_EFFORT', 'extreme');
-    try {
-      const warn = vi.fn();
-      const llm = new AnthropicLlm({ client: stub().client, warn });
-      expect(DEFAULT_MODEL).toBe('claude-opus-5-5');
-      expect(llm.model).toBe(DEFAULT_MODEL);
-      expect(llm.effort).toBe('medium');
-      expect(warn).toHaveBeenCalledOnce();
-    } finally {
-      vi.unstubAllEnvs();
-    }
   });
 });
 

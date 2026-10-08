@@ -28,4 +28,4 @@ export * from './outcomes';
 export * from './title-translations';
 export * from './pay';
 export * from './own-answers';
-export * from './llm-openai';
+export * from './llm-gemini';

@@ -223,9 +223,9 @@ Every item here is open. None has a workaround in the code.
       fictional forms in `apps/extension/test/fixtures/`, in automated headless Chromium.
       Nobody has loaded it into desktop Chrome by hand. Real forms (multi-page, file
       upload, iframes, custom widgets) will break it.
-- [ ] **LLM API key and model name are not confirmed.** No call to Anthropic has ever
-      been made by this code. `OPENNJOB_MODEL` has no verified value; the fallback
-      constant is a placeholder. Statement quality from a real model is unknown.
+- [ ] **The Gemini key and model name are not confirmed.** Claude was removed (owner, 8 October
+      2026); Google Gemini is the only AI. No call to Gemini has been made by this code here;
+      `deploy/check-ai.sh` makes one on the server. Statement quality from Gemini is unknown.
 - [ ] **Production files for one server exist and were never run**: `docker-compose.prod.yml`,
       `deploy/web.Dockerfile`, `deploy/Caddyfile`, `deploy/hostinger-vps.md`. `docker compose config`
       validates the file; the same-origin `/api` layout is tested with a proxy in `same-origin.spec.ts`;
@@ -300,7 +300,7 @@ Every item here is open. None has a workaround in the code.
       and agency sites, applicant tracking systems). Some sites forbid automated form
       filling as well as scraping.
 - [ ] Data processing agreement and international-transfer check with the LLM provider
-      (CV text and job adverts are sent to Anthropic when an LLM key is set), and with
+      (CV text and job adverts are sent to Google when a Gemini key is set), and with
       the hosting provider.
 - [ ] Lawful basis, retention periods, and a process for data-subject requests beyond
       the two routes that exist (export and delete). No named data protection lead.
@@ -333,7 +333,7 @@ Every item here is open. None has a workaround in the code.
 Privacy policy and terms; DPIA; ICO check; the web app deployed behind TLS with a
 content-security policy, and tried on real phones; a real sending domain with SPF and DKIM; hosting with TLS, backups that
 have been restored once, and alerting; key management for `OPENNJOB_DATA_KEY`; an
-independent security test; one real Anthropic call and a confirmed model name; the job
+independent security test; one real Gemini call and a confirmed model name; the job
 sources checked against the live APIs and their terms; the extension tried by hand on
 real forms, in hybrid mode, with the site's permission where its terms require it; and
 auto mode left switched off until hybrid has a track record.

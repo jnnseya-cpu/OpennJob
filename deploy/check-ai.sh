@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Is the AI (Claude, Gemini or OpenAI) really working for OpennJob? As root on the server:
+# Is the AI (Google Gemini) really working for OpennJob? As root on the server:
 #
 #   cd /opt/opennjob && bash deploy/check-ai.sh
 #
@@ -14,12 +14,10 @@ echo "== Settings the API is running with"
 ./oj exec -T api node -e '
 const { loadConfig, limitsOf } = require("/app/apps/api/dist/deps.js");
 const c = loadConfig(process.env), l = limitsOf(c);
-const provider = (process.env.OPENNJOB_LLM_PROVIDER || "").trim().toLowerCase() || "anthropic";
-const keyName = provider === "gemini" ? "GEMINI_API_KEY" : provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
-const key = (process.env[keyName] || "").trim();
-console.log("  AI provider:    " + provider);
-console.log("  key:            " + (key ? "set (" + key.length + " characters, starts " + key.slice(0, 5) + "...)" : "NOT SET: bash deploy/set-keys.sh " + (provider === "anthropic" ? "claude" : provider)));
-console.log("  model:          " + ((provider === "anthropic" ? process.env.OPENNJOB_MODEL : process.env.OPENNJOB_LLM_MODEL) || "(default)"));
+const key = (process.env.GEMINI_API_KEY || "").trim();
+console.log("  AI:             Google Gemini");
+console.log("  key:            " + (key ? "set (" + key.length + " characters, starts " + key.slice(0, 5) + "...)" : "NOT SET: bash deploy/set-keys.sh gemini"));
+console.log("  model:          " + (process.env.OPENNJOB_LLM_MODEL || "(default)"));
 const cap = (n) => (Number.isFinite(n) ? n + " units a day" : "unlimited");
 console.log("  daily allowance per person: " + cap(l.llmDailyAcuPerUser) + "; everyone: " + cap(l.llmDailyAcuTotal));
 console.log("  AI reads job requirements:  " + (c.llmCriteria ? "yes" : "no"));
@@ -36,7 +34,7 @@ echo "== One real call to the AI"
 ./oj exec -T api node -e '
 const { buildLlm } = require("/app/apps/api/dist/deps.js");
 const llm = buildLlm(process.env);
-if (!llm) { console.log("  NO  no AI key for the chosen provider"); process.exit(0); }
+if (!llm) { console.log("  NO  no Gemini key: bash deploy/set-keys.sh gemini"); process.exit(0); }
 const t = Date.now();
 llm.complete({ system: "Reply with the single word OK.", prompt: "Say OK.", maxTokens: 16 })
   .then((r) => console.log("  OK  the AI answered (" + (r.text || "").trim().slice(0, 10) + ") in " + ((Date.now() - t) / 1000).toFixed(1) + "s with model " + llm.model))
