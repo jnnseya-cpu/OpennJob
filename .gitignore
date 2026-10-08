@@ -40,3 +40,4 @@ career-agent/.venv/
 # Research notes and reports written during sessions (not part of the product)
 /research_notes/
 /reports/
+career-sites.log

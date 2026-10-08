@@ -15,6 +15,8 @@ import {
   createReedSearch,
   createReliefWebSearch,
   createJoobleSearch,
+  createCareerSiteSearch,
+  parseCareerSites,
   parseJoobleKeys,
   createSampleSource,
   systemClock,
@@ -305,6 +307,12 @@ export function buildSearchSources(env: Env, fetchFn: FetchLike): SearchSource[]
   // Jooble: one key per country site ("AE:key,SA:key"), for countries Adzuna and Reed do not cover.
   const joobleKeys = parseJoobleKeys(env.JOOBLE_API_KEYS);
   if (Object.keys(joobleKeys).length) out.push(createJoobleSearch({ keys: joobleKeys, fetch: fetchFn }));
+  // Employers' own careers sites (Workday, SuccessFactors), each listed by the operator after its
+  // terms were checked (deploy/add-career-site.sh). Every job comes with the employer's own page.
+  const careerSites = parseCareerSites(env.OPENNJOB_CAREER_SITES);
+  for (const kind of ['workday', 'successfactors'] as const) {
+    if (careerSites.some((c) => c.kind === kind)) out.push(createCareerSiteSearch({ kind, sites: careerSites, fetch: fetchFn }));
+  }
   return out;
 }
 

@@ -8,7 +8,7 @@ import { classifyPack } from '../packs';
 export type FetchLike = (
   url: string,
   init?: { method?: string; headers?: Record<string, string>; body?: string },
-) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; text?(): Promise<string> }>;
 
 export interface JobSourceAdapter {
   readonly name: JobSource;
@@ -67,6 +67,18 @@ export async function postJson(fetchFn: FetchLike, source: string, url: string, 
   } catch {
     throw new SourceError(source, 'response was not JSON');
   }
+}
+
+export async function getText(fetchFn: FetchLike, source: string, url: string): Promise<string> {
+  let res;
+  try {
+    res = await fetchFn(url, { method: 'GET', headers: { Accept: 'application/rss+xml, application/xml, text/xml' } });
+  } catch (err) {
+    throw new SourceError(source, `request failed (${err instanceof Error ? err.message : 'unknown error'})`);
+  }
+  if (!res.ok) throw new SourceError(source, `HTTP ${res.status}`, res.status);
+  if (!res.text) throw new SourceError(source, 'response could not be read as text');
+  return res.text();
 }
 
 export async function getJson(fetchFn: FetchLike, source: string, url: string, headers?: Record<string, string>): Promise<unknown> {

@@ -85,6 +85,10 @@ describe('buildSearchSources: the job-search APIs take only keys; what they are 
     expect(both.map((s) => s.label)).toEqual(['reliefweb', 'jooble']);
     expect(both[1]?.countries).toEqual(['AE', 'SA']); // asked only where a country key exists
     expect(buildSearchSources({ OPENNJOB_RELIEFWEB_APPNAME: '  ', JOOBLE_API_KEYS: 'not a key list' }, noFetch)).toEqual([]);
+    // Employers' careers sites only when the operator listed them, one source per kind.
+    const sites = buildSearchSources({ OPENNJOB_CAREER_SITES: 'https://examplegrid.wd3.myworkdayjobs.com/en-GB/Careers|Example Grid (fictional)|GB, https://jobs.example.org|Example Build (fictional)|AE' }, noFetch);
+    expect(sites.map((s) => [s.label, s.countries])).toEqual([['workday', ['GB']], ['successfactors', ['AE']]]);
+    expect(buildSearchSources({ OPENNJOB_CAREER_SITES: 'http://not-https.example.org|X|GB' }, noFetch)).toEqual([]);
   });
 
   it('ignores the old server-wide search settings: the query is the one it is given', async () => {
