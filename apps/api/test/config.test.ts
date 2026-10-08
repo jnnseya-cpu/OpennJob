@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryRepository } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
 import { silentLogger } from '../src/logging';
-import { buildSearchSources, buildSources, createDefaultDeps, loadConfig } from '../src/deps';
+import { buildLlm, buildSearchSources, buildSources, createDefaultDeps, loadConfig } from '../src/deps';
 
 const noFetch: FetchLike = async () => { throw new Error('tests must not make live calls'); };
 
@@ -120,3 +120,17 @@ describe('createDefaultDeps', () => {
     expect((deps.llm as { model?: string } | undefined)?.model).toBe('some-model');
   });
 });
+
+describe('buildLlm: which AI the API uses', () => {
+  it('Gemini or OpenAI when chosen and keyed; Claude by default; none without a key', async () => {
+    const { AnthropicLlm, OpenAiCompatibleLlm } = await import('@opennjob/core');
+    const gemini = buildLlm({ OPENNJOB_LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'g-not-a-secret', ANTHROPIC_API_KEY: 'sk-ant-not-a-secret' });
+    expect(gemini).toBeInstanceOf(OpenAiCompatibleLlm);
+    expect(gemini).toMatchObject({ provider: 'gemini', model: 'gemini-2.5-flash' });
+    expect(buildLlm({ OPENNJOB_LLM_PROVIDER: 'OpenAI', OPENAI_API_KEY: 'o', OPENNJOB_LLM_MODEL: 'example-model', OPENNJOB_MODEL: 'claude-opus-5-5' })).toMatchObject({ provider: 'openai', model: 'example-model' });
+    expect(buildLlm({ OPENNJOB_LLM_PROVIDER: 'gemini' })).toBeUndefined(); // chosen but no key: no AI
+    expect(buildLlm({ ANTHROPIC_API_KEY: 'sk-ant-not-a-secret' })).toBeInstanceOf(AnthropicLlm);
+    expect(buildLlm({})).toBeUndefined();
+  });
+});
+

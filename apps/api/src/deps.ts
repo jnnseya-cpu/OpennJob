@@ -5,6 +5,7 @@ import type { SmtpSettings } from './notifications';
 import type { EmailSender, Notifier } from './notifications';
 import {
   AnthropicLlm,
+  OpenAiCompatibleLlm,
   InMemoryRepository,
   InMemoryUsageMeter,
   InProcessEventBus,
@@ -362,8 +363,26 @@ export function createDefaultDeps(env: Env = process.env, fetchFn: FetchLike = t
   if (resendKey && emailFrom) deps.emailSender = resendEmail(resendKey, emailFrom);
   else if (smtp) deps.emailSender = smtpEmail(smtp);
   else if (config.devMailboxDir && !isProduction(env)) deps.emailSender = fileMailbox(config.devMailboxDir);
-  if ((env.ANTHROPIC_API_KEY ?? '').trim()) {
-    deps.llm = new AnthropicLlm({ apiKey: env.ANTHROPIC_API_KEY as string, ...(env.OPENNJOB_MODEL ? { model: env.OPENNJOB_MODEL } : {}) });
-  }
+  const llm = buildLlm(env);
+  if (llm) deps.llm = llm;
   return deps;
+}
+
+/**
+ * The AI the API uses: OPENNJOB_LLM_PROVIDER picks gemini (GEMINI_API_KEY), openai (OPENAI_API_KEY)
+ * or anthropic (ANTHROPIC_API_KEY, the default when it is set). OPENNJOB_LLM_MODEL chooses the
+ * model for Gemini or OpenAI; OPENNJOB_MODEL stays Claude's. No key for the chosen provider: no AI,
+ * and the no-AI drafts are used.
+ */
+export function buildLlm(env: Env): LlmPort | undefined {
+  const provider = (env.OPENNJOB_LLM_PROVIDER ?? '').trim().toLowerCase();
+  const model = (env.OPENNJOB_LLM_MODEL ?? '').trim();
+  if (provider === 'gemini' || provider === 'openai') {
+    const key = (provider === 'gemini' ? env.GEMINI_API_KEY : env.OPENAI_API_KEY ?? '')?.trim() ?? '';
+    return key ? new OpenAiCompatibleLlm({ provider, apiKey: key, ...(model ? { model } : {}) }) : undefined;
+  }
+  if ((env.ANTHROPIC_API_KEY ?? '').trim()) {
+    return new AnthropicLlm({ apiKey: env.ANTHROPIC_API_KEY as string, ...(env.OPENNJOB_MODEL ? { model: env.OPENNJOB_MODEL } : {}) });
+  }
+  return undefined;
 }

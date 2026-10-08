@@ -4,6 +4,8 @@
 #
 #   cd /opt/opennjob
 #   bash deploy/set-keys.sh claude     # Anthropic API key (Claude): drafts, criteria, interview feedback
+#   bash deploy/set-keys.sh gemini     # or Google Gemini instead of Claude (key from aistudio.google.com)
+#   bash deploy/set-keys.sh openai     # or OpenAI instead of Claude (key from platform.openai.com)
 #   bash deploy/set-keys.sh adzuna     # Adzuna job search API (free developer key)
 #   bash deploy/set-keys.sh reed       # Reed job search API (free developer key)
 #   bash deploy/set-keys.sh boards     # employers' own boards on Greenhouse / Lever / Ashby (no key)
@@ -58,6 +60,18 @@ const Anthropic = require("@anthropic-ai/sdk").default; const c = new Anthropic(
 c.models.retrieve(process.env.OPENNJOB_MODEL).then(
   (m) => console.log("Claude key OK; model " + m.id + " is available. AI drafting is on."),
   (e) => { console.log("Claude check FAILED (" + (e.status || e.name) + "): check the key in the Anthropic Console and the model name, then run this again."); process.exit(1); });'
+    ;;
+  gemini|openai)
+    P="$1"
+    if [ "$P" = gemini ]; then NAME="Google Gemini"; VAR=GEMINI_API_KEY; DEF=gemini-2.5-flash; else NAME="OpenAI"; VAR=OPENAI_API_KEY; DEF=gpt-4.1-mini; fi
+    KEY="$(ask_secret "$NAME API key")"
+    [ -n "$KEY" ] || { echo "No key given. Nothing changed." >&2; exit 1; }
+    MODEL="$(ask 'Model' "$(current OPENNJOB_LLM_MODEL | grep . || echo $DEF)")"
+    set_values OPENNJOB_LLM_PROVIDER "$P" "$VAR" "$KEY" OPENNJOB_LLM_MODEL "$MODEL"
+    unset KEY
+    restart
+    echo "== $NAME is now OpennJob's AI (Claude's key, if any, is kept but not used). Checking with one tiny call:"
+    bash deploy/check-ai.sh | sed -n '/One real call/,$p'
     ;;
   adzuna)
     confirm_terms "Adzuna" "https://developer.adzuna.com (API terms)"
