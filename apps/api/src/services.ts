@@ -42,7 +42,7 @@ import {
   zonedDayStart,
   nextZonedDayStart,
 } from '@opennjob/core';
-import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Profile, QuestionCategory, SearchQuery, WorkRightsRecord } from '@opennjob/core';
+import type { Application, HealthcareRole, Job, LlmPort, MatchResult, Mode, PackId, Passport, Preferences, Profile, QuestionCategory, SearchQuery, WorkRightsRecord } from '@opennjob/core';
 import { DEPS, applyThresholdOf, limitsOf } from './deps';
 import type { OpennJobDeps } from './deps';
 import type {
@@ -219,6 +219,15 @@ export class OpennJobService {
     let llmExtracted = 0;
 
     const llm = this.deps.config.llmCriteria ? this.llmFor(userId, 'criteria-extraction') : undefined;
+    // AI reads the requirements only of jobs inside someone's preferences (countries, cities,
+    // languages, search types): the rest are never shown or applied for, and reading them made the
+    // morning run take hours.
+    const scopes: Preferences[] = [];
+    for (const id of userId === SYSTEM_USER_ID ? await this.deps.repository.listUserIds() : [userId]) {
+      const profile = await this.deps.repository.getProfile(id);
+      if (profile) scopes.push(preferencesOf(profile));
+    }
+    const wanted = (job: Job) => scopes.length === 0 || scopes.some((p) => inScope(job, p));
     if (llm) {
       const enriched: Job[] = [];
       for (const job of jobs) {
@@ -234,7 +243,7 @@ export class OpennJobService {
             requiresRegistration: existing.requiresRegistration,
             ...(existing.requiredCredential ? { requiredCredential: existing.requiredCredential } : {}),
           });
-        } else if (llmExtracted < this.deps.config.llmCriteriaMaxJobs) {
+        } else if (llmExtracted < this.deps.config.llmCriteriaMaxJobs && wanted(job)) {
           const extracted = await extractCriteria(job.description, llm, job.title);
           if (extracted.source === 'llm') llmExtracted += 1;
           const requiredCredential = job.requiredCredential ?? extracted.requiredCredential;

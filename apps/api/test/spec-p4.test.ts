@@ -390,6 +390,23 @@ describe('NFR-4: a failed discovery source raises one operator alert per hour', 
     expect((await t.deps.repository.listApplications(USER_ID)).length).toBeGreaterThan(0);
     expect((await t.deps.repository.listEvents(SYSTEM_USER_ID)).map((e) => e.type)).toContain('jobs.refreshed');
   });
+
+  it('a discovery cut short by a restart runs again once it has been silent for three hours, and not while it may still be running', async () => {
+    const time = movable('2026-10-06T05:00:00.000Z'); // 06:00 London
+    t = await createTestApp({ sources: [createSampleSource()], clock: time.clock });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    await t.api.put('/passport').send(PASSPORT).expect(200);
+    // The server restarted during the 06:00 run: it was marked started, never finished.
+    await t.deps.repository.setPlatformSetting('discovery.started.2026-10-06', '2026-10-06T05:00:00.000Z');
+    await t.deps.repository.claimOnce('discovery:2026-10-06:first', '2026-10-06T05:00:00.000Z');
+    const scheduler = t.app.get(Scheduler);
+    time.set('2026-10-06T06:30:00.000Z');
+    expect(await scheduler.tick()).not.toContain('discovery'); // it may still be running
+    time.set('2026-10-06T08:01:00.000Z');
+    expect(await scheduler.tick()).toContain('discovery'); // silent for three hours: run again
+    expect(await scheduler.tick()).not.toContain('discovery'); // finished: once for the day
+    expect((await t.deps.repository.listApplications(USER_ID)).length).toBeGreaterThan(0);
+  });
 });
 
 describe('DP-5: records older than the retention period are deleted', () => {

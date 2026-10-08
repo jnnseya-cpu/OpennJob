@@ -20,6 +20,9 @@ import { OpennJobService } from './services';
  * Each job runs once per London day: a claim in the database decides which instance does it.
  * A failed discovery, agent run or report raises an operator alert at once (NFR-4).
  */
+/** A discovery that has not finished after this long was cut short (a restart) and is started again. */
+export const DISCOVERY_STALE_MS = 3 * 3_600_000;
+
 @Injectable()
 export class Scheduler implements OnApplicationShutdown {
   private timer: NodeJS.Timeout | undefined;
@@ -59,8 +62,11 @@ export class Scheduler implements OnApplicationShutdown {
     if (hour >= 3 && this.deps.config.retentionDays && (await this.deps.repository.claimOnce(`retention:${date}`, this.now()))) {
       await this.retention(); ran.push('retention');
     }
-    if (hour >= 6 && (await this.deps.repository.claimOnce(`discovery:${date}`, this.now()))) {
-      await this.discovery(); ran.push('discovery');
+    if (hour >= 6 && (await this.discoveryDue(date))) {
+      await this.deps.repository.setPlatformSetting(`discovery.started.${date}`, this.now());
+      await this.discovery();
+      await this.deps.repository.setPlatformSetting(`discovery.done.${date}`, this.now());
+      ran.push('discovery');
     }
     if (hour >= 9) {
       for (const userId of await this.deps.repository.listUserIds()) {
@@ -70,6 +76,19 @@ export class Scheduler implements OnApplicationShutdown {
       }
     }
     return ran;
+  }
+
+  /**
+   * The day's discovery is due until it has finished. A run cut short (the server restarted during
+   * it, e.g. for an update) is started again once it has been silent for DISCOVERY_STALE_MS; a run
+   * still going is not started twice.
+   */
+  private async discoveryDue(date: string): Promise<boolean> {
+    if (await this.deps.repository.getPlatformSetting<string>(`discovery.done.${date}`)) return false;
+    const started = await this.deps.repository.getPlatformSetting<string>(`discovery.started.${date}`);
+    if (started && this.deps.clock().getTime() - Date.parse(started) < DISCOVERY_STALE_MS) return false;
+    // One claim per attempt, so two instances never start the same attempt.
+    return this.deps.repository.claimOnce(`discovery:${date}:${started ?? 'first'}`, this.now());
   }
 
   async retention(): Promise<Record<string, number>> {
