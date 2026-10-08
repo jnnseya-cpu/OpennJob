@@ -16,6 +16,8 @@ import {
   searchPlan,
   targetEmployerOf,
   isEmployerLink,
+  payExpectationOf,
+  payFits,
   hasWayOut,
   COUNTRY_LANGUAGES,
   automaticBar,
@@ -360,9 +362,10 @@ export class OpennJobService {
     const profile = await this.getProfile(userId);
     const preferences = preferencesOf(profile);
     const passport = await this.deps.repository.getPassport(userId);
+    const pay = payExpectationOf(await this.deps.repository.getScreeningAnswers(userId));
     const jobs = await this.deps.repository.listJobs();
     return jobs
-      .filter((job) => inScope(job, preferences))
+      .filter((job) => inScope(job, preferences) && payFits(job, pay))
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
@@ -581,6 +584,19 @@ export class OpennJobService {
     const jobs = await this.deps.repository.listJobs();
 
     const jobsById = new Map(jobs.map((j) => [j.id, j]));
+    // A job that states pay under the person's expectation (Profile) is not applied for: unsent
+    // applications to one are closed, the person's own picks ("Apply to this link") excepted.
+    const pay = payExpectationOf(await this.deps.repository.getScreeningAnswers(userId));
+    let closedBelowPay = 0;
+    for (const a of [...existing]) {
+      if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined) continue;
+      const job = jobsById.get(a.jobId);
+      if (!job || job.source === 'link' || payFits(job, pay)) continue;
+      const closed: Application = { ...a, status: 'closed' };
+      await this.deps.repository.updateApplication(closed);
+      existing.splice(existing.indexOf(a), 1, closed);
+      closedBelowPay += 1;
+    }
     // Unsent drafts for posts the CV does not show (scored before the title was checked) are closed.
     let closedOtherField = 0;
     for (const a of existing) {
@@ -720,7 +736,7 @@ export class OpennJobService {
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
-      if (!inScope(job, preferences)) {
+      if (!inScope(job, preferences) || !payFits(job, pay)) {
         skipped.outOfScope += 1;
         continue;
       }
@@ -742,8 +758,8 @@ export class OpennJobService {
       prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
     }
 
-    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted, advertsRead });
-    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted, advertsRead };
+    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates, closedBelowBar, closedBelowPay, redrafted, advertsRead });
+    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates, closedBelowBar, closedBelowPay, redrafted, advertsRead };
   }
 
   /** The score the agent needs before it prepares or sends an application on its own, and why. */

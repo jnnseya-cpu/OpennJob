@@ -69,6 +69,7 @@ export function ScreeningForm() {
           <label key={k} className="field">
             <span>{label}</span>
             <input type="text" value={(answers[k] as string | undefined) ?? ''} onChange={(e) => setAnswers((s) => ({ ...s, [k]: e.target.value }))} />
+            {k === 'salaryExpectation' || k === 'dayRate' ? <span className="small muted">A job that states lower pay is not shown or applied for. One that states no pay still is.</span> : null}
           </label>
         ))}
         {YES_NO.map(([k, label]) => (

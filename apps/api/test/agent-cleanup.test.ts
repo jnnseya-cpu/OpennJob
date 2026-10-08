@@ -112,4 +112,27 @@ describe('try again after signing in once', () => {
     await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200);
     expect(await t.deps.repository.getApplication(USER_ID, 'approved-low')).toMatchObject({ status: 'closed', score: 60 });
   });
+
+  it('pay: a job stating less than the expectation is neither listed nor applied for; one stating no pay still is', async () => {
+    t = await createTestApp({ sources: [] });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    await t.api.put('/passport').send(PASSPORT).expect(200);
+    await t.api.put('/screening').send({ salaryExpectation: '£80,000', custom: {} }).expect(200);
+    const criteria = [
+      { label: 'Medication rounds', essential: true, keywords: ['medication'] },
+      { label: 'Care plans', essential: true, keywords: ['care plans'] },
+    ];
+    const low = { ...job('low', 'provided', criteria), salaryMin: 50_000, salaryMax: 65_000 };
+    const high = { ...job('high', 'provided', criteria), salaryMin: 75_000, salaryMax: 90_000 };
+    const none = job('none', 'provided', criteria);
+    await t.deps.repository.upsertJobs([low, high, none]);
+    await t.deps.repository.createApplication(draft('old-low', low, { status: 'confirmed' }));
+    const listed = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
+    expect(listed).toEqual(expect.arrayContaining([high.id, none.id]));
+    expect(listed).not.toContain(low.id);
+    const run = (await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200)).body;
+    expect(run.closedBelowPay).toBe(1);
+    expect((await t.deps.repository.getApplication(USER_ID, 'old-low'))?.status).toBe('closed');
+    expect(run.prepared.map((a: { jobId: string }) => a.jobId).sort()).toEqual([high.id, none.id].sort());
+  });
 });
