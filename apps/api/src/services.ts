@@ -365,7 +365,8 @@ export class OpennJobService {
     const pay = payExpectationOf(await this.deps.repository.getScreeningAnswers(userId));
     const jobs = await this.deps.repository.listJobs();
     return jobs
-      .filter((job) => inScope(job, preferences) && payFits(job, pay))
+      // A job someone pasted ("Apply to a job you found") belongs to them alone: never listed here.
+      .filter((job) => job.source !== 'link' && inScope(job, preferences) && payFits(job, pay))
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
@@ -692,7 +693,7 @@ export class OpennJobService {
     // the recruiter's address or the employer's own page, when the application's copy has neither:
     // the application moves to that copy, so it can go out without the person finding the link.
     const wayOutByKey = new Map<string, Job>();
-    for (const j of jobs) if (hasWayOut(j) && !wayOutByKey.has(dedupeKey(j))) wayOutByKey.set(dedupeKey(j), j);
+    for (const j of jobs) if (j.source !== 'link' && hasWayOut(j) && !wayOutByKey.has(dedupeKey(j))) wayOutByKey.set(dedupeKey(j), j);
     for (const a of [...existing]) {
       if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined || isEmployerLink(a.applyUrl)) continue;
       const job = jobsById.get(a.jobId);
@@ -771,6 +772,10 @@ export class OpennJobService {
       if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined) continue;
       const withoutAi = a.holdReasons?.includes('llm-ceiling') || (a.statementSource === 'fallback' && !edited.has(a.id));
       if (!withoutAi) continue;
+      // The AI was tried and failed (no credit, key refused, unreachable) less than 12 hours ago:
+      // not tried again yet, so the same applications are not closed and re-made on every run.
+      const aiFailed = a.warnings.some((w) => /drafted without AI\.?( It is rewritten|$)/.test(w) && !/daily AI limit/.test(w));
+      if (aiFailed && this.deps.clock().getTime() - Date.parse(a.createdAt) < 12 * 3_600_000) continue;
       if (!this.deps.llm || (await this.llmCeilingReached(userId))) break;
       const job = jobsById.get(a.jobId);
       if (!job) continue;
@@ -786,7 +791,7 @@ export class OpennJobService {
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
-      if (!inScope(job, preferences) || !payFits(job, pay)) {
+      if (job.source === 'link' || !inScope(job, preferences) || !payFits(job, pay)) {
         skipped.outOfScope += 1;
         continue;
       }

@@ -161,7 +161,7 @@ export const markReadSchema = z.object({ ids: z.array(text(200)).min(1).max(500)
 
 export const notificationTestSchema = z.object({ event: notificationKey.default('account.test') }).strict();
 
-export const notificationPreviewSchema = z.object({ event: notificationKey });
+export const notificationPreviewSchema = z.object({ event: notificationKey }).strict();
 
 export const interviewFeedbackSchema = z
   .object({ questionId: text(80).optional(), question: text(500).optional(), answer: z.string().trim().min(1).max(8000) })

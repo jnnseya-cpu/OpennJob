@@ -15,7 +15,7 @@ export const STATUS_LABEL: Record<Application['status'], string> = {
 /** Why an application is held (the same wording as HOLD_REASONS in packages/core/src/tailoring.ts). */
 export const HOLD_LABEL: Record<string, string> = {
   'trace-check': 'A sentence in the documents could not be traced to your CV. Read it and correct it.',
-  'llm-ceiling': 'OpennJob’s own daily AI limit (a setting on the server, not your Claude credit) was reached, so this was drafted without AI. It is rewritten with AI at the next agent run.',
+  'llm-ceiling': 'OpennJob’s own daily AI limit (a setting on the server, not your AI provider credit) was reached, so this was drafted without AI. It is rewritten with AI at the next agent run.',
   'daily-limit': "Today's application limit was reached. It goes out tomorrow.",
   'email-not-sent': 'The e-mail to the recruiter was not accepted by the mail server. It is not retried: send it yourself or open the advert.',
   'login-wall': 'The employer’s site asks you to sign in. Sign in once in the tab OpennJob left open (create the account there if you have none), then press Try again: the queue goes on from there next time.',

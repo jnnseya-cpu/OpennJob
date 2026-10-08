@@ -9,13 +9,13 @@ import { PACKS } from '../lib/core';
 import { ThemeToggle } from './ThemeToggle';
 import type { Application, Mode, PackId, PublicUser } from '../lib/types';
 
-/** The threshold the API applies unless OPENNJOB_APPLY_THRESHOLD says otherwise. An agent run reports the real one. */
+/** Shown until the API answers with the real bar (GET /agent/interview-rates, or an agent run). */
 export const DEFAULT_THRESHOLD = 80;
 
 export const MODE_HELP: Record<Mode, string> = {
   review: 'You see and confirm every field before anything is filled.',
-  hybrid: 'The agent prepares every match at or above the threshold. You confirm declarations and submit yourself.',
-  auto: 'The agent prepares every match at or above the threshold. The extension may submit a form only if it has no declaration or other sensitive field; any form that has one waits for you.',
+  hybrid: 'The agent prepares every match at or above the threshold. Declarations you saved on your Profile are filled; you confirm the rest and submit yourself.',
+  auto: 'The agent prepares every match at or above the threshold. The extension may submit a form only when every declaration on it is answered from your saved answers and it has no other sensitive field; any form that has one waits for you.',
 };
 
 const MODE_LABEL: Record<Mode, string> = { review: 'Review all', hybrid: 'Hybrid', auto: 'Auto' };
@@ -115,6 +115,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       .catch(() => undefined);
     api<PublicUser>('/account')
       .then((u) => setUnverified(!u.emailVerified))
+      .catch(() => undefined);
+    // The bar the agent really uses (server setting, the person's own minimum, their interview target).
+    api<{ bar: { bar: number } }>('/agent/interview-rates')
+      .then((r) => setThreshold(r.bar.bar))
       .catch(() => undefined);
   }, []);
 

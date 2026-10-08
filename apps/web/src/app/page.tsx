@@ -54,7 +54,7 @@ export default function Landing() {
           </h1>
           <p className="lp-lede lp-reveal">
             OpennJob reads the jobs, scores each one against what your CV can actually prove, and prepares the application for every role at
-            80% or more. You check it, you answer the declarations, you press submit.
+            or above your threshold. You check it and press submit, or let it submit on certified employer sites under your standing authorisation.
           </p>
           <div className="lp-cta lp-reveal">
             <Link className="lp-btn solid" href="/register/">
@@ -110,7 +110,7 @@ export default function Landing() {
               </div>
               <div className="lp-card">
                 <h4>Only you confirm these</h4>
-                <p>OpennJob never answers a declaration for you.</p>
+                <p>OpennJob answers a declaration only with the answer you saved yourself; anything else waits for you.</p>
                 <div className="lp-box">
                   <b />
                   <span>Right to work for this country</span>
@@ -155,13 +155,13 @@ export default function Landing() {
             <div className="lp-step lp-reveal">
               <div>
                 <h3>It prepares the application</h3>
-                <p>For every eligible role at 80% or more: a supporting statement built from your own words, your details, your documents.</p>
+                <p>For every eligible role at or above your threshold: a supporting statement built from your own words, your details, your documents.</p>
               </div>
             </div>
             <div className="lp-step lp-reveal">
               <div>
                 <h3>You check it and you submit</h3>
-                <p>You answer the declarations and press submit on the employer’s form. OpennJob records the receipt and keeps the tracker.</p>
+                <p>You press submit on the employer’s form, or, under your standing authorisation, the extension submits on a certified site when every question is answered from your own records. OpennJob records the receipt and keeps the tracker.</p>
               </div>
             </div>
           </div>
@@ -173,7 +173,7 @@ export default function Landing() {
           <div className="lp-not lp-reveal">
             <div>
               <h3>Answer a declaration</h3>
-              <p>Convictions, vetting, health, conflicts of interest and every “I confirm” box are answered by you, every time.</p>
+              <p>Vetting, health, safeguarding and fitness to practise are answered by you, every time. Convictions, conflicts of interest and “I confirm” boxes are answered only from the answers you saved yourself.</p>
             </div>
             <div>
               <h3>Invent experience</h3>

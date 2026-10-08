@@ -6,6 +6,8 @@
  */
 
 export const CV_MAX_BYTES = 5 * 1024 * 1024;
+/** The most pages of a PDF CV that are read. */
+export const CV_MAX_PAGES = 30;
 export const CV_TYPES = {
   pdf: 'application/pdf',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -52,7 +54,8 @@ async function pdfText(bytes: Buffer): Promise<{ text: string; pages: number }> 
   const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: false, disableFontFace: true, verbosity: 0 }).promise;
   const lines: string[] = [];
   try {
-    for (let n = 1; n <= doc.numPages; n += 1) {
+    // A CV is a few pages: at most CV_MAX_PAGES are read, so a crafted file cannot tie up the server.
+    for (let n = 1; n <= Math.min(doc.numPages, CV_MAX_PAGES); n += 1) {
       const page = await doc.getPage(n);
       const content = await page.getTextContent();
       let line = '';

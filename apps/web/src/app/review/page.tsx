@@ -52,6 +52,21 @@ function Review() {
   const [verified, setVerified] = useState<boolean>();
   const [workRights, setWorkRights] = useState<WorkRightsRecord[]>([]);
   const [profile, setProfile] = useState<Profile>();
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  /** SCR-2: answers a question that held this application; the API keeps it for next time and lifts the hold. */
+  async function answerQuestion(question: string, answer: string) {
+    if (!app) return;
+    setBusy(true);
+    setError('');
+    try {
+      showApp(await api<Application>(`/applications/${encodeURIComponent(app.id)}/answer`, { method: 'POST', body: { question, answer } }));
+      setNotice('Answer saved. The application goes on at the next Start the queue.');
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     api<AgentStatus>('/agent/status').then(setAgent).catch(() => undefined);
     api<PublicUser>('/account').then((u) => setVerified(u.emailVerified)).catch(() => undefined);
@@ -240,9 +255,21 @@ function Review() {
             <section className="card" aria-label="Held for you">
               <span className="label">Held for you</span>
               <ul className="plain small">
-                {(app.holdReasons ?? []).map((r) => (
-                  <li key={`h-${r}`}>{HOLD_LABEL[r] ?? r}</li>
-                ))}
+                {(app.holdReasons ?? []).map((r) =>
+                  r.startsWith('question:') ? (
+                    <li key={`h-${r}`}>
+                      <label className="field">
+                        <span>The employer’s form asks: “{r.slice(9)}”. Your answer (kept for next time):</span>
+                        <input type="text" value={answers[r] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [r]: e.target.value }))} />
+                      </label>
+                      <button type="button" className="btn" disabled={busy || !(answers[r] ?? '').trim()} onClick={() => void answerQuestion(r.slice(9), (answers[r] ?? '').trim())}>
+                        Save answer
+                      </button>
+                    </li>
+                  ) : (
+                    <li key={`h-${r}`}>{HOLD_LABEL[r] ?? r}</li>
+                  ),
+                )}
                 {(app.traceFailures ?? []).map((f) => (
                   <li key={`t-${f}`}>{f}</li>
                 ))}

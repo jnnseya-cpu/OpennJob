@@ -431,7 +431,7 @@ export default function ProfilePage() {
                 <b>Prepare applications only at or above</b>
               </span>
               <select aria-label="Minimum match score" value={prefs.minScore ?? ''} onChange={(e) => setPrefs((p) => ({ ...p, minScore: e.target.value ? Number(e.target.value) : undefined }))}>
-                <option value="">The platform’s threshold (80%)</option>
+                <option value="">The platform’s threshold</option>
                 {[85, 90, 95, 100].map((n) => (
                   <option key={n} value={n}>
                     {n}%

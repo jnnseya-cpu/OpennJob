@@ -169,7 +169,7 @@ export default function AccountPage() {
             <blockquote className="small" data-testid="scope-text">
               {auth.scope.text}
             </blockquote>
-            <p className="small muted">Wording version {auth.scope.version}. A form with any declaration or other sensitive question always waits for you, whatever you choose here.</p>
+            <p className="small muted">Wording version {auth.scope.version}. A form with a declaration you have not answered on your Profile, or any other sensitive question, always waits for you, whatever you choose here.</p>
             {auth.enabled ? (
               <div className="row">
                 <button type="button" className="btn danger" onClick={() => setAuthorisation(false)}>

@@ -80,7 +80,7 @@ nano .env.production      # DOMAIN, ACME_EMAIL, the three secrets, OPENNJOB_REGI
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 docker compose -f docker-compose.prod.yml --env-file .env.production ps
-docker compose -f docker-compose.prod.yml --env-file .env.production logs migrate   # "migrations: 3 applied"
+docker compose -f docker-compose.prod.yml --env-file .env.production logs migrate   # "migrations: N applied" (one per file in db/migrations, 7 today)
 curl -s https://app.example.org/api/health      # {"status":"ok","persistence":"postgres","database":"up"}
 ```
 

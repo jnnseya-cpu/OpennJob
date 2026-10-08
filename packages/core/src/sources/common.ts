@@ -205,8 +205,12 @@ export function contractTypeOf(employmentType: string | undefined, title: string
  * discovered job and an employer-posted job have exactly the same shape.
  * Returns undefined for rows without an id or a title.
  */
+/** A link from an outside source is kept only if it is a web address: never javascript:, data: or anything else. */
+const webLink = (u: string | undefined): string | undefined => (u && /^https?:\/\//i.test(u.trim()) ? u.trim() : undefined);
+
 export function normaliseJob(raw: RawJob): Job | undefined {
   if (!raw.externalId || !raw.title) return undefined;
+  const url = webLink(raw.url) ?? '';
   const extracted = extractCriteriaFallback(raw.description, raw.title);
   const job: Job = {
     id: `${raw.source}:${raw.externalId}`,
@@ -215,7 +219,7 @@ export function normaliseJob(raw: RawJob): Job | undefined {
     title: raw.title,
     employer: raw.employer || 'Unknown employer',
     location: raw.location || 'Not stated',
-    url: raw.url,
+    url,
     description: raw.description,
     criteria: raw.criteria && raw.criteria.length > 0 ? raw.criteria : extracted.criteria,
     criteriaSource: raw.criteria && raw.criteria.length > 0 ? 'provided' : 'fallback',
@@ -239,7 +243,8 @@ export function normaliseJob(raw: RawJob): Job | undefined {
   const pack = raw.pack ?? classifyPack({ title: raw.title, description: raw.description, ...(country ? { country } : {}), language: job.language });
   if (pack) job.pack = pack;
   job.origin = raw.origin ?? 'discovered';
-  if (raw.applyUrl) job.applyUrl = raw.applyUrl;
+  const applyUrl = webLink(raw.applyUrl);
+  if (applyUrl) job.applyUrl = applyUrl;
   if (raw.salaryMin !== undefined) job.salaryMin = raw.salaryMin;
   if (raw.salaryMax !== undefined) job.salaryMax = raw.salaryMax;
   if (raw.employmentType) job.employmentType = raw.employmentType;

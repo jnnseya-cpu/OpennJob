@@ -194,6 +194,11 @@ for (const backend of BACKENDS) {
       const made = (await b.post('/applications/from-link').send(link).expect(201)).body as { application: Application };
       expect(made.application.userId).toBe(B_ID);
       expect((await t.api.get('/applications').expect(200)).body.map((x: Application) => x.id)).not.toContain(made.application.id);
+      // B's pasted job is B's alone: never listed in A's matches, never prepared for A, never a "copy" A's applications move to.
+      expect((await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id)).not.toContain(made.application.jobId);
+      const run = (await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200)).body as { prepared: Application[] };
+      expect(run.prepared.map((x) => x.jobId)).not.toContain(made.application.jobId);
+      expect((await t.deps.repository.listApplications(USER_ID)).map((x) => x.jobId)).not.toContain(made.application.jobId);
     });
 
     it("POST /applications: B's draft is made from B's CV and belongs to B", async () => {

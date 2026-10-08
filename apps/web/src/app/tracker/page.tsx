@@ -39,7 +39,7 @@ const OUTCOME_NAME: Record<NonNullable<Application['outcome']>, string> = { inte
 
 function holdText(reason: string): string {
   if (HOLD_LABEL[reason]) return HOLD_LABEL[reason];
-  if (reason.startsWith('question:')) return `A question with no stored answer: “${reason.slice(9)}”. Answer it on the review page.`;
+  if (reason.startsWith('question:')) return `A question with no stored answer: “${reason.slice(9)}”. Open it (Documents) and answer it there.`;
   if (reason.startsWith('sensitive:')) return `A ${reason.slice(10).replace(/-/g, ' ')} question that only you answer.`;
   if (reason.startsWith('steps-saved:')) return `OpennJob filled and saved the first ${reason.slice(12)} step(s) on the employer’s site and left it open in a tab: finish from the step it stopped at.`;
   if (reason.startsWith('step-refused:')) return `The employer’s site did not move to the next step. It said: “${reason.slice(13)}”`;
