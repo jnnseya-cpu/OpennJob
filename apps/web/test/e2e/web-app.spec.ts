@@ -303,6 +303,12 @@ test('review: requirements with evidence, editable statement, every declaration 
   await statement.fill(EDITED);
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Statement saved.')).toBeVisible();
+  // The CV and cover letter that would be sent, as PDFs made in the browser.
+  for (const [button, ending] of [['download-cv', '_CV.pdf'], ['download-letter', '.pdf']] as const) {
+    const [file] = await Promise.all([page.waitForEvent('download'), page.getByTestId(button).click()]);
+    expect(file.suggestedFilename().endsWith(ending)).toBe(true);
+    expect(readFileSync((await file.path()) as string).subarray(0, 5).toString()).toBe('%PDF-');
+  }
   const draft = (await call<{ id: string; jobId: string; statement: string; status: string }[]>('GET', '/applications')).find((a) => a.jobId === 'sample:hca-elderly-care');
   // TAI-3: "28-bed" is not in this CV, so the edit is held for the person; approving below is them taking it as theirs.
   expect(draft).toMatchObject({ statement: EDITED, status: 'needs_you', holdReasons: ['trace-check'] });

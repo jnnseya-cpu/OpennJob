@@ -38,7 +38,8 @@ describe('the agent run tidies unsent drafts', () => {
     const run = (await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200)).body;
     expect(run.closedBelowBar).toBe(1);
     expect(await t.deps.repository.getApplication(USER_ID, 'old-thin')).toMatchObject({ status: 'closed', score: 75 });
-    expect((await t.deps.repository.getApplication(USER_ID, 'old-approved'))?.status).toBe('confirmed');
+    // The approved one stays open, but shows today's score (the one its review page shows), not the old 100.
+    expect(await t.deps.repository.getApplication(USER_ID, 'old-approved')).toMatchObject({ status: 'confirmed', score: 75 });
   });
 
   it('writes a draft made without AI again once AI is available', async () => {

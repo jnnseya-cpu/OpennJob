@@ -666,11 +666,14 @@ export class OpennJobService {
     // closed (it was prepared under an older, looser score). The person's approved ones are left alone.
     let closedBelowBar = 0;
     for (const a of [...existing]) {
-      if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined) continue;
+      if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined) continue;
       const job = jobsById.get(a.jobId);
-      if (!job || job.source === 'link') continue;
+      if (!job) continue;
       const now = matchJob(job, profile.cvText, passport, preferences);
-      if (now.score >= threshold) {
+      // Approved applications and jobs the person chose stay open, but show today's score, the
+      // same one the review page shows.
+      const keep = a.status === 'confirmed' || job.source === 'link' || now.score >= threshold;
+      if (keep) {
         if (now.score !== a.score) {
           const rescored: Application = { ...a, score: now.score };
           await this.deps.repository.updateApplication(rescored);

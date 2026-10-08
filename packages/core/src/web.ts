@@ -16,3 +16,4 @@ export type { WorkRightsRecord } from './types';
 export type { Language } from './languages';
 export { SCORE_BANDS, OUTCOMES_BEFORE_LEARNING } from './outcomes';
 export type { BandRate, AutomaticBar } from './outcomes';
+export { cvPdf, coverLetterPdf, coverLetterText, coverLetterFileName } from './email-apply';

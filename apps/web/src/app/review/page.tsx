@@ -7,9 +7,22 @@ import { useApp } from '../../components/AppShell';
 import { api, errorText } from '../../lib/api';
 import { ALL_FIELDS_CHECKED, STATEMENT_FIELD, declarationField, declarationsFor } from '../../lib/declarations';
 import { ADZUNA_URL, HOLD_LABEL, STATUS_LABEL, isAdzuna, needsLabel, placeOf } from '../../lib/labels';
-import { describeWorkRights, workRightsProblem } from '../../lib/core';
-import type { WorkRightsRecord } from '../../lib/core';
+import { coverLetterFileName, coverLetterPdf, coverLetterText, cvPdf, describeWorkRights, workRightsProblem } from '../../lib/core';
+import type { Profile, WorkRightsRecord } from '../../lib/core';
 import type { AgentStatus, Application, MatchView, PassportView, PublicUser } from '../../lib/types';
+
+/** The person's name as a file name: Jane_Example_CV.pdf. */
+const fileStem = (p: Profile | undefined): string => (p ? `${p.firstName}_${p.lastName}`.replace(/[^A-Za-z0-9_-]+/g, '_') : 'OpennJob');
+
+/** Saves a PDF made in the browser: nothing is sent anywhere. */
+function savePdf(bytes: Uint8Array, name: string): void {
+  const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const FILLED: [string, string][] = [
   ['Name, contact details', 'from your profile'],
@@ -38,10 +51,12 @@ function Review() {
   const [agent, setAgent] = useState<AgentStatus>();
   const [verified, setVerified] = useState<boolean>();
   const [workRights, setWorkRights] = useState<WorkRightsRecord[]>([]);
+  const [profile, setProfile] = useState<Profile>();
   useEffect(() => {
     api<AgentStatus>('/agent/status').then(setAgent).catch(() => undefined);
     api<PublicUser>('/account').then((u) => setVerified(u.emailVerified)).catch(() => undefined);
     api<PassportView>('/passport').then((v) => setWorkRights(v.passport.workRights ?? [])).catch(() => undefined);
+    api<Profile>('/profile').then(setProfile).catch(() => undefined);
   }, []);
 
   const showApp = useCallback((a: Application | undefined) => {
@@ -280,7 +295,15 @@ function Review() {
                 <summary>Cover letter · your supporting statement as a letter, attached when a form or the recruiter asks for one</summary>
                 <pre className="fb">{`Dear Hiring Manager,\n\n${statement.trim()}\n\nYours sincerely,`}</pre>
               </details>
-              <p className="small muted">Both go as PDFs. On a form they are attached only to a field that asks for a CV or a cover letter; by e-mail both are attached.</p>
+              <div className="row">
+                <button type="button" className="btn primary" data-testid="download-cv" onClick={() => app.tailoredCv && savePdf(cvPdf(app.tailoredCv), `${fileStem(profile)}_CV.pdf`)}>
+                  Download CV (PDF)
+                </button>
+                <button type="button" className="btn" data-testid="download-letter" disabled={!profile} onClick={() => profile && savePdf(coverLetterPdf(coverLetterText(statement, profile, { title: app.jobTitle, employer: app.employer }, new Date())), coverLetterFileName(profile))}>
+                  Download cover letter (PDF)
+                </button>
+              </div>
+              <p className="small muted">Press a heading above to read each one. Both go as PDFs. On a form they are attached only to a field that asks for a CV or a cover letter; by e-mail both are attached.</p>
             </section>
           ) : null}
 
