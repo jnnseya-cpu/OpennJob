@@ -335,3 +335,7 @@ export type QueueResultInput = z.infer<typeof queueResultSchema>;
 export type ScreeningInput = z.infer<typeof screeningSchema>;
 export type QuestionAnswerInput = z.infer<typeof questionAnswerSchema>;
 export type ApplicationSystemInput = z.infer<typeof applicationSystemSchema>;
+
+/** The employer's own application page for a job found on a job board (https only). */
+export const applyUrlSchema = z.object({ url: z.string().trim().url().max(2000).refine((u) => u.startsWith('https://'), 'an https:// address') }).strict();
+export type ApplyUrlInput = z.infer<typeof applyUrlSchema>;

@@ -40,3 +40,39 @@ describe('application systems: Workday and SuccessFactors', () => {
     expect((await t.api.get('/agent/queue/next').expect(200)).body.application?.id).toBe('sf-app');
   });
 });
+
+describe('jobs found on a job board: why they cannot go out, and the employer link', () => {
+  it('says why, takes the employer link from the person, and the queue can then use it', async () => {
+    t = await createTestApp({ sources: [], config: testConfig({ operatorKey: OPERATOR_KEY }) });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    await t.api.put('/passport').send(PASSPORT).expect(200);
+    await t.api.put('/agent/authorisation').send({ enabled: true, scopeVersion: STANDING_SCOPE_VERSION }).expect(200);
+    const job: Job = { id: 'reed:1', source: 'reed', externalId: '1', title: 'Staff Nurse (fictional)', employer: 'Example Grid (fictional)', location: 'Leeds', country: 'GB', url: 'https://www.reed.co.uk/jobs/staff-nurse/1', applyUrl: 'https://www.reed.co.uk/jobs/staff-nurse/1', description: 'A fictional vacancy.', criteria: [{ label: 'Medication', essential: true, keywords: ['medication'] }], criteriaSource: 'provided', requiresRegistration: false };
+    await t.deps.repository.upsertJobs([job]);
+    const app: Application = { id: 'reed-app', userId: USER_ID, jobId: job.id, jobTitle: job.title, employer: job.employer, applyUrl: job.url, mode: 'auto', status: 'draft', statement: 'A fictional statement.', statementSource: 'fallback', gaps: [], warnings: [], score: 100, confirmedFields: [], createdAt: '2026-10-08T06:00:00.000Z' };
+    await t.deps.repository.createApplication(app);
+    expect((await t.api.get('/agent/status').expect(200)).body).toMatchObject({ routes: { 'reed-app': 'none' }, routeReasons: { 'reed-app': 'job-board' } });
+
+    // A job board's or an aggregator's page is not an employer link.
+    await t.api.post('/applications/reed-app/apply-url').send({ url: 'https://www.reed.co.uk/jobs/x/2' }).expect(400);
+    await t.api.post('/applications/reed-app/apply-url').send({ url: 'https://www.adzuna.co.uk/jobs/land/ad/1' }).expect(400);
+    await t.api.post('/applications/reed-app/apply-url').send({ url: 'http://example.wd3.myworkdayjobs.com/job/1' }).expect(400); // https only
+    const linked = (await t.api.post('/applications/reed-app/apply-url').send({ url: 'https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1' }).expect(200)).body;
+    expect(linked.applyUrl).toBe('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1');
+    expect((await t.api.get('/agent/status').expect(200)).body.routeReasons).toEqual({ 'reed-app': 'system-off:workday' });
+
+    await t.raw().put('/operator/systems/workday').set('Authorization', `Bearer ${OPERATOR_KEY}`).send({ enabled: true, termsCheckedAt: '2026-10-08T10:00:00Z', supervisedSubmissionAt: '2026-10-08T11:00:00Z' }).expect(200);
+    expect((await t.api.get('/agent/status').expect(200)).body).toMatchObject({ routes: { 'reed-app': 'form' }, routeReasons: {} });
+    expect((await t.api.get('/agent/queue/next').expect(200)).body.application?.id).toBe('reed-app');
+  });
+
+  it('the agent run takes the employer link when the job board gives it later', async () => {
+    t = await createTestApp({ sources: [] });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    const job: Job = { id: 'reed:2', source: 'reed', externalId: '2', title: 'Staff Nurse (fictional)', employer: 'Other Grid (fictional)', location: 'Leeds', country: 'GB', url: 'https://www.reed.co.uk/jobs/staff-nurse/2', applyUrl: 'https://career4.successfactors.com/career?company=example&job=2', description: 'A fictional vacancy.', criteria: [{ label: 'Medication', essential: true, keywords: ['medication'] }], criteriaSource: 'provided', requiresRegistration: false };
+    await t.deps.repository.upsertJobs([job]);
+    await t.deps.repository.createApplication({ id: 'old', userId: USER_ID, jobId: job.id, jobTitle: job.title, employer: job.employer, applyUrl: job.url, mode: 'auto', status: 'draft', statement: 'A fictional statement.', statementSource: 'fallback', gaps: [], warnings: [], score: 100, confirmedFields: [], createdAt: '2026-10-08T06:00:00.000Z' });
+    await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200);
+    expect((await t.deps.repository.getApplication(USER_ID, 'old'))?.applyUrl).toBe(job.applyUrl);
+  });
+});

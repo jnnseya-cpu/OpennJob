@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   APPLICATION_SYSTEMS,
+  noRouteReason,
   EMPTY_PASSPORT,
   EMPTY_SCREENING,
   STANDING_SCOPE_TEXT,
@@ -146,13 +147,17 @@ export class ApplyingService {
     return { paused: await this.operatorPaused(), systems: await this.systems() };
   }
 
-  private async systemEnabledFor(url: string): Promise<boolean> {
+  private async extraHosts(): Promise<Record<string, string[]>> {
     const extra: Record<string, string[]> = {};
     for (const s of APPLICATION_SYSTEMS) {
       const hosts = (await this.systemSetting(s.id)).extraHosts;
       if (hosts?.length) extra[s.id] = hosts;
     }
-    const system = applicationSystemFor(url, extra);
+    return extra;
+  }
+
+  private async systemEnabledFor(url: string): Promise<boolean> {
+    const system = applicationSystemFor(url, await this.extraHosts());
     if (!system || (system.testOnly && this.deps.config.production)) return false;
     return (await this.systemSetting(system.id)).enabled;
   }
@@ -207,14 +212,22 @@ export class ApplyingService {
    * two as going out automatically.
    */
   async routes(userId: string): Promise<Record<string, 'email' | 'form' | 'none'>> {
+    return (await this.routesWithReasons(userId)).routes;
+  }
+
+  /** The routes, and for each application with none, why (a job board's page, an aggregator link, a system not switched on...). */
+  async routesWithReasons(userId: string): Promise<{ routes: Record<string, 'email' | 'form' | 'none'>; reasons: Record<string, string> }> {
     const bar = await this.raisedBar(userId);
-    const out: Record<string, 'email' | 'form' | 'none'> = {};
+    const extra = await this.extraHosts();
+    const routes: Record<string, 'email' | 'form' | 'none'> = {};
+    const reasons: Record<string, string> = {};
     for (const a of await this.deps.repository.listApplications(userId)) {
       if (!ApplyingService.queueable(a) || a.score < bar) continue;
       const job = await this.deps.repository.getJob(a.jobId);
-      out[a.id] = job && recruiterEmailIn(job.description) ? 'email' : (await this.systemEnabledFor(a.applyUrl)) ? 'form' : 'none';
+      routes[a.id] = job && recruiterEmailIn(job.description) ? 'email' : (await this.systemEnabledFor(a.applyUrl)) ? 'form' : 'none';
+      if (routes[a.id] === 'none') reasons[a.id] = noRouteReason(a.applyUrl, extra);
     }
-    return out;
+    return { routes, reasons };
   }
 
   async status(userId: string) {
@@ -228,7 +241,7 @@ export class ApplyingService {
       queue: { ready: ready.length, waitingForSystem: systemOff, needsYou: all.filter((a) => a.status === 'needs_you').length },
       ...(block ? { wait: block.wait, message: WAIT_MESSAGE[block.wait], ...(block.resetsAt ? { resetsAt: block.resetsAt } : {}) } : {}),
       systems: (await this.systems()).map((s) => ({ id: s.id, label: s.label, enabled: s.enabled })),
-      routes: await this.routes(userId),
+      ...(await this.routesWithReasons(userId).then((r) => ({ routes: r.routes, routeReasons: r.reasons }))),
     };
   }
 

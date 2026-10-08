@@ -57,6 +57,14 @@ test('an application with no automatic route is listed for the person to apply, 
   const mine = page.getByTestId('no-route');
   await expect(mine).toContainText('Ready, but you apply · 1');
   await expect(mine.getByRole('link', { name: 'Open advert' })).toHaveAttribute('target', '_blank');
+  // It says why, and takes the employer's own application page: then the reason is the system switch.
+  await expect(mine.getByTestId('no-route-reason')).toContainText('does not know this site');
+  await mine.getByRole('textbox').fill('https://www.reed.co.uk/jobs/fictional/1');
+  await mine.getByRole('button', { name: 'Use this link' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'job board' })).toBeVisible();
+  await mine.getByRole('textbox').fill('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Fictional_R1');
+  await mine.getByRole('button', { name: 'Use this link' }).click();
+  await expect(mine.getByTestId('no-route-reason')).toContainText('Workday is not switched on yet');
   await mine.getByRole('button', { name: 'Skip' }).click();
   await expect(page.getByTestId('no-route')).toHaveCount(0);
   const skipped = (await (await fetch(`${api.url}/applications/${outgoingId}`, { headers: auth() })).json()) as { status: string; skippedAt?: string };

@@ -22,6 +22,7 @@ import {
   interviewFeedbackSchema,
   applicationInterviewFeedbackSchema,
   minScoreSchema,
+  applyUrlSchema,
   passportSchema,
   profileSchema,
   questionQuerySchema,
@@ -36,7 +37,7 @@ import {
   outcomeSchema,
   refreshSchema,
 } from './schemas';
-import type { ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput, OutcomeInput } from './schemas';
+import type { ApplyUrlInput, ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput, OutcomeInput } from './schemas';
 import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RefreshInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
@@ -366,6 +367,13 @@ export class ApplicationsController {
    * "I have signed in" / "try again": clears the holds the person resolves on the employer's site
    * (a sign-in, a CAPTCHA they completed, a step the site refused). Never a declaration or a question.
    */
+  /** The employer's own application link, given by the person for a job found on a job board. */
+  @Post(':id/apply-url')
+  @HttpCode(200)
+  applyUrl(@CurrentUser() userId: string, @Param('id') id: string, @Body(new ZodPipe(applyUrlSchema)) body: ApplyUrlInput) {
+    return this.service.setApplyUrl(userId, id, body);
+  }
+
   @Post(':id/retry')
   @HttpCode(200)
   retry(@CurrentUser() userId: string, @Param('id') id: string) {

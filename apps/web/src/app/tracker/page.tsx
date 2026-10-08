@@ -24,6 +24,17 @@ const BAR_TEXT: Record<InterviewRates['bar']['reason'], (r: InterviewRates['bar'
   'meets-target': (r) => `Aiming for ${r.target}%: applications at ${r.bar}% or more reached ${r.rateAtBar}% interviews, so only those go out on their own.`,
   'below-target': (r) => `Aiming for ${r.target}%: no score band has reached it yet${r.rateAtBar !== undefined ? ` (${r.rateAtBar}% at ${r.bar}%+)` : ''}, so only the closest matches (${r.bar}% or more) go out on their own. The rest wait for you.`,
 };
+const SYSTEM_NAME: Record<string, string> = { workday: 'Workday', successfactors: 'SuccessFactors', greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workable: 'Workable' };
+function noRouteText(reason: string | undefined): string {
+  if (reason === 'job-board') return 'The link is the job board’s own page (Reed, Indeed, LinkedIn…): OpennJob never presses a job board’s apply button. Paste the employer’s own application page, if the advert gives one, and the queue applies there.';
+  if (reason === 'aggregator') return 'The link goes through a job search site (Adzuna, Jooble). Open it, and paste the employer’s application page it leads to.';
+  if (reason?.startsWith('system-off:')) {
+    const id = reason.slice(11);
+    return `${SYSTEM_NAME[id] ?? id} is not switched on yet. After one supervised test: bash deploy/enable-system.sh ${id}`;
+  }
+  return 'OpennJob does not know this site’s application system, so it cannot send it. Apply there yourself, or paste a Workday or SuccessFactors link if the employer uses one.';
+}
+
 const OUTCOME_NAME: Record<NonNullable<Application['outcome']>, string> = { interview: 'Interview', rejected: 'Rejected', 'no-reply': 'No reply' };
 
 function holdText(reason: string): string {
@@ -43,6 +54,20 @@ export default function TrackerPage() {
   const [busyId, setBusyId] = useState('');
   const [rates, setRates] = useState<InterviewRates>();
   const [agent, setAgent] = useState<AgentStatus>();
+  const [links, setLinks] = useState<Record<string, string>>({});
+  async function saveLink(id: string) {
+    setBusyId(id);
+    setError('');
+    try {
+      replace(await api<Application>(`/applications/${encodeURIComponent(id)}/apply-url`, { method: 'POST', body: { url: (links[id] ?? '').trim() } }));
+      setAgent(await api<AgentStatus>('/agent/status'));
+      setLinks((l) => ({ ...l, [id]: '' }));
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusyId('');
+    }
+  }
 
   const replace = (updated: Application) => setApps((list) => list?.map((x) => (x.id === updated.id ? updated : x)));
   async function act(id: string, path: 'skip' | 'outcome' | 'retry', body?: object) {
@@ -142,9 +167,17 @@ export default function TrackerPage() {
           </p>
           <ul className="plain review-list">
             {noRoute.map((a) => (
-              <li key={a.id} className="row">
+              <li key={a.id} className="row" data-testid="no-route-item">
                 <span className="grow">
                   <b>{a.jobTitle}</b> · {a.employer} · {a.score}%
+                  <br />
+                  <span className="small muted" data-testid="no-route-reason">{noRouteText(agent?.routeReasons?.[a.id])}</span>
+                  <span className="row">
+                    <input type="url" className="grow" aria-label={`Employer's application page for ${a.jobTitle}`} placeholder="https://… the employer's own application page" value={links[a.id] ?? ''} onChange={(e) => setLinks((l) => ({ ...l, [a.id]: e.target.value }))} />
+                    <button type="button" className="btn" disabled={busyId === a.id || !(links[a.id] ?? '').trim()} onClick={() => saveLink(a.id)}>
+                      Use this link
+                    </button>
+                  </span>
                 </span>
                 <a className="small" href={a.applyUrl} target="_blank" rel="noopener noreferrer">
                   Open advert

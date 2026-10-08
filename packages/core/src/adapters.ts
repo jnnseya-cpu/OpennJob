@@ -70,3 +70,36 @@ export const STANDING_SCOPE_TEXT = [
   "every required question has an answer I stored myself; and the site's application system has been enabled by the operator after a supervised test.",
   'Anything else waits for me. I can pause or turn this off at any time, and it stops before the next submission.',
 ].join(' ');
+
+/** Job boards whose own apply button OpennJob never presses (CLAUDE.md rule 5): the person applies there. */
+const JOB_BOARDS = ['reed.co.uk', 'indeed.com', 'indeed.co.uk', 'linkedin.com', 'totaljobs.com', 'cv-library.co.uk', 'cwjobs.co.uk', 'monster.co.uk', 'monster.com', 'glassdoor.co.uk', 'glassdoor.com', 'jobs.nhs.uk', 'trac.jobs', 'jobsite.co.uk'];
+/** Aggregators whose links lead on to the advert somewhere else. */
+const AGGREGATORS = ['adzuna.co.uk', 'adzuna.com', 'adzuna.fr', 'adzuna.be', 'adzuna.ca', 'jooble.org'];
+
+export type NoRouteReason = 'job-board' | 'aggregator' | `system-off:${string}` | 'unknown-site';
+
+/**
+ * Why an application's link cannot be used by the queue: it is a job board's own page (OpennJob
+ * never presses a job board's apply button), an aggregator's link (the employer's own page is
+ * somewhere behind it), a known application system that is not switched on, or a site OpennJob
+ * does not know. The person can then give the employer's own application link instead.
+ */
+export function noRouteReason(url: string, extraHosts: Readonly<Record<string, readonly string[]>> = {}): NoRouteReason {
+  let host = '';
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return 'unknown-site';
+  }
+  const on = (list: readonly string[]) => list.some((d) => host === d || host.endsWith(`.${d}`));
+  if (on(JOB_BOARDS)) return 'job-board';
+  if (on(AGGREGATORS) || /(^|\.)adzuna\./.test(host)) return 'aggregator';
+  const system = applicationSystemFor(url, extraHosts);
+  return system ? `system-off:${system.id}` : 'unknown-site';
+}
+
+/** Is this an employer's own application link (not a job board or an aggregator)? */
+export const isEmployerLink = (url: string): boolean => {
+  const r = noRouteReason(url);
+  return r !== 'job-board' && r !== 'aggregator';
+};

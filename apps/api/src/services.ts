@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import {
   EMPTY_PASSPORT,
   checkTraining,
@@ -15,6 +15,7 @@ import {
   queryKey,
   searchPlan,
   targetEmployerOf,
+  isEmployerLink,
   COUNTRY_LANGUAGES,
   automaticBar,
   automaticOrder,
@@ -542,6 +543,18 @@ export class OpennJobService {
       closedDuplicates += 1;
     }
 
+    // A job first seen with a job board's link may later give the employer's own (Reed's externalUrl):
+    // an unsent application still on the board's link takes the employer's.
+    for (const a of [...existing]) {
+      if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined) continue;
+      const job = jobsById.get(a.jobId);
+      const jobLink = job?.applyUrl;
+      if (!jobLink || jobLink === a.applyUrl || isEmployerLink(a.applyUrl) || !isEmployerLink(jobLink)) continue;
+      const linked: Application = { ...a, applyUrl: jobLink };
+      await this.deps.repository.updateApplication(linked);
+      existing.splice(existing.indexOf(a), 1, linked);
+    }
+
     // Unsent drafts are scored again with today's matcher: one that no longer reaches the bar is
     // closed (it was prepared under an older, looser score). The person's approved ones are left alone.
     let closedBelowBar = 0;
@@ -682,6 +695,21 @@ export class OpennJobService {
    * cleared; a declaration, a question, the truth check and the AI hold stay until their own steps.
    * Only before anything was submitted.
    */
+  /**
+   * The person gives the employer's own application link for a job found on a job board or an
+   * aggregator, so the queue can apply there (on a switched-on application system). Only before
+   * anything was attempted; https only; never a job board's own page.
+   */
+  async setApplyUrl(userId: string, id: string, input: { url: string }): Promise<Application> {
+    const application = await this.mustGetApplication(userId, id);
+    if (application.status === 'submitted' || application.status === 'closed' || application.attemptedAt !== undefined) throw new ConflictException('This application can no longer be changed');
+    if (!isEmployerLink(input.url)) throw new BadRequestException("That is a job board's or an aggregator's page. Give the employer's own application page.");
+    const updated: Application = { ...application, applyUrl: input.url };
+    await this.deps.repository.updateApplication(updated);
+    await this.emit(userId, 'application.apply_url', { applicationId: id });
+    return updated;
+  }
+
   async retryApplication(userId: string, id: string): Promise<Application> {
     const application = await this.mustGetApplication(userId, id);
     if (application.status === 'submitted' || application.status === 'closed' || application.attemptedAt !== undefined) throw new ConflictException('This application can no longer be retried');

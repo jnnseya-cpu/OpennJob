@@ -52,6 +52,7 @@ const ROUTES = [
   'POST /applications/:id/confirm',
   'POST /applications/:id/interview/feedback',
   'POST /applications/:id/outcome',
+  'POST /applications/:id/apply-url',
   'POST /applications/:id/retry',
   'POST /applications/:id/skip',
   'POST /applications/:id/submitted',
@@ -179,6 +180,7 @@ for (const backend of BACKENDS) {
       await b.post(`/applications/${aApp.id}/interview/feedback`).send({ questionId: 'doc-1', answer: 'An answer by B.' }).expect(404);
       await b.post(`/applications/${aApp.id}/skip`).expect(404);
       await b.post(`/applications/${aApp.id}/retry`).expect(404);
+      await b.post(`/applications/${aApp.id}/apply-url`).send({ url: 'https://example.wd3.myworkdayjobs.com/job/1' }).expect(404);
       await b.post(`/applications/${aApp.id}/outcome`).send({ outcome: 'rejected' }).expect(404);
       expect((await t.api.get(`/applications/${aApp.id}`).expect(200)).body).toEqual(aApp);
       expect((await t.deps.repository.listEvents(B_ID)).map((e) => e.type)).toEqual([]);

@@ -78,3 +78,17 @@ describe('jooble search', () => {
     expect(parseJoobleKeys(undefined)).toEqual({});
   });
 });
+
+describe('why a link cannot be used by the queue', () => {
+  it('job boards, aggregators, known systems and unknown sites', async () => {
+    const { noRouteReason, isEmployerLink } = await import('../src');
+    expect(noRouteReason('https://www.reed.co.uk/jobs/x/1')).toBe('job-board');
+    expect(noRouteReason('https://uk.indeed.com/viewjob?jk=1')).toBe('job-board');
+    expect(noRouteReason('https://www.adzuna.co.uk/jobs/land/ad/1')).toBe('aggregator');
+    expect(noRouteReason('https://career4.successfactors.com/portalcareer?x=1')).toBe('system-off:successfactors');
+    expect(noRouteReason('https://jobs.example.org/job/1', { successfactors: ['jobs.example.org'] })).toBe('system-off:successfactors');
+    expect(noRouteReason('https://careers.example.org/apply')).toBe('unknown-site');
+    expect(isEmployerLink('https://example.wd3.myworkdayjobs.com/job/1')).toBe(true);
+    expect(isEmployerLink('https://www.linkedin.com/jobs/view/1')).toBe(false);
+  });
+});

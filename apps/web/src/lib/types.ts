@@ -89,6 +89,8 @@ export interface AgentStatus {
   systems: { id: string; label: string; enabled: boolean }[];
   /** For each application that would go out on its own: how it can ('none': the person applies on the site). */
   routes?: Record<string, 'email' | 'form' | 'none'>;
+  /** Why an application has no route: 'job-board', 'aggregator', 'system-off:<id>' or 'unknown-site'. */
+  routeReasons?: Record<string, string>;
 }
 
 /** Ordinary screening answers, stored once and reused. Never declarations. */
