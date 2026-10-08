@@ -395,7 +395,13 @@ async function run(dryRun: boolean): Promise<void> {
     render(report);
     if (!dryRun) await recordOutcome(report);
   } catch (err) {
-    setStatus(`OpennJob cannot work on this page: ${err instanceof Error ? err.message : String(err)}`, 'blocked');
+    const message = err instanceof Error ? err.message : String(err);
+    // Chrome's own pages (new tab, extensions, settings) cannot be read by any extension.
+    if (/chrome:\/\/|chrome-extension:\/\/|edge:\/\/|extensions gallery/i.test(message)) {
+      setStatus('Scan and Fill work on an application form on a website. Open the employer’s application page in this tab first. Start the queue below works from any tab.', 'blocked');
+    } else {
+      setStatus(`OpennJob cannot work on this page: ${message}`, 'blocked');
+    }
   }
 }
 
