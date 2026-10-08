@@ -339,3 +339,14 @@ export type ApplicationSystemInput = z.infer<typeof applicationSystemSchema>;
 /** The employer's own application page for a job found on a job board (https only). */
 export const applyUrlSchema = z.object({ url: z.string().trim().url().max(2000).refine((u) => u.startsWith('https://'), 'an https:// address') }).strict();
 export type ApplyUrlInput = z.infer<typeof applyUrlSchema>;
+/** A job the person found themselves: its application page and the advert as they copied it. */
+export const fromLinkSchema = z
+  .object({
+    url: z.string().trim().url().max(2000).refine((u) => u.startsWith('https://'), 'an https:// address'),
+    title: z.string().trim().min(2).max(200),
+    employer: z.string().trim().min(2).max(200),
+    location: z.string().trim().max(200).optional(),
+    description: z.string().trim().min(50, 'paste the advert text (at least a few sentences)').max(30000),
+  })
+  .strict();
+export type FromLinkInput = z.infer<typeof fromLinkSchema>;

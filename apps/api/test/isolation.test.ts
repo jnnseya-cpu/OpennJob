@@ -53,6 +53,7 @@ const ROUTES = [
   'POST /applications/:id/interview/feedback',
   'POST /applications/:id/outcome',
   'POST /applications/:id/apply-url',
+  'POST /applications/from-link',
   'POST /applications/:id/retry',
   'POST /applications/:id/skip',
   'POST /applications/:id/submitted',
@@ -184,6 +185,15 @@ for (const backend of BACKENDS) {
       await b.post(`/applications/${aApp.id}/outcome`).send({ outcome: 'rejected' }).expect(404);
       expect((await t.api.get(`/applications/${aApp.id}`).expect(200)).body).toEqual(aApp);
       expect((await t.deps.repository.listEvents(B_ID)).map((e) => e.type)).toEqual([]);
+    });
+
+    it("POST /applications/from-link: B's job from a link is B's, and A does not see it among A's applications", async () => {
+      const link = { url: 'https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Care_R9', title: 'Healthcare Assistant (fictional)', employer: 'Example Care Homes (fictional)', location: 'Leeds', description: 'A fictional vacancy for a healthcare assistant. Personal care, moving and handling, and supporting residents with daily living.' };
+      await b.post('/applications/from-link').send(link).expect(404); // B has no profile yet
+      await b.put('/profile').send(B_PROFILE).expect(200);
+      const made = (await b.post('/applications/from-link').send(link).expect(201)).body as { application: Application };
+      expect(made.application.userId).toBe(B_ID);
+      expect((await t.api.get('/applications').expect(200)).body.map((x: Application) => x.id)).not.toContain(made.application.id);
     });
 
     it("POST /applications: B's draft is made from B's CV and belongs to B", async () => {

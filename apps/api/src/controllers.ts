@@ -23,6 +23,7 @@ import {
   applicationInterviewFeedbackSchema,
   minScoreSchema,
   applyUrlSchema,
+  fromLinkSchema,
   passportSchema,
   profileSchema,
   questionQuerySchema,
@@ -37,7 +38,7 @@ import {
   outcomeSchema,
   refreshSchema,
 } from './schemas';
-import type { ApplyUrlInput, ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput, OutcomeInput } from './schemas';
+import type { ApplyUrlInput, FromLinkInput, ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput, OutcomeInput } from './schemas';
 import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RefreshInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
@@ -320,6 +321,14 @@ export class ApplicationsController {
   @Post()
   create(@CurrentUser() userId: string, @Body(new ZodPipe(createApplicationSchema)) body: CreateApplicationInput) {
     return this.service.createApplication(userId, body);
+  }
+
+  /** "Apply to this link": a job the person found, prepared like any other and queued on its own page. */
+  @Post('from-link')
+  async fromLink(@CurrentUser() userId: string, @Body(new ZodPipe(fromLinkSchema)) body: FromLinkInput) {
+    const application = await this.service.applyFromLink(userId, body);
+    const { routes, reasons } = await this.applying.routesWithReasons(userId);
+    return { application, route: routes[application.id] ?? 'none', ...(reasons[application.id] ? { reason: reasons[application.id] } : {}) };
   }
 
   @Get()

@@ -55,6 +55,31 @@ export default function TrackerPage() {
   const [rates, setRates] = useState<InterviewRates>();
   const [agent, setAgent] = useState<AgentStatus>();
   const [links, setLinks] = useState<Record<string, string>>({});
+  const [found, setFound] = useState({ url: '', title: '', employer: '', location: '', description: '' });
+  const [foundMessage, setFoundMessage] = useState('');
+  async function applyToLink() {
+    setBusyId('from-link');
+    setError('');
+    setFoundMessage('');
+    try {
+      const body = { url: found.url.trim(), title: found.title.trim(), employer: found.employer.trim(), description: found.description.trim(), ...(found.location.trim() ? { location: found.location.trim() } : {}) };
+      const r = await api<{ application: Application; route: 'email' | 'form' | 'none'; reason?: string }>('/applications/from-link', { method: 'POST', body });
+      setApps((list) => [...(list ?? []), r.application]);
+      setAgent(await api<AgentStatus>('/agent/status'));
+      setFound({ url: '', title: '', employer: '', location: '', description: '' });
+      setFoundMessage(
+        r.route === 'form'
+          ? `Prepared at ${r.application.score}% with a tailored CV and cover letter. Open the extension and press Start the queue: it applies on that page and stops for you on anything only you answer.`
+          : r.route === 'email'
+            ? `Prepared at ${r.application.score}%. The advert names a recruiter's address, so it is e-mailed with your tailored CV and cover letter at the next agent run.`
+            : `Prepared at ${r.application.score}%, but it cannot go out on its own: ${noRouteText(r.reason)}`,
+      );
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusyId('');
+    }
+  }
   async function saveLink(id: string) {
     setBusyId(id);
     setError('');
@@ -110,6 +135,25 @@ export default function TrackerPage() {
       {agentMessage ? <div className="note ok" role="status">{agentMessage}</div> : null}
       {error ? <div className="note bad" role="alert">{error}</div> : null}
       {apps === undefined && !error ? <p className="muted small">Loading…</p> : null}
+      <section className="card" aria-label="Apply to this link" data-testid="from-link">
+        <span className="label">Apply to a job you found</span>
+        <p className="small muted">
+          Found a job on an employer’s own site (Workday, SuccessFactors)? Paste its application page and the advert. OpennJob writes a CV and cover letter for it, and the extension’s queue applies there.
+        </p>
+        <div className="grid2">
+          <label className="field"><span>Application page</span><input type="url" placeholder="https://…myworkdayjobs.com/… or …successfactors…" value={found.url} onChange={(e) => setFound((f) => ({ ...f, url: e.target.value }))} /></label>
+          <label className="field"><span>Job title</span><input type="text" value={found.title} onChange={(e) => setFound((f) => ({ ...f, title: e.target.value }))} /></label>
+          <label className="field"><span>Employer</span><input type="text" value={found.employer} onChange={(e) => setFound((f) => ({ ...f, employer: e.target.value }))} /></label>
+          <label className="field"><span>Town or city (optional)</span><input type="text" value={found.location} onChange={(e) => setFound((f) => ({ ...f, location: e.target.value }))} /></label>
+        </div>
+        <label className="field"><span>The advert (copy and paste the whole text)</span><textarea rows={6} value={found.description} onChange={(e) => setFound((f) => ({ ...f, description: e.target.value }))} /></label>
+        <div className="row">
+          <button type="button" className="btn primary" disabled={busyId === 'from-link' || !found.url.trim() || !found.title.trim() || !found.employer.trim() || found.description.trim().length < 50} onClick={applyToLink}>
+            {busyId === 'from-link' ? 'Preparing…' : 'Prepare and apply'}
+          </button>
+        </div>
+        {foundMessage ? <p className="note ok small" role="status" data-testid="from-link-result">{foundMessage}</p> : null}
+      </section>
       {apps && apps.length ? (
         <>
           <StatTiles

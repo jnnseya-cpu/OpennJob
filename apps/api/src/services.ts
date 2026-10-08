@@ -58,6 +58,7 @@ import type {
   StatementInput,
   SubmittedInput,
   OutcomeInput,
+  FromLinkInput,
 } from './schemas';
 
 /** zod leaves `undefined` on absent optional keys; drop them so stored objects are clean. */
@@ -529,6 +530,31 @@ export class OpennJobService {
   }
 
   /**
+   * "Apply to this link": a job the person found on an employer's site, with the advert text they
+   * copied. It is scored, and a tailored CV and cover letter are prepared in auto mode, so the
+   * queue applies on that page (when its application system is switched on) under the same policy
+   * as every other form. Kept whatever its score: the person chose it, and the agent does not close it.
+   * OpennJob does not open the page itself to read it.
+   */
+  async applyFromLink(userId: string, input: FromLinkInput): Promise<Application> {
+    const profile = await this.getProfile(userId);
+    if (!isEmployerLink(input.url)) throw new BadRequestException("That is a job board's or an aggregator's page. Give the employer's own application page.");
+    const externalId = sha256(`${userId}|${input.url}`).slice(0, 24);
+    const job = normaliseJob({ source: 'link', externalId, title: input.title, employer: input.employer, location: input.location ?? '', url: input.url, applyUrl: input.url, description: input.description });
+    if (!job) throw new BadRequestException('The job could not be read');
+    await this.deps.repository.upsertJobs([job]);
+    const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
+    const match = matchJob(job, profile.cvText, passport, preferencesOf(profile));
+    if (!match.eligible) throw new UnprocessableEntityException(OpennJobService.ineligibleMessage(match));
+    const existing = await this.deps.repository.listApplications(userId);
+    const duplicate = this.duplicateOf(existing, job);
+    if (duplicate && duplicate.status !== 'closed') throw new ConflictException(`You already have an application for this job (${duplicate.jobTitle}, ${duplicate.employer}).`);
+    const application = await this.draftFor(userId, job, profile, passport, match, 'auto');
+    await this.emit(userId, 'application.from_link', { applicationId: application.id, score: match.score });
+    return application;
+  }
+
+  /**
    * THE 80% RULE. Takes every job that is (a) inside the candidate's preferences,
    * (b) one they are eligible for and (c) scoring at or above the threshold
    * (OPENNJOB_APPLY_THRESHOLD, default 80), and prepares an application DRAFT for it.
@@ -556,7 +582,8 @@ export class OpennJobService {
     for (const a of existing) {
       if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined) continue;
       const job = jobs.find((j) => j.id === a.jobId);
-      if (!job || matchJob(job, profile.cvText, passport, preferences).role?.fits !== false) continue;
+      // A job the person chose themselves ("Apply to this link") is theirs to skip, not the agent's.
+      if (!job || job.source === 'link' || matchJob(job, profile.cvText, passport, preferences).role?.fits !== false) continue;
       const closed: Application = { ...a, status: 'closed' };
       await this.deps.repository.updateApplication(closed);
       existing.splice(existing.indexOf(a), 1, closed);
@@ -641,7 +668,7 @@ export class OpennJobService {
     for (const a of [...existing]) {
       if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined) continue;
       const job = jobsById.get(a.jobId);
-      if (!job) continue;
+      if (!job || job.source === 'link') continue;
       const now = matchJob(job, profile.cvText, passport, preferences);
       if (now.score >= threshold) {
         if (now.score !== a.score) {

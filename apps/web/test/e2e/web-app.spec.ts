@@ -268,6 +268,27 @@ test('agent run in auto mode prepares drafts only: nothing is approved or submit
   await expect(page.getByRole('button', { name: 'Approve' })).toBeDisabled();
 });
 
+test('apply to a job you found: the pasted link is prepared in auto mode with a tailored CV, a job board link is refused', async () => {
+  await page.getByRole('link', { name: /Tracker/ }).click();
+  const box = page.getByRole('region', { name: 'Apply to this link' });
+  await box.getByLabel('Application page').fill('https://www.reed.co.uk/jobs/care-assistant/123');
+  await box.getByLabel('Job title').fill('Care Assistant (fictional)');
+  await box.getByLabel('Employer').fill('Example Care Homes (fictional)');
+  await box.getByLabel(/The advert/).fill('A fictional vacancy for a care assistant. Personal care, moving and handling, medication rounds and supporting residents with daily living.');
+  await box.getByRole('button', { name: 'Prepare and apply' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: "job board's or an aggregator's page" })).toBeVisible();
+
+  await box.getByLabel('Application page').fill('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Care-Assistant_R77');
+  await box.getByRole('button', { name: 'Prepare and apply' }).click();
+  await expect(page.getByTestId('from-link-result')).toContainText('Prepared at');
+  // Workday is not switched on in this test server: it says why it cannot go out on its own.
+  await expect(page.getByTestId('from-link-result')).toContainText('Workday is not switched on yet');
+  const made = (await call<{ jobTitle: string; mode: string; status: string; applyUrl: string; tailoredCv?: string }[]>('GET', '/applications')).find((a) => a.jobTitle === 'Care Assistant (fictional)');
+  expect(made).toMatchObject({ mode: 'auto', applyUrl: 'https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Care-Assistant_R77' });
+  expect(made?.tailoredCv).toBeTruthy();
+  await expect(box.getByLabel('Job title')).toHaveValue('');
+});
+
 test('review: requirements with evidence, editable statement, every declaration confirmed by hand before approve', async () => {
   // The draft the agent prepared in the previous test.
   await page.getByRole('link', { name: 'Matches' }).click();
@@ -413,7 +434,7 @@ test('account: export downloads everything held; delete needs the password and r
   expect(exported.user.email).toBe(EMAIL);
   expect(exported.profile.cvText).toBe(CV);
   expect(exported.applications).toEqual(expect.arrayContaining((await call<unknown[]>('GET', '/applications')).map((a) => expect.objectContaining(a as Record<string, unknown>))));
-  expect(exported.applications).toHaveLength(2);
+  expect(exported.applications).toHaveLength(3);
 
   const form = page.getByRole('form', { name: 'Delete account' });
   const remove = form.getByRole('button', { name: 'Delete my account' });
