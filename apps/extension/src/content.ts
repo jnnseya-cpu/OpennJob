@@ -7,6 +7,7 @@ import { advanceNow, pressStart, runAgent, submitNow } from './agent/agent';
 import { selectListboxOption } from './agent/fill';
 import { scanFields } from './agent/scan';
 import { stepErrors, stepSignature } from './agent/steps';
+import { detectBlockers } from './agent/blockers';
 import { detectConfirmation } from './agent/confirmation';
 import type { Confirmation } from './agent/confirmation';
 import type { RunReport, RunRequest, SubmitReport } from './agent/types';
@@ -56,7 +57,7 @@ if (!scope.__opennjob) {
   // running as a real content script this lives in the extension's isolated world and
   // is not visible to the page.
   scope.__opennjob = { run, submit: () => submitNow(document, lastFill), confirmation: () => detectConfirmation(document) ?? null };
-  const stepState = () => ({ signature: stepSignature(document), errors: stepErrors(document) });
+  const stepState = () => ({ signature: stepSignature(document), errors: stepErrors(document), signIn: detectBlockers(document).includes('login-wall') });
 
   if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
     chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {

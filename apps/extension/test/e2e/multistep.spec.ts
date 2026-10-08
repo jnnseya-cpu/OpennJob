@@ -216,8 +216,11 @@ test('Workday-style and SuccessFactors-style applications: walked step by step, 
   // Five applications over many pages take about 25 seconds alone, more when the whole suite runs:
   // the test gets the same 120 seconds runQueue gives the queue, not the default 30.
   test.setTimeout(120_000);
+  // Nobody signs in during this run: the queue waits 1.5 seconds here (10 minutes for people).
+  await worker.evaluate(() => chrome.storage.local.set({ signInWaitMs: 1_500 }));
   const page = await popup();
   const state = await runQueue(page);
+  await worker.evaluate(() => chrome.storage.local.remove('signInWaitMs'));
   expect(state).toMatchObject({ sent: 2, held: 3, uncertain: 0 });
 
   // Workday: Apply, Apply Manually, My Information (drop-downs from stored answers), My Experience
@@ -234,7 +237,7 @@ test('Workday-style and SuccessFactors-style applications: walked step by step, 
   expect(disclosures.holdReasons?.some((r) => r.startsWith('sensitive:'))).toBe(true);
   expect(openTabs().some((u) => u.includes('variant=disclosures'))).toBe(true);
 
-  // A sign-in page stops it, with the tab left open for the person to sign in once.
+  // A sign-in page nobody signed in on (within the wait) stops it, with the tab left open.
   expect((await app('signin')).holdReasons).toEqual(['login-wall']);
   expect(openTabs().some((u) => u.includes('variant=signin'))).toBe(true);
 
@@ -250,16 +253,19 @@ test('Workday-style and SuccessFactors-style applications: walked step by step, 
   await page.close();
 });
 
-test('log in once: the person signs in in the tab that was left open, presses "try again", and the queue goes all the way', async () => {
-  const signinTab = context.pages().find((p) => p.url().includes('variant=signin'));
-  expect(signinTab).toBeDefined();
-  // The person signs in on the employer's site themselves (OpennJob never fills a password).
-  await signinTab?.locator('[data-automation-id="signInSubmitButton"]').click();
-  await signinTab?.close();
+test('sign in while the queue waits: it brings the tab forward, waits, and goes all the way once the person is in', async () => {
   expect((await call<App>('POST', `/applications/${apps.signin}/retry`)).status).toBe('draft');
-  // The disclosures one keeps its declaration hold; it is not part of this run.
   const page = await popup();
-  const state = await runQueue(page);
+  await worker.evaluate(() => chrome.storage.local.remove('queueState'));
+  await page.locator('#queue-start').click();
+  // The queue says what it is waiting for.
+  await expect.poll(async () => worker.evaluate(async () => (await chrome.storage.local.get('queueState')).queueState?.message ?? ''), { timeout: 30_000 }).toContain('Sign in on');
+  // The person signs in on the employer's site themselves (OpennJob never fills a password), in the newest tab.
+  const signinTab = context.pages().filter((p) => p.url().includes('variant=signin')).pop();
+  expect(signinTab).toBeDefined();
+  await signinTab?.locator('[data-automation-id="signInSubmitButton"]').click();
+  await expect.poll(async () => worker.evaluate(async () => (await chrome.storage.local.get('queueState')).queueState?.running), { timeout: 60_000 }).toBe(false);
+  const state = await worker.evaluate(async () => (await chrome.storage.local.get('queueState')).queueState);
   expect(state).toMatchObject({ sent: 1 });
   expect((await app('signin')).status).toBe('submitted');
   expect(hits.filter((h) => h === 'workday-signin')).toHaveLength(1);

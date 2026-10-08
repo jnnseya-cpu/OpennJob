@@ -142,6 +142,38 @@ async function settle(tabId: number, before: string, timeoutMs = 10_000): Promis
   return { changed: false, errors };
 }
 
+/** How long the queue waits for the person to sign in on an employer's site. */
+export const SIGN_IN_WAIT_MS = 10 * 60_000;
+
+/**
+ * Brings the tab to the front and waits while the person signs in (or creates the account) there.
+ * True once the sign-in form is gone; false after SIGN_IN_WAIT_MS.
+ */
+async function waitForSignIn(tabId: number, host: string): Promise<boolean> {
+  // The tests set a shorter wait in storage; people get SIGN_IN_WAIT_MS.
+  const stored = (await chrome.storage.local.get('signInWaitMs')).signInWaitMs;
+  const timeoutMs = typeof stored === 'number' && stored > 0 ? stored : SIGN_IN_WAIT_MS;
+  await chrome.tabs.update(tabId, { active: true });
+  await setState({ message: `Sign in on ${host} in the tab OpennJob opened (create the account there if you have none). The queue goes on by itself once you are in.` });
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(2_000);
+    try {
+      await waitForLoad(tabId, 3_000);
+      await inject(tabId);
+      const now = await send<{ signIn: boolean }>(tabId, { type: 'OPENNJOB_STEP_STATE' });
+      if (!now.signIn) {
+        await sleep(1_000); // let the page after sign-in finish drawing
+        return true;
+      }
+    } catch {
+      // The tab is navigating (the sign-in was sent), or it was closed: look again until the deadline.
+      if (!(await chrome.tabs.get(tabId).catch(() => undefined))) return false;
+    }
+  }
+  return false;
+}
+
 let running = false;
 
 export async function runQueue(): Promise<QueueState> {
@@ -178,8 +210,15 @@ export async function runQueue(): Promise<QueueState> {
           await inject(tabId);
           report = await send<RunReport>(tabId, { ...runRequest, priorFields: prior });
           if (report.status === 'blocked') {
+            // A sign-in page: the person signs in, in this tab (doing any CAPTCHA on it as part of
+            // their own sign-in), and the queue goes on from there. OpennJob never types a password
+            // and never touches a CAPTCHA; it only waits (rule 4: nothing is worked around).
+            if (report.blockers.includes('login-wall') && (await waitForSignIn(tabId, url.hostname))) {
+              state = await setState({ message: 'Working through the queue…' });
+              continue;
+            }
             reasons = holdReasonsOf(report);
-            keepTab = report.blockers.includes('login-wall'); // sign in once, here, and the queue goes on next time
+            keepTab = report.blockers.includes('login-wall') || report.blockers.includes('captcha'); // left for the person to finish
             break;
           }
           if (report.readyToSubmit) break; // the final step: submit after the go, below
