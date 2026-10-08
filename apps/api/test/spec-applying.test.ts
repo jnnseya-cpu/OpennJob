@@ -94,15 +94,25 @@ describe('spec T-01: a job at 79% is left alone; at 80% it is prepared', () => {
   });
 });
 
-describe('spec T-05 (API): an application whose documents do not trace is held for the person', () => {
-  it('an AI draft that invents an employer, a date and a qualification is stored as needs_you, with the reasons, and never as a plain draft', async () => {
+describe('spec T-05 (API): what the CV does not support is never sent', () => {
+  it('a sentence that invents an employer, a date and a qualification is taken out; the rest is kept, and nothing is added', async () => {
+    const inventing = new FakeLlm(() => 'Wrote and reviewed care plans and kept accurate records. I worked at Barrow Infirmary from 2011 and hold an MSc in nursing.\n\nGAPS:\nnone');
+    await seeded({ llm: inventing });
+    const app = (await t.api.post('/applications').send({ jobId: NURSE_JOB, mode: 'hybrid' }).expect(201)).body as Application;
+    expect(app).toMatchObject({ status: 'draft', statementSource: 'llm' });
+    expect(app.statement).toContain('Wrote and reviewed care plans');
+    expect(app.statement).not.toContain('Barrow');
+    expect(app.traceFailures).toBeUndefined();
+    // The tailored CV is the person's CV reordered: every line is one of theirs.
+    for (const line of (app.tailoredCv ?? '').split('\n')) expect(PROFILE.cvText.split('\n')).toContain(line);
+  });
+
+  it('when nothing is left after taking out what the CV does not support, the application is held for the person', async () => {
     const inventing = new FakeLlm(() => 'I worked at Barrow Infirmary from 2011 and hold an MSc in nursing.\n\nGAPS:\nnone');
     await seeded({ llm: inventing });
     const app = (await t.api.post('/applications').send({ jobId: NURSE_JOB, mode: 'hybrid' }).expect(201)).body as Application;
     expect(app).toMatchObject({ status: 'needs_you', holdReasons: ['trace-check'], statementSource: 'llm' });
-    expect(app.traceFailures).toEqual(['Statement: "I worked at Barrow Infirmary from 2011 and hold an MSc in nursing." mentions 2011, Barrow, Infirmary, MSc, which your CV does not contain.']);
-    // The tailored CV is the person's CV reordered: every line is one of theirs.
-    for (const line of (app.tailoredCv ?? '').split('\n')) expect(PROFILE.cvText.split('\n')).toContain(line);
+    expect(app.traceFailures).toEqual(['Statement: nothing was left after the sentences your CV does not support were taken out.']);
     // The event says how many failures, never what they were.
     const drafted = (await t.deps.repository.listEvents(USER_ID)).find((e) => e.type === 'application.drafted');
     expect(drafted?.payload).toMatchObject({ traceFailures: 1, held: true });

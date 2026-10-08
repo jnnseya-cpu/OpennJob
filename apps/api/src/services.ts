@@ -444,6 +444,28 @@ export class OpennJobService {
   }
 
   /**
+   * TAI-3, corrected without the person: a sentence of the statement that the CV does not support
+   * is taken out, and a rewritten CV with any unsupported line is replaced by the person's own CV
+   * (which traces line for line). What still fails afterwards holds the application as before.
+   * Nothing is added; only what cannot be traced is removed.
+   */
+  private static corrected(statement: string, tailoredCv: string, tailoredCvSource: 'llm' | 'reorder' | undefined, job: Pick<Job, 'title' | 'employer' | 'location'>, profile: Profile, passport: Passport) {
+    const sources = { cvText: profile.cvText, passport, languages: preferencesOf(profile).languages, job, personName: `${profile.firstName} ${profile.lastName}` };
+    let text = statement;
+    for (const f of traceCheck({ statement: text }, sources)) {
+      if (f.document === 'statement' && f.text) text = text.replace(f.text, '').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    }
+    let cv = tailoredCv;
+    let cvSource = tailoredCvSource;
+    if (cv && traceRewrittenCv(cv, sources).length > 0) {
+      cv = profile.cvText;
+      cvSource = 'reorder';
+    }
+    const traceFailures = text.trim() ? OpennJobService.traceOf(text, cv, job, profile, passport) : ['Statement: nothing was left after the sentences your CV does not support were taken out.'];
+    return { statement: text, tailoredCv: cv, tailoredCvSource: cvSource, removed: text !== statement || cv !== tailoredCv, traceFailures };
+  }
+
+  /**
    * Drafts and stores one application. The caller has already checked eligibility and
    * duplicates. The statement and the tailored CV are traced to the source before the
    * application is stored; anything that does not trace holds it for the person.
@@ -455,8 +477,10 @@ export class OpennJobService {
     // The CV rewritten for this advert, traced to the CV at fact level; the reordered CV if it does not trace.
     const sources = { cvText: profile.cvText, passport, languages: preferencesOf(profile).languages, personName: `${profile.firstName} ${profile.lastName}` };
     const tailored = await tailorCvForJob({ cvText: profile.cvText, job, match }, ceiling ? undefined : this.llmFor(userId, 'cv-tailoring'), sources);
-    const tailoredCv = tailored.text;
-    const traceFailures = OpennJobService.traceOf(draft.statement, tailoredCv, job, profile, passport);
+    const fixed = OpennJobService.corrected(draft.statement, tailored.text, tailored.source, job, profile, passport);
+    const tailoredCv = fixed.tailoredCv;
+    const traceFailures = fixed.traceFailures;
+    draft.statement = fixed.statement;
     const holds: string[] = [];
     if (ceiling) holds.push('llm-ceiling');
     if (traceFailures.length > 0) holds.push('trace-check');
@@ -478,7 +502,7 @@ export class OpennJobService {
       createdAt: this.now(),
       dedupeKey: dedupeKey(job),
       tailoredCv,
-      tailoredCvSource: tailored.source,
+      ...(fixed.tailoredCvSource ? { tailoredCvSource: fixed.tailoredCvSource } : {}),
       ...(traceFailures.length > 0 ? { traceFailures } : {}),
     };
     const application = withHolds(base, holds);
@@ -717,6 +741,21 @@ export class OpennJobService {
       await this.deps.repository.updateApplication(closed);
       existing.splice(existing.indexOf(a), 1, closed);
       closedBelowBar += 1;
+    }
+
+    // Applications held only because a sentence did not trace to the CV are corrected the same way
+    // (the sentence taken out, or the person's own CV used), unless the person edited the statement.
+    const editedByPerson = new Set((await this.deps.repository.listEvents(userId)).filter((e) => e.type === 'application.statement.edited').map((e) => String(e.payload.applicationId)));
+    for (const a of [...existing]) {
+      if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined || !a.traceFailures?.length || editedByPerson.has(a.id)) continue;
+      const job = jobsById.get(a.jobId);
+      if (!job) continue;
+      const fixed = OpennJobService.corrected(a.statement, a.tailoredCv ?? '', a.tailoredCvSource, job, profile, passport);
+      if (fixed.traceFailures.length > 0) continue;
+      const cleared: Application = { ...withHolds({ ...a, statement: fixed.statement, tailoredCv: fixed.tailoredCv, ...(fixed.tailoredCvSource ? { tailoredCvSource: fixed.tailoredCvSource } : {}) }, [], (h) => h === 'trace-check') };
+      delete cleared.traceFailures;
+      await this.deps.repository.updateApplication(cleared);
+      existing.splice(existing.indexOf(a), 1, cleared);
     }
 
     // Drafts written without AI because the daily AI budget was used up are written again with AI
