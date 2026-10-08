@@ -25,10 +25,14 @@ describe('Workday careers site search', () => {
     const fetch: FetchLike = async (url, init) => {
       calls.push({ url, ...(init?.method ? { method: init.method } : {}), ...(init?.body ? { body: JSON.parse(init.body) } : {}) });
       if (url.endsWith('/jobs')) {
-        return { ok: true, status: 200, json: async () => ({ total: 3, jobPostings: [{ title: 'Senior Project Manager (fictional)', externalPath: '/job/Warwick/Senior-Project-Manager_R101', locationsText: 'Warwick' }, { title: 'Planner (fictional)', externalPath: '/job/Coventry/Planner_R102', locationsText: 'Coventry' }, { title: 'Process Engineer (fictional)', externalPath: '/job/Raleigh/Process-Engineer_R103', locationsText: 'Raleigh, North Carolina, United States' }] }) };
+        return { ok: true, status: 200, json: async () => ({ total: 3, jobPostings: [{ title: 'Senior Project Manager (fictional)', externalPath: '/job/Warwick/Senior-Project-Manager_R101', locationsText: 'Warwick' }, { title: 'Planner (fictional)', externalPath: '/job/Coventry/Planner_R102', locationsText: 'Coventry' }, { title: 'Process Engineer (fictional)', externalPath: '/job/Raleigh/Process-Engineer_R103', locationsText: 'Raleigh, North Carolina, United States' }, { title: 'Responsable Achats (fictional)', externalPath: '/job/Massy/Responsable_R104', locationsText: 'Massy' }] }) };
       }
       if (url.endsWith('_R101')) {
         return { ok: true, status: 200, json: async () => ({ jobPostingInfo: { title: 'Senior Project Manager (fictional)', location: 'Warwick', jobDescription: '<p>Lead substation projects.</p><ul><li>APM qualification</li><li>NEC3 contracts</li></ul>', externalUrl: 'https://examplegrid.wd3.myworkdayjobs.com/en-GB/EG_Careers/job/Warwick/Senior-Project-Manager_R101' }, hiringOrganization: { name: 'Example Grid plc' } }) };
+      }
+      if (url.endsWith('_R104')) {
+        // Only the advert's own country says it is abroad: "Massy" alone names no country.
+        return { ok: true, status: 200, json: async () => ({ jobPostingInfo: { title: 'Responsable Achats (fictional)', location: 'Massy', country: { descriptor: 'France' }, jobDescription: '<p>Fictional.</p>' } }) };
       }
       return { ok: false, status: 500, json: async () => ({}) };
     };
@@ -39,7 +43,7 @@ describe('Workday careers site search', () => {
     const { fetch, calls } = fetchFor();
     const jobs = await createCareerSiteSearch({ kind: 'workday', sites, fetch }).search({ what: 'project manager', where: 'Birmingham', country: 'GB' });
     expect(calls[0]).toMatchObject({ url: 'https://examplegrid.wd3.myworkdayjobs.com/wday/cxs/examplegrid/EG_Careers/jobs', method: 'POST', body: { searchText: 'project manager', limit: 20, offset: 0 } });
-    expect(jobs).toHaveLength(2); // the job in the United States is not a UK job
+    expect(jobs).toHaveLength(2); // the jobs in the United States and in France are not UK jobs
     expect(jobs[0]).toMatchObject({ source: 'workday', title: 'Senior Project Manager (fictional)', employer: 'Example Grid (fictional)', country: 'GB', city: 'Warwick', applyUrl: 'https://examplegrid.wd3.myworkdayjobs.com/en-GB/EG_Careers/job/Warwick/Senior-Project-Manager_R101' });
     expect(jobs[0]?.description).toContain('NEC3 contracts');
     // An advert that could not be read keeps the posting, with a page built from the list.

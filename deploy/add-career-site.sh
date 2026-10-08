@@ -5,6 +5,7 @@
 #   bash deploy/add-career-site.sh "https://examplegrid.wd3.myworkdayjobs.com/en-GB/Careers" "Example Grid" GB
 #   bash deploy/add-career-site.sh "https://jobs.example.org" "Example Build" GB      # a SuccessFactors career site
 #   bash deploy/add-career-site.sh list                                              # what is listed
+#   bash deploy/add-career-site.sh remove jobs.nationalgrid.com                      # take a site off the list
 #
 # The address is the careers site's search page as the browser shows it. Workday sites end in
 # myworkdayjobs.com; any other address is taken as an SAP SuccessFactors career site.
@@ -22,6 +23,18 @@ if [ "${1:-list}" = list ]; then
   [ -n "$sites" ] || { echo "No careers site is listed yet."; exit 0; }
   printf '%s\n' "$sites" | tr ',' '\n' | sed 's/^ */  /'
   [ -f career-sites.log ] && { echo "Terms checks recorded:"; sed 's/^/  /' career-sites.log; }
+  exit 0
+fi
+
+if [ "${1:-}" = remove ]; then
+  HOST_OUT="$(printf '%s' "${2:-}" | sed -E 's#^https://##; s#/.*##' | tr '[:upper:]' '[:lower:]')"
+  [ -n "$HOST_OUT" ] || { echo "Give the site's address or host name to remove." >&2; exit 1; }
+  KEPT="$(current | tr ',' '\n' | grep -v "://$HOST_OUT[/|]" | paste -sd, - || true)"
+  grep -vE '^OPENNJOB_CAREER_SITES=' "$F" > "$F.tmp" || true
+  [ -n "$KEPT" ] && printf "OPENNJOB_CAREER_SITES='%s'\n" "$KEPT" >> "$F.tmp"
+  mv "$F.tmp" "$F"; chmod 600 "$F"
+  ./oj up -d api >/dev/null
+  echo "Removed $HOST_OUT. Still listed:"; printf '%s\n' "${KEPT:-(none)}" | tr ',' '\n' | sed 's/^/  /'
   exit 0
 fi
 
