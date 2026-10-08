@@ -150,6 +150,11 @@ hold them, whatever a task seems to ask. If a request conflicts with one, stop a
 4. **No CAPTCHA solving and no bot-evasion.** On a CAPTCHA or a login wall the agent
    stops and says why. No proxy rotation, fingerprint spoofing, stealth plugins, headless
    detection workarounds, or anything meant to get past a site's defences.
+   Owner decisions, 8 October 2026: a CAPTCHA means one the person can see (tick box,
+   picture puzzle, Cloudflare check, typed letters); Google's invisible reCAPTCHA (badge, no
+   puzzle) does not stop the agent and is never touched (`apps/extension/src/agent/blockers.ts`).
+   On a sign-in page the queue brings the tab forward and waits for the person to sign in
+   (up to ten minutes), then goes on; it never types a password.
 5. **No automation against a site whose terms forbid it.** No scrapers or automated
    access for NHS Jobs, Trac, LinkedIn, Indeed or any other site without a terms-of-use
    check or a partnership. A new job source or target site needs that check first.

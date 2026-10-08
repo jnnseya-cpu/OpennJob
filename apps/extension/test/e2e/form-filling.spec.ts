@@ -354,6 +354,20 @@ test.describe('pages the agent must stop on', () => {
     });
   }
 
+  test('an invisible reCAPTCHA alone (badge, no puzzle) does not stop the fill, and is not touched (owner decision, 8 October 2026)', async ({ page }) => {
+    await openFixture(page, 'invisible-recaptcha-application.html');
+    const report = await runAgent(page, 'hybrid', []);
+    expect(report.blockers).toEqual([]);
+    expect(report.status).not.toBe('blocked');
+    expect(report.submitted).toBe(false); // hybrid never submits
+    const filled = await formSnapshot(page);
+    expect(filled['i-name']).not.toBe('');
+    expect(filled['i-email']).not.toBe('');
+    // The reCAPTCHA parts are left exactly as they were.
+    expect(filled['g-recaptcha-response']).toBe('');
+    await expect(page.locator('.g-recaptcha')).not.toHaveAttribute('data-opennjob-state', /.*/);
+  });
+
   test('stops on a login wall and never fills the email or password', async ({ page }) => {
     await openFixture(page, LOGIN);
     for (const mode of MODES) {
