@@ -155,7 +155,7 @@ export interface OpennJobDeps {
 type Env = Record<string, string | undefined>;
 
 const list = (v: string | undefined): string[] => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-const flag = (v: string | undefined): boolean => /^(1|true|yes|on)$/i.test((v ?? '').trim());
+export const flag = (v: string | undefined): boolean => /^(1|true|yes|on)$/i.test((v ?? '').trim());
 
 /** "token:Employer Name" -> { id: "token", employer: "Employer Name" } */
 function boards(v: string | undefined): { id: string; employer?: string }[] {

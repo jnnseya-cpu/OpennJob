@@ -184,9 +184,11 @@ export default function NotificationsPage() {
             <p className="small muted">In-app notifications are always on. Service notices (marked below) are sent whatever you choose here.</p>
             {(['email', 'sms', 'push', 'whatsapp'] as const).map((c) => {
               const ch = catalogue.channels.find((x) => x.channel === c);
+              // A channel with nothing behind it cannot be switched on; one already on can still be switched off.
+              const cannot = c !== 'email' && !ch?.wired && !prefs[c];
               return (
                 <label key={c} className={`confirm ${prefs[c] ? 'on' : ''}`}>
-                  <input type="checkbox" checked={prefs[c]} onChange={(e) => savePrefs({ ...prefs, [c]: e.target.checked })} />
+                  <input type="checkbox" disabled={cannot} checked={prefs[c]} onChange={(e) => savePrefs({ ...prefs, [c]: e.target.checked })} />
                   <span>
                     {CHANNEL_NAME[c]}
                     <br />

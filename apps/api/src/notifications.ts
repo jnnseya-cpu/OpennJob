@@ -77,6 +77,9 @@ export function fileMailbox(dir: string): EmailSender {
  */
 export type PostFn = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean }>;
 
+/** Header values on one line: a job title or name with a line break can never add a header. */
+export const oneLine = (v: string): string => v.replace(/[\r\n\t]+/g, ' ').trim();
+
 export function resendEmail(apiKey: string, from: string, fetchFn: PostFn = (url, init) => fetch(url, init)): EmailSender {
   return {
     name: 'resend',
@@ -86,9 +89,9 @@ export function resendEmail(apiKey: string, from: string, fetchFn: PostFn = (url
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: m.fromName ? `${m.fromName.replace(/[<>"]/g, '')} <${addressOf(from)}>` : from,
+          from: m.fromName ? `${oneLine(m.fromName).replace(/[<>"]/g, '')} <${addressOf(from)}>` : from,
           to: [m.to],
-          subject: m.subject,
+          subject: oneLine(m.subject),
           text: m.text,
           html: m.html,
           ...(m.replyTo ? { reply_to: m.replyTo } : {}),
@@ -137,9 +140,9 @@ export function smtpEmail(settings: SmtpSettings): EmailSender {
     async send(m) {
       try {
         await transport.sendMail({
-          from: m.fromName ? { name: m.fromName, address: addressOf(settings.from) } : settings.from,
+          from: m.fromName ? { name: oneLine(m.fromName), address: addressOf(settings.from) } : settings.from,
           to: m.to,
-          subject: m.subject,
+          subject: oneLine(m.subject),
           text: m.text,
           html: m.html,
           ...(m.replyTo ? { replyTo: m.replyTo } : {}),

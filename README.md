@@ -73,7 +73,7 @@ cp .env.example .env   # nothing needs setting for a local try-out
 npm start              # http://127.0.0.1:3000 ; JSON log lines on stdout
 ```
 
-With `OPENNJOB_DEMO_JOBS=true` (the default in `.env.example`) there are 28 fictional
+With `OPENNJOB_DEMO_JOBS=true` (off in `.env.example`; turn it on locally to try the app) there are 28 fictional
 sample jobs (the three v1 healthcare jobs, plus a few per industry pack across 16
 countries), so the whole flow can be tried with no API keys. Every employer in them is
 invented.

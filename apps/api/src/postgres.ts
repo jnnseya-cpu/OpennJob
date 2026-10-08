@@ -346,6 +346,12 @@ export class PostgresRepository implements Repository {
     return res.rowCount ?? 0;
   }
 
+  async usedAuthToken(kind: AuthToken['kind'], tokenHash: string): Promise<{ userId: string; usedAt: string } | undefined> {
+    const { rows } = await this.db.query('SELECT user_id, used_at FROM auth_tokens WHERE kind = $1 AND token_hash = $2 AND used_at IS NOT NULL LIMIT 1', [kind, tokenHash]);
+    const row = rows[0];
+    return row ? { userId: row.user_id as string, usedAt: new Date(row.used_at as string).toISOString() } : undefined;
+  }
+
   // ----- applying -------------------------------------------------------------------
 
   async deleteApplication(userId: string, id: string): Promise<boolean> {

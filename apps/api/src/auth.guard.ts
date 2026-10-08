@@ -93,7 +93,8 @@ export class AccessTokenGuard implements CanActivate {
     const user = await this.deps.repository.getUserById(check.userId);
     if (!user) throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', message: 'Missing or invalid bearer token', code: 'token_invalid' });
     // A token issued before the password was last changed no longer works (ACC-3).
-    if (check.pwv && check.pwv !== passwordVersion(user.passwordHash)) {
+    // A token without the claim was not issued by this API's sign-in and is refused.
+    if (check.pwv !== passwordVersion(user.passwordHash)) {
       throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', message: 'Missing or invalid bearer token', code: 'token_invalid' });
     }
     request.opennjobUserId = user.id;

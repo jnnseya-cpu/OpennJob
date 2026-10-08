@@ -5,7 +5,7 @@ import type { Application, Job, JobSourceAdapter } from '@opennjob/core';
 import { signAccessToken } from '../src/auth';
 import type { OpennJobDeps } from '../src/deps';
 import { OpennJobService } from '../src/services';
-import { JWT_SECRET, NOW, PASSPORT, PROFILE, USER_ID, createTestApp, scriptedLlm, testConfig } from './helpers';
+import { JWT_SECRET, NOW, PASSPORT, PROFILE, PWV, USER_ID, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
 /** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
@@ -36,7 +36,7 @@ function movableClock(start = NOW) {
     },
   };
 }
-const clientAt = (app: TestApp, at: Date) => app.as(signAccessToken(USER_ID, JWT_SECRET, 3600, at).accessToken);
+const clientAt = (app: TestApp, at: Date) => app.as(signAccessToken(USER_ID, JWT_SECRET, 3600, at, PWV).accessToken);
 
 async function seeded(overrides: Partial<OpennJobDeps> = {}): Promise<TestApp> {
   t = await createTestApp({ config: testConfig({ employerKey: EMPLOYER_KEY }), ...overrides });

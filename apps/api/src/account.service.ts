@@ -10,6 +10,8 @@ import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 /** "Keep me signed in" lasts 60 days from the last use. */
 const REFRESH_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+/** A refresh token used again within this long is a second tab, not a copied token. */
+const REUSE_GRACE_MS = 60_000;
 const RESET_TTL_MS = 60 * 60 * 1000;
 const tokenHash = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
 
@@ -129,10 +131,24 @@ export class AccountService {
    * one is refused. A password reset or signing out revokes them all.
    */
   async refresh(input: RefreshInput) {
-    const userId = await this.deps.repository.consumeAuthToken('refresh', tokenHash(input.refreshToken), this.now());
+    const hash = tokenHash(input.refreshToken);
+    const userId = await this.deps.repository.consumeAuthToken('refresh', hash, this.now());
+    if (!userId) await this.onReuse(hash);
     const user = userId ? await this.deps.repository.getUserById(userId) : undefined;
     if (!user) throw new UnauthorizedException('Your session has ended. Sign in again.');
     return { user: publicUser(user), ...this.token(user), refreshToken: await this.newToken(user.id, 'refresh', REFRESH_TTL_MS) };
+  }
+
+  /**
+   * A refresh token used again after it was replaced may have been copied: every kept sign-in of
+   * that account ends. Two tabs refreshing at the same moment are not that, so a token used in the
+   * last REUSE_GRACE_MS does not count.
+   */
+  private async onReuse(hash: string): Promise<void> {
+    const used = await this.deps.repository.usedAuthToken('refresh', hash);
+    if (!used || this.deps.clock().getTime() - Date.parse(used.usedAt) < REUSE_GRACE_MS) return;
+    const revoked = await this.deps.repository.revokeAuthTokens(used.userId, 'refresh', this.now());
+    if (revoked > 0) await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'auth.refresh_reused', userId: used.userId, occurredAt: this.now(), payload: { revoked } });
   }
 
   /** Signing out: the refresh token, and with it every other one for this account, stops working. */

@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { createDefaultDeps, isProduction, startupProblems } from './deps';
+import { createDefaultDeps, flag, isProduction, startupProblems } from './deps';
 import type { OpennJobDeps } from './deps';
 import { createApp } from './http';
 import { consoleJsonLogger } from './logging';
@@ -66,6 +66,7 @@ export async function startServer(env: Env = process.env, logger: Logger = conso
   logger.info({ msg: 'persistence', kind: deps.persistence });
   if (deps.config.registrationAllowlist.length === 0) logger.warn({ msg: 'OPENNJOB_REGISTRATION_ALLOWLIST is empty: anyone who can reach the API can register.' });
   else logger.info({ msg: 'registration is invite-only', invited: deps.config.registrationAllowlist.length });
+  if (isProduction(env) && flag(env.OPENNJOB_DEMO_JOBS)) logger.warn({ msg: 'OPENNJOB_DEMO_JOBS is on in production: fictional jobs are mixed into real matches. Set OPENNJOB_DEMO_JOBS=false.' });
   if (deps.persistence === 'memory') logger.warn({ msg: 'DATABASE_URL is not set: data is held in memory and is lost when this process stops.' });
   if (!(env.OPENNJOB_DATA_KEY ?? '').trim()) logger.warn({ msg: 'OPENNJOB_DATA_KEY is not set: CV text, passports and statements are stored unencrypted.' });
   logger.info({ msg: 'llm', configured: Boolean(deps.llm) });

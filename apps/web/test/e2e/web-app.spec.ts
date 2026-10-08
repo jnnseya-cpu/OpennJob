@@ -408,9 +408,12 @@ test('dashboard charts and notifications: inbox from real events, settings, e-ma
   await expect(page.getByRole('link', { name: 'Notifications', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('checkbox', { name: /^SMS/ }).check();
+  await expect(page.getByRole('checkbox', { name: /^SMS/ })).toBeDisabled(); // not connected: cannot be switched on
+  await page.getByRole('checkbox', { name: /^Email Sandbox/ }).uncheck();
   await expect(page.getByText('Settings saved.')).toBeVisible();
-  expect((await call<{ sms: boolean }>('GET', '/notifications/preferences')).sms).toBe(true);
+  expect((await call<{ email: boolean }>('GET', '/notifications/preferences')).email).toBe(false);
+  await page.getByRole('checkbox', { name: /^Email Sandbox/ }).check();
+  await expect.poll(async () => (await call<{ email: boolean }>('GET', '/notifications/preferences')).email).toBe(true);
   await expect(page.getByRole('checkbox', { name: 'Account deleted' })).toBeDisabled(); // a service notice cannot be muted
 
   await page.getByRole('button', { name: 'Catalogue and delivery' }).click();

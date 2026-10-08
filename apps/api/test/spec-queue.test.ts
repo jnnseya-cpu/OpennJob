@@ -3,7 +3,7 @@ import { STANDING_SCOPE_TEXT, STANDING_SCOPE_VERSION } from '@opennjob/core';
 import type { Application } from '@opennjob/core';
 import { signAccessToken } from '../src/auth';
 import type { OpennJobDeps } from '../src/deps';
-import { JWT_SECRET, NOW, PASSPORT, PROFILE, USER_ID, createTestApp, testConfig } from './helpers';
+import { JWT_SECRET, NOW, PASSPORT, PROFILE, PWV, USER_ID, createTestApp, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
 /**
@@ -176,7 +176,7 @@ describe('spec T-12: the application after the daily limit is reached is held un
     expect((await t.api.post(`/agent/queue/${left?.id}/go`).expect(200)).body).toMatchObject({ go: false, reason: 'daily-limit' });
 
     now = new Date('2026-10-06T23:00:00.000Z');
-    const tomorrow = t.as(signAccessToken(USER_ID, JWT_SECRET, 3600, now).accessToken);
+    const tomorrow = t.as(signAccessToken(USER_ID, JWT_SECRET, 3600, now, PWV).accessToken);
     expect((await tomorrow.get('/agent/queue/next').expect(200)).body.application.id).toBe(left?.id);
   });
 });

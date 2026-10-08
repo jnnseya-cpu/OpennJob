@@ -1,16 +1,23 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Inject, Post, Put, Query } from '@nestjs/common';
 import { CHANNELS, NOTIFICATION_CATALOGUE, NOTIFICATION_CATEGORIES, notificationEvent, renderEmailHtml } from '@opennjob/core';
 import type { NotificationPreferences } from '@opennjob/core';
+import { RateLimiter } from './auth';
 import { CurrentUser } from './auth.guard';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
 import { Notifier, SAMPLE_VARS, wiredChannels } from './notifications';
 import { ZodPipe, markReadSchema, notificationPreferencesSchema, notificationPreviewSchema, notificationTestSchema } from './schemas';
 
+/** Test messages one person may send in an hour. */
+export const TEST_SENDS_PER_HOUR = 5;
+
 /** The signed-in user's notifications, preferences and delivery log, and the catalogue for template QA. */
 @Controller('notifications')
 export class NotificationsController {
   constructor(@Inject(DEPS) private readonly deps: OpennJobDeps) {}
+
+  /** Test sends reach a real inbox: at most TEST_SENDS_PER_HOUR per person. */
+  private readonly testSends = new RateLimiter(TEST_SENDS_PER_HOUR, 3_600_000, () => this.deps.clock().getTime());
 
   private get notifier(): Notifier {
     return this.deps.notifier ?? new Notifier(this.deps);
@@ -77,6 +84,7 @@ export class NotificationsController {
   @Post('test')
   @HttpCode(200)
   async test(@CurrentUser() userId: string, @Body(new ZodPipe(notificationTestSchema)) body: { event: string }) {
+    if (!this.testSends.take(userId).allowed) throw new HttpException(`At most ${TEST_SENDS_PER_HOUR} test messages an hour. Try again later.`, HttpStatus.TOO_MANY_REQUESTS);
     const def = notificationEvent(body.event);
     if (!def) return { deliveries: [] };
     return { deliveries: await this.notifier.dispatch(userId, def, SAMPLE_VARS, { test: true }) };

@@ -6,7 +6,7 @@ import type { Application } from '@opennjob/core';
 import type { EmailMessage, EmailSender } from '../src/notifications';
 import { signAccessToken } from '../src/auth';
 import { Scheduler } from '../src/scheduler';
-import { PASSPORT, PROFILE, USER_EMAIL, USER_ID, createTestApp, testConfig } from './helpers';
+import { PASSPORT, PROFILE, PWV, USER_EMAIL, USER_ID, createTestApp, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
 /**
@@ -69,7 +69,7 @@ describe('overnight: applied at 06:00 without the person, reported at 09:00', ()
     expect(mail.attachments?.map((a) => a.filename)).toEqual([`${PROFILE.firstName}_${PROFILE.lastName}_CV.pdf`, `${PROFILE.firstName}_${PROFILE.lastName}_Cover_Letter.pdf`]);
     for (const a of mail.attachments ?? []) expect(Buffer.from(a.content).toString('latin1').startsWith('%PDF-1.4')).toBe(true);
     // The evening's session has long expired; the person signs in again to look.
-    const signedIn = () => t.as(signAccessToken(USER_ID, t.deps.config.jwtSecret as string, 3600, time.clock()).accessToken);
+    const signedIn = () => t.as(signAccessToken(USER_ID, t.deps.config.jwtSecret as string, 3600, time.clock(), PWV).accessToken);
     const apps = (await signedIn().get('/applications').expect(200)).body as Application[];
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({ status: 'submitted', automatic: true, receipt: { pageUrl: `mailto:${RECRUITER}` } });

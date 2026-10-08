@@ -475,6 +475,11 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         expect(await repo.consumeAuthToken('refresh', r2, NOW)).toBeUndefined();
         expect(await repo.consumeAuthToken('refresh', rb, NOW)).toBe(b); // B's untouched
         expect(await repo.consumeAuthToken('verify-email', verify, NOW)).toBe(a); // other kinds untouched
+        expect(await repo.usedAuthToken('refresh', r1)).toEqual({ userId: a, usedAt: NOW });
+        expect(await repo.usedAuthToken('verify-email', r1)).toBeUndefined(); // wrong kind
+        const fresh = '2'.repeat(64);
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'refresh', tokenHash: fresh, expiresAt: later, createdAt: NOW });
+        expect(await repo.usedAuthToken('refresh', fresh)).toBeUndefined(); // not used yet
       });
 
       it('platform settings, one-off claims and shared rate-limit windows', async () => {

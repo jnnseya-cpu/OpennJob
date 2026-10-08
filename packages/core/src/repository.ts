@@ -70,6 +70,8 @@ export interface Repository {
   consumeAuthToken(kind: AuthToken['kind'], tokenHash: string, at: string): Promise<string | undefined>;
   /** Marks every unused token of this kind for the user as used. Returns how many. */
   revokeAuthTokens(userId: string, kind: AuthToken['kind'], at: string): Promise<number>;
+  /** The owner of a token of this kind that was already used, and when. Undefined if unknown or unused. */
+  usedAuthToken(kind: AuthToken['kind'], tokenHash: string): Promise<{ userId: string; usedAt: string } | undefined>;
 
   // ----- applying -----
   deleteApplication(userId: string, id: string): Promise<boolean>;
@@ -260,6 +262,10 @@ export class InMemoryRepository implements Repository {
       }
     }
     return n;
+  }
+  async usedAuthToken(kind: AuthToken['kind'], tokenHash: string) {
+    const t = this.tokens.find((x) => x.kind === kind && x.tokenHash === tokenHash && x.usedAt);
+    return t?.usedAt ? { userId: t.userId, usedAt: t.usedAt } : undefined;
   }
   async deleteApplication(userId: string, id: string) {
     const a = this.applications.get(id);

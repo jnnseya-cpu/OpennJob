@@ -3,7 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { FakeLlm, InMemoryRepository, InMemoryUsageMeter, InProcessEventBus, createSampleSource } from '@opennjob/core';
 import type { LlmRequest, User } from '@opennjob/core';
-import { signAccessToken } from '../src/auth';
+import { passwordVersion, signAccessToken } from '../src/auth';
 import type { OpennJobConfig, OpennJobDeps } from '../src/deps';
 import { createApp } from '../src/http';
 import { silentLogger } from '../src/logging';
@@ -16,8 +16,10 @@ export const USER_EMAIL = 'amara.okafor@example.org';
 export const USER_PASSWORD = 'a long fictional passphrase';
 /** bcrypt (cost 4) of USER_PASSWORD. Not a secret: the password is one line up. */
 export const USER_PASSWORD_HASH = '$2b$04$CcK3vJhnxdkC7Hi7//VxTudrz3LJpEk6emUyD7dZVwRkYzdZJh2ke';
+/** The password-version claim every access token carries for an account made by the helpers. */
+export const PWV = passwordVersion(USER_PASSWORD_HASH);
 /** A valid access token for USER_ID at NOW. */
-export const TOKEN = signAccessToken(USER_ID, JWT_SECRET, 3600, new Date(NOW)).accessToken;
+export const TOKEN = signAccessToken(USER_ID, JWT_SECRET, 3600, new Date(NOW), PWV).accessToken;
 
 /** A complete configuration for tests; pass only what a test changes. */
 export function testConfig(overrides: Partial<OpennJobConfig> = {}): OpennJobConfig {
@@ -144,7 +146,7 @@ export async function createTestApp(overrides: Partial<OpennJobDeps> = {}): Prom
     const auth = (t: request.Test) => t.set('Authorization', `Bearer ${token}`);
     return { get: (url) => auth(raw().get(url)), post: (url) => auth(raw().post(url)), put: (url) => auth(raw().put(url)), delete: (url) => auth(raw().delete(url)) };
   };
-  const tokenFor = (id: string) => (deps.config.jwtSecret ? signAccessToken(id, deps.config.jwtSecret, deps.config.jwtTtlSeconds, deps.clock()).accessToken : 'no-secret-configured');
+  const tokenFor = (id: string) => (deps.config.jwtSecret ? signAccessToken(id, deps.config.jwtSecret, deps.config.jwtTtlSeconds, deps.clock(), PWV).accessToken : 'no-secret-configured');
   return {
     app,
     deps,

@@ -73,6 +73,17 @@ disabled checks were added.
 | D9 | P4 | `.env.example` turned fictional demo jobs on | Off | — |
 | D10 | P4 | `notifications/preview` query accepted unknown keys | `.strict()` | API suite |
 
+Second pass (same day):
+
+| ID | Severity | Defect | Fix | Test |
+|---|---|---|---|---|
+| D11 | P4 | A token without the password-version claim was not checked against a password reset | The claim is required; a token without it is refused | `auth.test.ts` |
+| D12 | P4 | A spent refresh token used again did not end the account's other kept sign-ins | Reuse more than a minute after rotation revokes every refresh token of the account (a second tab at the same moment does not) | `session.test.ts`, repository contract (both stores) |
+| D13 | P4 | `/notifications/test` had no per-person limit and reaches a real inbox | 5 an hour per person, then 429 | `notifications.test.ts` |
+| D14 | P4 | E-mail subject and sender name were not flattened; a job title with a line break reached the mail header | Line breaks and tabs become spaces (Resend and SMTP) | `notifications.test.ts` |
+| D15 | P4 | SMS, push and WhatsApp could be switched on with nothing behind them | Disabled until connected (one already on can still be switched off) | e2e suite |
+| D16 | P4 | Demo jobs could run in production without notice; README called them the default | Start-up warning in production; README corrected | — |
+
 Earlier the same day (separate commits): sentences the CV does not support are now taken out instead of
 holding the application; the queue names why nothing is ready; running the agent in Auto takes over
 applications prepared in another mode.
@@ -90,11 +101,11 @@ Open (not fixed, documented):
 
 * P3: the 60-day refresh token is kept in `localStorage` while the site CSP allows inline scripts; an XSS
   would expose it. Fix: nonce/hash CSP or an HttpOnly cookie for refresh.
-* P4: tokens without a password-version claim are not checked against a reset (all current tokens carry it).
-* P4: reuse of a rotated refresh token does not revoke the account's other tokens.
+  Not fixed in this pass: a hash-based CSP has to be generated from each build into the Caddy
+  configuration, which could not be run here, and a wrong CSP blanks the site without tripping the
+  API health-check rollback.
 * P4: per-e-mail sign-in limit lets someone lock a known address out for 15 minutes.
-* P4: `/notifications/test` has no per-user limit; `/health` shows the deployed commit.
-* Not checked: whether the mail senders strip newlines from subjects built from job titles.
+* P4: `/health` shows the deployed commit.
 
 ## 8–12. Areas not tested (BLOCKED or NOT TESTED)
 
@@ -114,8 +125,8 @@ Open (not fixed, documented):
 ## 13. Tests run for this review
 
 * `npm run typecheck` — pass.
-* `npm run test:pg` — 54 files, 946 tests, 0 failed, 0 skipped (PostgreSQL 16 throwaway database).
-* `npm run test:e2e` — 115 passed, 1 skipped (the skipped one needs PostgreSQL in the web e2e run).
+* `npm run test:pg` — 54 files, 950 tests, 0 failed, 0 skipped (PostgreSQL 16 throwaway database), after the second pass.
+* `npm run test:e2e` — 115 passed, 1 skipped (the skipped one needs PostgreSQL in the web e2e run), after the second pass.
 * `npm audit --omit=dev` — 2 advisories, justified in section 4.
 
 ## 14–17. Required actions and launch configuration

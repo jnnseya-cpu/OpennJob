@@ -35,6 +35,23 @@ describe('keep me signed in', () => {
     await t.raw().post('/auth/refresh').send({ refreshToken: next.refreshToken }).expect(200);
   });
 
+  it('a replaced token used again later ends every kept sign-in; a second tab at the same moment does not', async () => {
+    let now = new Date('2026-10-06T09:00:00.000Z');
+    t = await createTestApp({ clock: () => now });
+    const first = (await login(true).expect(200)).body.refreshToken as string;
+    const laptop = (await login(true).expect(200)).body.refreshToken as string;
+    const next = (await t.raw().post('/auth/refresh').send({ refreshToken: first }).expect(200)).body.refreshToken as string;
+    // Seconds later (another tab): refused, nothing else ends.
+    now = new Date(now.getTime() + 5_000);
+    await t.raw().post('/auth/refresh').send({ refreshToken: first }).expect(401);
+    const next2 = (await t.raw().post('/auth/refresh').send({ refreshToken: next }).expect(200)).body.refreshToken as string;
+    // An hour later the first token turns up again: it was copied, so every kept sign-in ends.
+    now = new Date(now.getTime() + 3_600_000);
+    await t.raw().post('/auth/refresh').send({ refreshToken: first }).expect(401);
+    await t.raw().post('/auth/refresh').send({ refreshToken: next2 }).expect(401);
+    await t.raw().post('/auth/refresh').send({ refreshToken: laptop }).expect(401);
+  });
+
   it('signing out revokes every refresh token of the account', async () => {
     t = await createTestApp();
     const phone = (await login(true).expect(200)).body.refreshToken as string;

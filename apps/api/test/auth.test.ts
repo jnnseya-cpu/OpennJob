@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PASSWORD_MAX_BYTES, RateLimiter, hashPassword, passwordProblems, signAccessToken, verifyAccessToken, verifyPassword } from '../src/auth';
 import { MIN_JWT_SECRET_LENGTH, createDefaultDeps, loadConfig, startupProblems } from '../src/deps';
 import { memoryLogger } from '../src/logging';
-import { JWT_SECRET, NOW, PROFILE, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, testConfig } from './helpers';
+import { JWT_SECRET, NOW, PROFILE, PWV, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
 let t: TestApp;
@@ -48,22 +48,22 @@ describe('access tokens', () => {
   const now = new Date(NOW);
 
   it('signs an HS256 token for one user that verifies until it expires', () => {
-    const token = signAccessToken('user-1', JWT_SECRET, 600, now);
+    const token = signAccessToken('user-1', JWT_SECRET, 600, now, PWV);
     expect(token).toMatchObject({ tokenType: 'Bearer', expiresIn: 600, expiresAt: '2026-10-06T09:10:00.000Z' });
     expect(jwt.decode(token.accessToken, { complete: true })).toMatchObject({ header: { alg: 'HS256' }, payload: { sub: 'user-1', iss: 'opennjob', aud: 'opennjob-api' } });
-    expect(verifyAccessToken(token.accessToken, JWT_SECRET, now)).toEqual({ ok: true, userId: 'user-1' });
-    expect(verifyAccessToken(token.accessToken, JWT_SECRET, new Date(now.getTime() + 599_000))).toEqual({ ok: true, userId: 'user-1' });
+    expect(verifyAccessToken(token.accessToken, JWT_SECRET, now)).toEqual({ ok: true, userId: 'user-1', pwv: PWV });
+    expect(verifyAccessToken(token.accessToken, JWT_SECRET, new Date(now.getTime() + 599_000))).toEqual({ ok: true, userId: 'user-1', pwv: PWV });
     expect(verifyAccessToken(token.accessToken, JWT_SECRET, new Date(now.getTime() + 601_000))).toEqual({ ok: false, reason: 'expired' });
   });
 
   it('rejects a token signed with another secret, altered, unsigned, or made for something else', () => {
     const at = Math.floor(now.getTime() / 1000);
-    const good = signAccessToken('user-1', JWT_SECRET, 600, now).accessToken;
+    const good = signAccessToken('user-1', JWT_SECRET, 600, now, PWV).accessToken;
     const [h, p, s] = good.split('.') as [string, string, string];
     const forgedPayload = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(p, 'base64url').toString()), sub: 'user-2' })).toString('base64url');
     const none = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString('base64url')}.${p}.`;
     const bad = [
-      signAccessToken('user-1', 'another-secret-another-secret-another', 600, now).accessToken,
+      signAccessToken('user-1', 'another-secret-another-secret-another', 600, now, PWV).accessToken,
       `${h}.${forgedPayload}.${s}`,
       none,
       jwt.sign({ sub: 'user-1', iat: at, exp: at + 600 }, JWT_SECRET, { algorithm: 'HS256' }), // no issuer or audience
@@ -77,7 +77,7 @@ describe('access tokens', () => {
   });
 
   it('cannot be signed without a secret', () => {
-    expect(() => signAccessToken('user-1', '', 600, now)).toThrow(/OPENNJOB_JWT_SECRET is not configured/);
+    expect(() => signAccessToken('user-1', '', 600, now, PWV)).toThrow(/OPENNJOB_JWT_SECRET is not configured/);
   });
 });
 
@@ -213,16 +213,25 @@ describe('access token on protected routes', () => {
     expect(expired.body).toMatchObject({ code: 'token_expired', message: 'Access token has expired' });
     const invalid = await t.as(`${token}x`).get('/applications').expect(401);
     expect(invalid.body.code).toBe('token_invalid');
-    await t.as(signAccessToken(USER_ID, 'some-other-secret-some-other-secret', 120, now).accessToken).get('/applications').expect(401);
+    await t.as(signAccessToken(USER_ID, 'some-other-secret-some-other-secret', 120, now, PWV).accessToken).get('/applications').expect(401);
   });
 
   it('rejects a well-signed token whose account does not exist', async () => {
     t = await createTestApp();
-    const ghost = signAccessToken('no-such-user', JWT_SECRET, 3600, new Date(NOW)).accessToken;
+    const ghost = signAccessToken('no-such-user', JWT_SECRET, 3600, new Date(NOW), PWV).accessToken;
     const res = await t.as(ghost).get('/profile').expect(401);
     expect(res.body.code).toBe('token_invalid');
     await t.as(ghost).put('/profile').send(PROFILE).expect(401);
     expect(await t.deps.repository.getProfile('no-such-user')).toBeUndefined();
+  });
+
+  it('rejects a well-signed token without the password-version claim, or with an old one', async () => {
+    t = await createTestApp();
+    const jwt = (await import('jsonwebtoken')).default;
+    const iat = Math.floor(new Date(NOW).getTime() / 1000);
+    const bare = jwt.sign({ sub: USER_ID, iat, exp: iat + 600 }, JWT_SECRET, { algorithm: 'HS256', issuer: 'opennjob', audience: 'opennjob-api' });
+    expect((await t.as(bare).get('/profile').expect(401)).body.code).toBe('token_invalid');
+    await t.as(signAccessToken(USER_ID, JWT_SECRET, 600, new Date(NOW), 'oldpassword0').accessToken).get('/profile').expect(401);
   });
 
   it('the employer key is not a user token and a user token is not the employer key', async () => {

@@ -3,6 +3,7 @@ import { NOTIFICATION_CATALOGUE, NOTIFICATION_CATEGORIES, eventsForTrigger, rend
 import { memoryLogger } from '../src/logging';
 import { resendEmail } from '../src/notifications';
 import { loadConfig } from '../src/deps';
+import { TEST_SENDS_PER_HOUR } from '../src/notifications.controller';
 import type { EmailSender } from '../src/notifications';
 import { PASSPORT, PROFILE, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, testConfig } from './helpers';
 import type { TestApp } from './helpers';
@@ -139,6 +140,12 @@ describe('the engine, through the API', () => {
     expect(test.find((d: { channel: string }) => d.channel === 'email')).toMatchObject({ status: 'logged', provider: 'sandbox' });
   });
 
+  it('test messages are limited per person per hour', async () => {
+    t = await createTestApp({ emailSender: capturing() });
+    for (let i = 0; i < TEST_SENDS_PER_HOUR; i++) await t.api.post('/notifications/test').send({}).expect(200);
+    await t.api.post('/notifications/test').send({}).expect(429);
+  });
+
   it('deleting the account sends the mandatory notice to the old address and keeps nothing of it', async () => {
     const sender = capturing();
     const logger = memoryLogger();
@@ -161,5 +168,14 @@ describe('Resend sender', () => {
     const bad = resendEmail('k', 'f', async () => ({ ok: false }));
     expect(await bad.send({ to: 'x@example.org', subject: 's', text: 't', html: 'h' })).toBe('failed');
     vi.restoreAllMocks();
+  });
+
+  it('keeps the subject and sender name on one line, so a job title cannot add a header', async () => {
+    const calls: { body: string }[] = [];
+    const s = resendEmail('k', 'OpennJob <noreply@example.org>', async (_url, init) => (calls.push(init), { ok: true }));
+    await s.send({ to: 'x@example.org', subject: 'Nurse\r\nBcc: y@example.org', fromName: 'A\nB', text: 't', html: 'h' });
+    const sent = JSON.parse(calls[0]?.body ?? '{}');
+    expect(sent.subject).toBe('Nurse Bcc: y@example.org');
+    expect(sent.from).toBe('A B <noreply@example.org>');
   });
 });

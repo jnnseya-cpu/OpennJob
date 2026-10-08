@@ -57,10 +57,10 @@ export function passwordVersion(passwordHash: string): string {
   return createHash('sha256').update(passwordHash).digest('hex').slice(0, 12);
 }
 
-export function signAccessToken(userId: string, secret: string, ttlSeconds: number, now: Date, pwv?: string): AccessToken {
+export function signAccessToken(userId: string, secret: string, ttlSeconds: number, now: Date, pwv: string): AccessToken {
   if (!secret) throw new Error('OPENNJOB_JWT_SECRET is not configured on the server');
   const iat = Math.floor(now.getTime() / 1000);
-  const accessToken = jwt.sign({ sub: userId, iat, exp: iat + ttlSeconds, ...(pwv ? { pwv } : {}) }, secret, { algorithm: 'HS256', issuer: ISSUER, audience: AUDIENCE });
+  const accessToken = jwt.sign({ sub: userId, iat, exp: iat + ttlSeconds, pwv }, secret, { algorithm: 'HS256', issuer: ISSUER, audience: AUDIENCE });
   return { accessToken, tokenType: 'Bearer', expiresIn: ttlSeconds, expiresAt: new Date((iat + ttlSeconds) * 1000).toISOString() };
 }
 
