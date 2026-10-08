@@ -80,7 +80,7 @@ node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64
   | gcloud secrets create opennjob-data-key --data-file=-
 ```
 
-Add `GEMINI_API_KEY` and `OPENNJOB_EMPLOYER_KEY` the same way if you use them.
+Add `ANTHROPIC_API_KEY` and `OPENNJOB_EMPLOYER_KEY` the same way if you use them.
 
 ## 5. A service account that can read those secrets and reach the database
 

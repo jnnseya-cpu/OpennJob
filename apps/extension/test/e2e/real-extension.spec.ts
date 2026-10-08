@@ -99,7 +99,7 @@ test.beforeAll(async () => {
   const port = await freePort();
   apiBase = `http://127.0.0.1:${port}`;
   const env: NodeJS.ProcessEnv = { ...process.env, PORT: String(port), HOST: '127.0.0.1', OPENNJOB_JWT_SECRET: JWT_SECRET, OPENNJOB_BCRYPT_ROUNDS: '4', OPENNJOB_DEMO_JOBS: 'true' };
-  for (const key of ['DATABASE_URL', 'OPENNJOB_DATA_KEY', 'NODE_ENV', 'OPENNJOB_CORS_ORIGINS', 'OPENNJOB_CORS_ALLOW_ANY_EXTENSION', 'GEMINI_API_KEY', 'OPENNJOB_LLM_MODEL', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY', 'REED_API_KEY', 'OPENNJOB_GREENHOUSE_BOARDS', 'OPENNJOB_LEVER_COMPANIES', 'OPENNJOB_ASHBY_BOARDS']) delete env[key];
+  for (const key of ['DATABASE_URL', 'OPENNJOB_DATA_KEY', 'NODE_ENV', 'OPENNJOB_CORS_ORIGINS', 'OPENNJOB_CORS_ALLOW_ANY_EXTENSION', 'ANTHROPIC_API_KEY', 'OPENNJOB_MODEL', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY', 'REED_API_KEY', 'OPENNJOB_GREENHOUSE_BOARDS', 'OPENNJOB_LEVER_COMPANIES', 'OPENNJOB_ASHBY_BOARDS']) delete env[key];
   api = spawn(process.execPath, [API_ENTRY], { cwd: workDir, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let apiLog = '';
   api.stdout?.on('data', (d) => (apiLog += d));

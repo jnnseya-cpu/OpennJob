@@ -3,7 +3,9 @@
 # comes from each person's CV and places on Profile, not from here:
 #
 #   cd /opt/opennjob
-#   bash deploy/set-keys.sh gemini     # Google Gemini API key (aistudio.google.com): drafts, criteria, interview feedback
+#   bash deploy/set-keys.sh claude     # Anthropic API key (Claude): drafts, criteria, interview feedback
+#   bash deploy/set-keys.sh gemini     # or Google Gemini instead of Claude (key from aistudio.google.com)
+#   bash deploy/set-keys.sh openai     # or OpenAI instead of Claude (key from platform.openai.com)
 #   bash deploy/set-keys.sh adzuna     # Adzuna job search API (free developer key)
 #   bash deploy/set-keys.sh reed       # Reed job search API (free developer key)
 #   bash deploy/set-keys.sh boards     # employers' own boards on Greenhouse / Lever / Ashby (no key)
@@ -11,7 +13,7 @@
 #   bash deploy/set-keys.sh jooble     # Jooble job search API: one free key per country site (UAE, Gulf, Ireland...)
 #
 # Secrets are typed without being shown and stored only in .env.production (root only).
-# The Gemini key is checked with one tiny call. Job sources are not called
+# The Claude key is checked with a model lookup, which costs nothing. Job sources are not called
 # here: a job source may be used only after someone has read its terms (CLAUDE.md rule 5).
 set -euo pipefail
 cd "${OPENNJOB_DIR:-/opt/opennjob}"
@@ -43,17 +45,32 @@ set_values() {
 restart() { echo "== Restarting the API"; ./oj up -d api >/dev/null; for _ in $(seq 1 20); do ./oj exec -T api true >/dev/null 2>&1 && break; sleep 2; done; }
 
 case "${1:-}" in
-  gemini)
-    KEY="$(ask_secret 'Google Gemini API key')"
-    [ -n "$KEY" ] || { echo "No key given. Nothing changed." >&2; exit 1; }
-    MODEL="$(ask 'Model' "$(current OPENNJOB_LLM_MODEL | grep . || echo gemini-2.5-flash)")"
-    set_values GEMINI_API_KEY "$KEY" OPENNJOB_LLM_MODEL "$MODEL"
+  claude)
+    KEY="$(ask_secret 'Anthropic API key (starts with sk-ant-)')"
+    case "$KEY" in sk-ant-*) ;; *) echo "That does not look like an Anthropic API key. Nothing changed." >&2; exit 1 ;; esac
+    MODEL="$(ask 'Model' "$(current OPENNJOB_MODEL | grep . || echo claude-opus-5-5)")"
+    EFFORT="$(ask 'Effort: low, medium, high (more careful costs more)' "$(current OPENNJOB_LLM_EFFORT | grep . || echo medium)")"
+    case "$EFFORT" in low|medium|high|xhigh|max) ;; *) echo "Effort must be low, medium, high, xhigh or max." >&2; exit 1 ;; esac
+    set_values ANTHROPIC_API_KEY "$KEY" OPENNJOB_MODEL "$MODEL" OPENNJOB_LLM_EFFORT "$EFFORT"
     unset KEY
-    # Claude is no longer used: its settings are taken out of the file.
-    grep -vE '^(ANTHROPIC_API_KEY|OPENNJOB_MODEL|OPENNJOB_LLM_EFFORT|OPENNJOB_LLM_PROVIDER|OPENAI_API_KEY)=' "$F" > "$F.tmp" || true
-    cat "$F.tmp" > "$F"; rm -f "$F.tmp"; chmod 600 "$F"
     restart
-    echo "== Gemini is OpennJob's AI. Checking with one tiny call:"
+    echo "== Checking the key and the model (a model lookup: no tokens, no cost)"
+    ./oj exec -T api node -e '
+const Anthropic = require("@anthropic-ai/sdk").default; const c = new Anthropic();
+c.models.retrieve(process.env.OPENNJOB_MODEL).then(
+  (m) => console.log("Claude key OK; model " + m.id + " is available. AI drafting is on."),
+  (e) => { console.log("Claude check FAILED (" + (e.status || e.name) + "): check the key in the Anthropic Console and the model name, then run this again."); process.exit(1); });'
+    ;;
+  gemini|openai)
+    P="$1"
+    if [ "$P" = gemini ]; then NAME="Google Gemini"; VAR=GEMINI_API_KEY; DEF=gemini-2.5-flash; else NAME="OpenAI"; VAR=OPENAI_API_KEY; DEF=gpt-4.1-mini; fi
+    KEY="$(ask_secret "$NAME API key")"
+    [ -n "$KEY" ] || { echo "No key given. Nothing changed." >&2; exit 1; }
+    MODEL="$(ask 'Model' "$(current OPENNJOB_LLM_MODEL | grep . || echo $DEF)")"
+    set_values OPENNJOB_LLM_PROVIDER "$P" "$VAR" "$KEY" OPENNJOB_LLM_MODEL "$MODEL"
+    unset KEY
+    restart
+    echo "== $NAME is now OpennJob's AI (Claude's key, if any, is kept but not used). Checking with one tiny call:"
     bash deploy/check-ai.sh | sed -n '/One real call/,$p'
     ;;
   adzuna)

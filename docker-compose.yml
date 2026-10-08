@@ -32,8 +32,6 @@ services:
     command: ["node", "apps/api/dist/migrate-cli.js"]
     restart: "no"
     environment:
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      OPENNJOB_LLM_MODEL: ${OPENNJOB_LLM_MODEL:-}
       DATABASE_URL: postgres://opennjob:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/opennjob
     depends_on:
       postgres:
@@ -58,6 +56,8 @@ services:
       OPENNJOB_APPLY_THRESHOLD: ${OPENNJOB_APPLY_THRESHOLD:-80}
       OPENNJOB_EMPLOYER_KEY: ${OPENNJOB_EMPLOYER_KEY:-}
       OPENNJOB_DEMO_JOBS: ${OPENNJOB_DEMO_JOBS:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENNJOB_MODEL: ${OPENNJOB_MODEL:-}
     ports:
       - "127.0.0.1:3000:8080" # this machine only; put a TLS-terminating proxy in front for anything else
     depends_on:
