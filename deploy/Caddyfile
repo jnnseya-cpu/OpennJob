@@ -20,7 +20,9 @@
 		Referrer-Policy "no-referrer"
 		X-Frame-Options "DENY"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-		# Next.js inlines its bootstrap scripts, hence 'unsafe-inline' for scripts; everything else is same-origin only.
+		# Next.js inlines its bootstrap scripts. Each page carries its own policy (apps/web/scripts/csp.mjs)
+		# allowing only those scripts by hash; the browser enforces both, so that one wins. 'unsafe-inline'
+		# stays here only so a page without the tag still works. Everything else is same-origin only.
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		-Server
 	}

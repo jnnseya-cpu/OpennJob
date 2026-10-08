@@ -533,3 +533,26 @@ test('no personal data reached the browser console or the API log', async () => 
     expect(apiLog, `API log: ${value.slice(0, 24)}`).not.toContain(value);
   }
 });
+
+test('every page carries a hash-only script policy, and the browser blocked nothing on any screen', async () => {
+  // The policy is checked on the built files, then in the browser: a script it did not allow
+  // would have been reported on the console during the tests above.
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const out = join(__dirname, '..', '..', 'out');
+  const pages = (dir: string): string[] => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? pages(join(dir, n)) : n.endsWith('.html') ? [join(dir, n)] : []));
+  for (const file of pages(out)) {
+    const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(readFileSync(file, 'utf8'))?.[1];
+    expect(policy, file).toMatch(/^script-src 'self'( 'sha256-[A-Za-z0-9+/=]+')*; object-src 'none'; base-uri 'self'$/);
+  }
+  expect(consoleLines.filter((l) => /Content Security Policy/i.test(l))).toEqual([]);
+  // And it is enforced: a script injected into the page does not run.
+  await page.goto(`${web.url}/signin/`);
+  const ran = await page.evaluate(() => {
+    const s = document.createElement('script');
+    s.textContent = 'window.__injected = true;';
+    document.head.appendChild(s);
+    return (window as unknown as { __injected?: boolean }).__injected === true;
+  });
+  expect(ran).toBe(false);
+});

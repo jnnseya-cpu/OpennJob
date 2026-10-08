@@ -249,17 +249,26 @@ export class ApplyingService {
   }
 
   async status(userId: string) {
-    const all = await this.deps.repository.listApplications(userId);
-    const { ready, systemOff } = await this.ready(userId);
-    const block = await this.blocked(userId);
+    // Read-only and independent of each other: asked at once rather than one after another.
+    const [all, { ready, systemOff }, block, authorisation, operatorPaused, dailyLimit, systems, routes] = await Promise.all([
+      this.deps.repository.listApplications(userId),
+      this.ready(userId),
+      this.blocked(userId),
+      this.getAuthorisation(userId),
+      this.operatorPaused(),
+      this.service.dailyLimit(userId),
+      this.systems(),
+      this.routesWithReasons(userId),
+    ]);
     return {
-      authorisation: await this.getAuthorisation(userId),
-      operatorPaused: await this.operatorPaused(),
-      dailyLimit: await this.service.dailyLimit(userId),
+      authorisation,
+      operatorPaused,
+      dailyLimit,
       queue: { ready: ready.length, waitingForSystem: systemOff, needsYou: all.filter((a) => a.status === 'needs_you').length },
       ...(block ? { wait: block.wait, message: WAIT_MESSAGE[block.wait], ...(block.resetsAt ? { resetsAt: block.resetsAt } : {}) } : {}),
-      systems: (await this.systems()).map((s) => ({ id: s.id, label: s.label, enabled: s.enabled })),
-      ...(await this.routesWithReasons(userId).then((r) => ({ routes: r.routes, routeReasons: r.reasons }))),
+      systems: systems.map((s) => ({ id: s.id, label: s.label, enabled: s.enabled })),
+      routes: routes.routes,
+      routeReasons: routes.reasons,
     };
   }
 

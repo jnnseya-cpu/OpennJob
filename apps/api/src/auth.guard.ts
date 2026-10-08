@@ -105,21 +105,32 @@ export class AccessTokenGuard implements CanActivate {
 export const AUTH_RATE_LIMITER = Symbol('OPENNJOB_AUTH_RATE_LIMITER');
 
 /**
- * Rate limit for /auth/*. Counts attempts per client address, and per email address
- * when the body names one, so one address cannot hammer many accounts and many addresses
- * cannot hammer one account. Replies 429 with Retry-After.
+ * Rate limit for /auth/*. Counts attempts per client address, so one address cannot hammer many
+ * accounts. When the body names an e-mail address it also counts that account from that client
+ * address, and that account from everywhere with a limit ACCOUNT_WIDE_FACTOR times higher: many
+ * addresses cannot hammer one account, and someone guessing at an account from their own machine
+ * does not lock its owner out on theirs. Replies 429 with Retry-After.
  */
+export const ACCOUNT_WIDE_FACTOR = 10;
+
 @Injectable()
 export class AuthRateLimitGuard implements CanActivate {
-  constructor(@Inject(AUTH_RATE_LIMITER) private readonly limiter: Limiter) {}
+  constructor(
+    @Inject(AUTH_RATE_LIMITER) private readonly limiter: Limiter,
+    @Inject(DEPS) private readonly deps: OpennJobDeps,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const http = context.switchToHttp();
     const request = http.getRequest<AuthedRequest>();
-    const keys = [`ip:${request.ip ?? 'unknown'}`];
+    const ip = request.ip ?? 'unknown';
+    const checks: [string, number | undefined][] = [[`ip:${ip}`, undefined]];
     const email = (request.body as { email?: unknown } | undefined)?.email;
-    if (typeof email === 'string' && email.length <= 254) keys.push(`email:${email.trim().toLowerCase()}`);
-    const results = await Promise.all(keys.map((k) => this.limiter.take(k)));
+    if (typeof email === 'string' && email.length <= 254) {
+      const account = email.trim().toLowerCase();
+      checks.push([`email-ip:${account}|${ip}`, undefined], [`email:${account}`, this.deps.config.authRateLimitMax * ACCOUNT_WIDE_FACTOR]);
+    }
+    const results = await Promise.all(checks.map(([k, max]) => this.limiter.take(k, max)));
     const blocked = results.filter((r) => !r.allowed);
     if (blocked.length > 0) {
       const retryAfter = Math.max(...blocked.map((r) => r.retryAfterSeconds));

@@ -4,7 +4,7 @@
   "private": true,
   "description": "OpennJob candidate web app (Next.js 14, static export)",
   "scripts": {
-    "build": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "build": "NEXT_TELEMETRY_DISABLED=1 next build && node scripts/csp.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "dev": "NEXT_TELEMETRY_DISABLED=1 next dev -p 3001"
   },

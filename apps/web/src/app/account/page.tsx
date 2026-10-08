@@ -32,7 +32,7 @@ export default function AccountPage() {
 
   const [serverVersion, setServerVersion] = useState('');
   useEffect(() => {
-    api<{ version?: string }>('/health', { auth: false })
+    api<{ version?: string }>('/health/version')
       .then((h) => setServerVersion(h.version ?? 'unknown'))
       .catch(() => setServerVersion('not reachable'));
   }, []);

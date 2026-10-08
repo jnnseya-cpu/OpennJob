@@ -30,6 +30,7 @@ const ROUTES = [
   'GET /applications/:id/interview',
   'GET /auth/versions',
   'GET /health',
+  'GET /health/version',
   'GET /interview/questions',
   'GET /jobs/matches',
   'GET /jobs/search-plan',
@@ -81,7 +82,7 @@ const ROUTES = [
   'PUT /screening',
 ];
 /** Routes that carry no user data and take no user token. */
-const NOT_USER_SCOPED = ['GET /auth/versions', 'GET /health', 'GET /interview/questions', 'POST /auth/login', 'POST /auth/refresh', 'POST /auth/logout', 'POST /auth/register', 'POST /employer/jobs',
+const NOT_USER_SCOPED = ['GET /auth/versions', 'GET /health', 'GET /health/version', 'GET /interview/questions', 'POST /auth/login', 'POST /auth/refresh', 'POST /auth/logout', 'POST /auth/register', 'POST /employer/jobs',
   'POST /auth/verify-email', 'POST /auth/password/forgot', 'POST /auth/password/reset', 'GET /operator/status', 'PUT /operator/pause', 'PUT /operator/systems/:id'];
 
 const B_ID = 'user-b';

@@ -28,6 +28,8 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: *db-url
+      # Set by deploy/auto-update.sh only while it rolls back to older code (see migrations.ts).
+      OPENNJOB_ALLOW_NEWER_SCHEMA: ${OPENNJOB_ALLOW_NEWER_SCHEMA:-}
     depends_on:
       postgres:
         condition: service_healthy

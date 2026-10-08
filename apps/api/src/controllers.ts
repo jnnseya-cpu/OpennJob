@@ -58,9 +58,16 @@ export class HealthController {
       () => 'down' as const,
     );
     if (database === 'down') res.status(503);
-    // The commit the server was started from (deploy/update.sh and auto-update set OPENNJOB_VERSION).
-    const version = (process.env.OPENNJOB_VERSION ?? '').trim() || 'unknown';
-    return { status: database === 'up' ? 'ok' : 'degraded', persistence: this.deps.persistence, database, version };
+    return { status: database === 'up' ? 'ok' : 'degraded', persistence: this.deps.persistence, database };
+  }
+
+  /**
+   * The commit the server was started from (deploy/update.sh and auto-update set OPENNJOB_VERSION).
+   * Signed-in only: an outsider is not told which version, and so which known faults, it runs.
+   */
+  @Get('version')
+  version() {
+    return { version: (process.env.OPENNJOB_VERSION ?? '').trim() || 'unknown' };
   }
 }
 

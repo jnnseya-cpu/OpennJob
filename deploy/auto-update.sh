@@ -7,7 +7,7 @@
 # 1. Fetch the branch. Nothing new: stop.
 # 2. Move to the new commit (fast-forward only: local edits to tracked files stop it), rebuild, restart.
 #    Migrations run on start, as with every update.
-# 3. Check /api/health for up to 3 minutes. Healthy: done. Not healthy, or the build failed: go
+# 3. Check /api/health and the sign-in page for up to 3 minutes. Healthy: done. Not healthy, or the build failed: go
 #    back to the previous commit, rebuild and restart it, and record that the update was rolled back.
 #    A commit that was rolled back is skipped until a newer one arrives.
 #
@@ -37,9 +37,12 @@ if [ "$(env_value OPENNJOB_MODE)" = proxy ]; then
 else
   HEALTH="${HEALTH_URL:-https://$(env_value DOMAIN)/api/health}"
 fi
+SITE="${HEALTH%/api/health}"
+# The web app is up when the sign-in page is served with its scripts (a blank or missing page fails).
+web_ok() { curl -fsS --max-time 5 "$SITE/signin/" 2>/dev/null | grep -q '/_next/static/'; }
 healthy() {
   for _ in $(seq 1 36); do
-    curl -fsS --max-time 5 "$HEALTH" 2>/dev/null | grep -q '"status":"ok"' && return 0
+    curl -fsS --max-time 5 "$HEALTH" 2>/dev/null | grep -q '"status":"ok"' && web_ok && return 0
     sleep 5
   done
   return 1
@@ -59,6 +62,8 @@ fi
 log "update to ${TARGET:0:7} failed its health check; going back to ${CURRENT:0:7}"
 echo "$TARGET" > .auto-update.rejected
 git reset -q --hard "$CURRENT"
+# The new version may have added a migration; the older code may start on that schema.
+export OPENNJOB_ALLOW_NEWER_SCHEMA=1
 export OPENNJOB_VERSION="$(git log -1 --format='%h %cs' "$CURRENT")"
 ./oj up -d --build --remove-orphans >/dev/null 2>&1
 if healthy; then log "rolled back to ${CURRENT:0:7}; healthy"; else log "rolled back to ${CURRENT:0:7}, but it is NOT healthy: check ./oj ps and ./oj logs api"; fi

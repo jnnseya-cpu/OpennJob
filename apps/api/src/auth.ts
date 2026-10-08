@@ -80,7 +80,8 @@ export function verifyAccessToken(token: string, secret: string, now: Date): Tok
 // ----- rate limiting -----------------------------------------------------------------
 
 export interface Limiter {
-  take(key: string): { allowed: boolean; retryAfterSeconds: number } | Promise<{ allowed: boolean; retryAfterSeconds: number }>;
+  /** Counts one attempt for `key`; `max` overrides the limiter's own limit for this key. */
+  take(key: string, max?: number): { allowed: boolean; retryAfterSeconds: number } | Promise<{ allowed: boolean; retryAfterSeconds: number }>;
 }
 
 /**
@@ -95,11 +96,11 @@ export class SharedRateLimiter implements Limiter {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async take(key: string): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+  async take(key: string, max = this.max): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
     const t = this.now();
     const start = Math.floor(t / this.windowMs) * this.windowMs;
     const hits = await this.repository.hitRateLimit(key, new Date(start).toISOString());
-    return { allowed: hits <= this.max, retryAfterSeconds: Math.max(1, Math.ceil((start + this.windowMs - t) / 1000)) };
+    return { allowed: hits <= max, retryAfterSeconds: Math.max(1, Math.ceil((start + this.windowMs - t) / 1000)) };
   }
 }
 
@@ -118,7 +119,7 @@ export class RateLimiter implements Limiter {
   ) {}
 
   /** Counts one attempt. `allowed` is false once the key has used up its window. */
-  take(key: string): { allowed: boolean; retryAfterSeconds: number } {
+  take(key: string, max = this.max): { allowed: boolean; retryAfterSeconds: number } {
     const t = this.now();
     if (this.hits.size > 50_000) for (const [k, v] of this.hits) if (v.resetAt <= t) this.hits.delete(k);
     let entry = this.hits.get(key);
@@ -127,6 +128,6 @@ export class RateLimiter implements Limiter {
       this.hits.set(key, entry);
     }
     entry.count += 1;
-    return { allowed: entry.count <= this.max, retryAfterSeconds: Math.max(1, Math.ceil((entry.resetAt - t) / 1000)) };
+    return { allowed: entry.count <= max, retryAfterSeconds: Math.max(1, Math.ceil((entry.resetAt - t) / 1000)) };
   }
 }

@@ -58,18 +58,30 @@ async function applied(client: MigrationClient): Promise<Map<string, string>> {
 export interface MigrationResult {
   applied: string[];
   alreadyApplied: string[];
+  /** Migrations the database has that this code does not know (only with allowNewer). */
+  newer: string[];
 }
 
-export async function runMigrations(client: MigrationClient, migrations: MigrationFile[]): Promise<MigrationResult> {
+/**
+ * `allowNewer`: set only while rolling back to older code (deploy/auto-update.sh,
+ * OPENNJOB_ALLOW_NEWER_SCHEMA=1). The database may then carry migrations this code does not know,
+ * provided every one of them comes after the newest it does know: a newer release added them, and
+ * migrations only add tables, columns and looser checks. Anything else is still refused.
+ */
+export async function runMigrations(client: MigrationClient, migrations: MigrationFile[], options: { allowNewer?: boolean } = {}): Promise<MigrationResult> {
   await client.query('SELECT pg_advisory_lock($1)', [LOCK_KEY]);
   try {
     await client.query(TABLE);
     const done = await applied(client);
     const known = new Set(migrations.map((m) => m.version));
-    for (const version of done.keys()) {
-      if (!known.has(version)) throw new Error(`The database has migration ${version}, which this code does not know. Refusing to continue with older code.`);
+    const newestKnown = [...known].sort().at(-1) ?? '';
+    const newer: string[] = [];
+    for (const version of [...done.keys()].sort()) {
+      if (known.has(version)) continue;
+      if (options.allowNewer && version > newestKnown) newer.push(version);
+      else throw new Error(`The database has migration ${version}, which this code does not know. Refusing to continue with older code.`);
     }
-    const result: MigrationResult = { applied: [], alreadyApplied: [] };
+    const result: MigrationResult = { applied: [], alreadyApplied: [], newer };
     for (const m of migrations) {
       const label = `${m.version}_${m.name}`;
       const recorded = done.get(m.version);

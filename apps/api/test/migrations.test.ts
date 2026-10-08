@@ -68,7 +68,7 @@ describe.skipIf(!hasPostgres)('running migrations against a live PostgreSQL', ()
 
   it('applies every migration once, in order, and records each in schema_migrations', async () => {
     const first = await runMigrations(client, REAL);
-    expect(first).toEqual({ applied: ['001_initial_schema', '002_accounts_and_encryption', '003_notifications', '004_applying', '005_refresh_tokens', '006_more_job_sources', '007_link_and_career_sites'], alreadyApplied: [] });
+    expect(first).toEqual({ applied: ['001_initial_schema', '002_accounts_and_encryption', '003_notifications', '004_applying', '005_refresh_tokens', '006_more_job_sources', '007_link_and_career_sites'], alreadyApplied: [], newer: [] });
     expect(await tables()).toEqual(['applications', 'auth_tokens', 'events', 'jobs', 'notification_deliveries', 'notification_preferences', 'notifications', 'passports', 'platform_claims', 'platform_settings', 'profiles', 'rate_limit_windows', 'schema_migrations', 'screening_answers', 'standing_authorisations', 'usage_records', 'users']);
     const recorded = (await client.query('SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version')).rows;
     expect(recorded.map((r) => [r.version, r.name, r.checksum])).toEqual(REAL.map((m) => [m.version, m.name, m.checksum]));
@@ -80,7 +80,7 @@ describe.skipIf(!hasPostgres)('running migrations against a live PostgreSQL', ()
     await client.query("INSERT INTO users (id, email, password_hash, accepted_terms_version, accepted_privacy_version, consent_at) VALUES ('keep', 'keep@example.org', 'x', 't', 'p', now())");
     const before = (await client.query('SELECT version, applied_at FROM schema_migrations ORDER BY version')).rows;
     for (let i = 0; i < 2; i += 1) {
-      expect(await runMigrations(client, REAL)).toEqual({ applied: [], alreadyApplied: ['001_initial_schema', '002_accounts_and_encryption', '003_notifications', '004_applying', '005_refresh_tokens', '006_more_job_sources', '007_link_and_career_sites'] });
+      expect(await runMigrations(client, REAL)).toEqual({ applied: [], alreadyApplied: ['001_initial_schema', '002_accounts_and_encryption', '003_notifications', '004_applying', '005_refresh_tokens', '006_more_job_sources', '007_link_and_career_sites'], newer: [] });
     }
     expect((await client.query('SELECT version, applied_at FROM schema_migrations ORDER BY version')).rows).toEqual(before);
     expect((await client.query('SELECT id FROM users')).rows).toEqual([{ id: 'keep' }]);
@@ -110,7 +110,7 @@ describe.skipIf(!hasPostgres)('running migrations against a live PostgreSQL', ()
     expect(await tables()).not.toContain('half_made');
     expect(await pendingMigrations(client, [...REAL, good, bad])).toEqual(['009_broken']);
     // The lock was released: the next run is not left waiting.
-    expect(await runMigrations(client, [...REAL, good])).toEqual({ applied: [], alreadyApplied: ['001_initial_schema', '002_accounts_and_encryption', '003_notifications', '004_applying', '005_refresh_tokens', '006_more_job_sources', '007_link_and_career_sites', '008_extra'] });
+    expect(await runMigrations(client, [...REAL, good])).toEqual({ applied: [], alreadyApplied: ['001_initial_schema', '002_accounts_and_encryption', '003_notifications', '004_applying', '005_refresh_tokens', '006_more_job_sources', '007_link_and_career_sites', '008_extra'], newer: [] });
   });
 
   it('refuses to run when an applied migration was edited, or when the database is ahead of the code', async () => {
@@ -118,6 +118,14 @@ describe.skipIf(!hasPostgres)('running migrations against a live PostgreSQL', ()
     const edited = [...REAL.map((m, i) => (i === 0 ? { ...m, checksum: 'different' } : m)), extra];
     await expect(runMigrations(client, edited)).rejects.toThrow(/001_initial_schema was changed after it was applied/);
     await expect(runMigrations(client, REAL)).rejects.toThrow(/has migration 008, which this code does not know/);
+  });
+
+  it('while rolling back, older code accepts migrations newer than all of its own, and nothing else', async () => {
+    // 008 (from the tests above) is newer than everything in REAL: a rollback may go on.
+    expect((await runMigrations(client, REAL, { allowNewer: true })).newer).toEqual(['008']);
+    // Code that knows 009 but not 008 has a gap, not a newer schema: still refused.
+    const later: MigrationFile = { version: '009', name: 'later', sql: '', checksum: 'c9' };
+    await expect(runMigrations(client, [...REAL, later], { allowNewer: true })).rejects.toThrow(/has migration 008, which this code does not know/);
   });
 
   it('two runs at the same time do not collide', async () => {

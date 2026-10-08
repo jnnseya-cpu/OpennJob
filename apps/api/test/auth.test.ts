@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PASSWORD_MAX_BYTES, RateLimiter, hashPassword, passwordProblems, signAccessToken, verifyAccessToken, verifyPassword } from '../src/auth';
+import { ACCOUNT_WIDE_FACTOR } from '../src/auth.guard';
 import { MIN_JWT_SECRET_LENGTH, createDefaultDeps, loadConfig, startupProblems } from '../src/deps';
 import { memoryLogger } from '../src/logging';
 import { JWT_SECRET, NOW, PROFILE, PWV, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, testConfig } from './helpers';
@@ -267,10 +268,20 @@ describe('rate limiting on /auth', () => {
     t = await createTestApp({ config: testConfig({ authRateLimitMax: 2, authRateLimitWindowMs: 60_000 }) });
     t.app.getHttpAdapter().getInstance().set('trust proxy', true);
     const from = (ip: string, email: string) => t.raw().post('/auth/login').set('X-Forwarded-For', ip).send({ email, password: 'a wrong passphrase' });
-    await from('203.0.113.1', USER_EMAIL).expect(401);
-    await from('203.0.113.2', USER_EMAIL).expect(401);
-    await from('203.0.113.3', USER_EMAIL).expect(429); // a third address, same account
-    await from('203.0.113.4', 'someone.else@example.org').expect(401); // another account, fresh address
+    // Account-wide limit: 2 x ACCOUNT_WIDE_FACTOR attempts from any mix of addresses.
+    for (let i = 0; i < 2 * ACCOUNT_WIDE_FACTOR; i += 1) await from(`203.0.113.${i + 1}`, USER_EMAIL).expect(401);
+    await from('203.0.113.200', USER_EMAIL).expect(429); // a fresh address, same account
+    await from('203.0.113.201', 'someone.else@example.org').expect(401); // another account, fresh address
+  });
+
+  it('someone guessing at an account from their machine does not lock the owner out on theirs', async () => {
+    t = await createTestApp({ config: testConfig({ authRateLimitMax: 2, authRateLimitWindowMs: 60_000 }) });
+    t.app.getHttpAdapter().getInstance().set('trust proxy', true);
+    const login = (ip: string, password: string) => t.raw().post('/auth/login').set('X-Forwarded-For', ip).send({ email: USER_EMAIL, password });
+    await login('198.51.100.9', 'a wrong passphrase').expect(401);
+    await login('198.51.100.9', 'a wrong passphrase').expect(401);
+    await login('198.51.100.9', 'a wrong passphrase').expect(429); // the guesser is stopped
+    await login('203.0.113.50', USER_PASSWORD).expect(200); // the owner, elsewhere, is not
   });
 });
 

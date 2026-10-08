@@ -84,6 +84,17 @@ Second pass (same day):
 | D15 | P4 | SMS, push and WhatsApp could be switched on with nothing behind them | Disabled until connected (one already on can still be switched off) | e2e suite |
 | D16 | P4 | Demo jobs could run in production without notice; README called them the default | Start-up warning in production; README corrected | — |
 
+Third pass (same day):
+
+| ID | Severity | Defect | Fix | Test |
+|---|---|---|---|---|
+| D17 | P3 | Site policy allowed every inline script, and the kept sign-in is in `localStorage`: one injected script could read it | Each page carries its own policy allowing only its own inline scripts by SHA-256 (`apps/web/scripts/csp.mjs`, run by `npm run build`); the browser enforces it as well as Caddy's header | e2e: every page has a hash-only policy; no screen reported a blocked script; an injected script does not run |
+| D18 | P2 | Rolling back across a release that added a migration could not work: the older code refused the newer schema, so an automatic rollback left the site down | During a rollback (`OPENNJOB_ALLOW_NEWER_SCHEMA=1`, set by `auto-update.sh` and `rollback-drill.sh`) older code accepts migrations newer than all of its own; a gap is still refused | `migrations.test.ts` (PostgreSQL); built-process run: migrate refused without the flag, accepted with it, API healthy on the newer schema |
+| D19 | P3 | Auto-update rolled back only on an API failure; a broken web app passed | Health check also requires the sign-in page with its scripts | `bash -n`; not run on the server |
+| D20 | P4 | Wrong passwords for a known e-mail address from one machine locked its owner out everywhere for 15 minutes | Counted per account and client address; a 10x higher limit per account across all addresses still stops guessing from many machines | `auth.test.ts` (owner elsewhere signs in; distributed guessing still stopped) |
+| D21 | P4 | `/health` told anyone which commit was running | Version moved to `GET /health/version`, signed-in only (Account page uses it) | API suite, isolation test |
+| D22 | P4 | `/agent/status` made about a dozen database reads one after another (p50 270 ms under load) | Independent reads run together | load test below |
+
 Earlier the same day (separate commits): sentences the CV does not support are now taken out instead of
 holding the application; the queue names why nothing is ready; running the agent in Auto takes over
 applications prepared in another mode.
@@ -99,13 +110,9 @@ logs, field encryption at rest, extension writes page text with `textContent` on
 
 Open (not fixed, documented):
 
-* P3: the 60-day refresh token is kept in `localStorage` while the site CSP allows inline scripts; an XSS
-  would expose it. Fix: nonce/hash CSP or an HttpOnly cookie for refresh.
-  Not fixed in this pass: a hash-based CSP has to be generated from each build into the Caddy
-  configuration, which could not be run here, and a wrong CSP blanks the site without tripping the
-  API health-check rollback.
-* P4: per-e-mail sign-in limit lets someone lock a known address out for 15 minutes.
-* P4: `/health` shows the deployed commit.
+* Residual (P4): the kept sign-in is still in `localStorage`. With the hash-only script policy (D17) an
+  injected script no longer runs, which is what made this exploitable; an HttpOnly cookie would remove
+  it entirely but needs the API and the site on one origin in every set-up (tests run them apart).
 
 ## 8–12. Areas not tested (BLOCKED or NOT TESTED)
 
@@ -121,6 +128,19 @@ Open (not fixed, documented):
 | Payments | NOT APPLICABLE | none |
 | Privacy | PARTIAL | export and deletion of an account are tested; no processor agreements with the AI provider or host; privacy notice "in preparation" |
 | AI quality evaluation | NOT TESTED | no evaluation set; outputs are trace-checked against the CV |
+
+## 12a. Operational drills (third pass)
+
+| Drill | Tool | Result here | On the server |
+|---|---|---|---|
+| Backup restore | `deploy/restore-drill.sh` | PASS against PostgreSQL 16 (psql mode): all 17 tables present, counts equal, migration 007, restored in under 1 s; a truncated dump is refused (FAIL, exit 1) | NOT RUN: Docker mode (throwaway `postgres:16`, no network) could not run here (no Docker daemon). Run it: `bash deploy/restore-drill.sh`; result in `backups/restore-drill.log` |
+| Rollback | `deploy/rollback-drill.sh` | Rollback onto a newer schema proven with the built API (D18) | NOT RUN: back one commit and forward again, both health-checked and timed; result in `backups/rollback-drill.log` |
+| Load | `scripts/load-test.mjs` | PASS, 50 people for 30 s, built API + PostgreSQL in this container: 19,011 requests, 633/s, p50 53 ms, p95 228 ms, p99 280 ms, 0 errors, 212 MB | NOT RUN against production (needs a test account's token; keep it short) |
+| Stress | same, 200 people | 18,470 requests, 613/s, p95 972 ms, p99 1,067 ms, **0 errors**, 228 MB. One API process saturates at about 620 requests a second; latency rises, nothing fails. The pilot target (p95 under 800 ms) holds to roughly 150 people at once | — |
+| Outside uptime | `.github/workflows/uptime.yml` (every 10 min: API health, sign-in page, certificate 14+ days) | NOT RUN: the container's network blocks opennjob.com, and GitHub runs schedules only from `main` | Merge to `main` (or copy the file there); GitHub e-mails the owner when a run fails |
+| Data-processing agreements | — | NOT APPLICABLE to code | Anthropic publishes a DPA that is part of its Commercial Terms (anthropic.com/legal/data-processing-addendum); Hostinger publishes one at hostinger.com/legal/dpa. Read, accept and keep a dated copy of each; list both as subprocessors in the privacy notice |
+| AI credit | `deploy/check-ai.sh` | — | Top up at console.anthropic.com and set a monthly spend limit there; then `bash deploy/check-ai.sh` must say "OK the AI answered" |
+| Real automatic submission | `deploy/supervised-test.md` | — | Needs the person signed in on the employer's site, a right-to-work record in Profile, and AI credit; then one supervised run, receipt recorded |
 
 ## 13. Tests run for this review
 

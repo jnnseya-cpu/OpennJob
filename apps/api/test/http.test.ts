@@ -189,11 +189,11 @@ describe('structured request logging', () => {
 describe('GET /health', () => {
   it('reports the store and its connectivity, and 503 when the store cannot be reached', async () => {
     t = await createTestApp();
-    await t.raw().get('/health').expect(200, { status: 'ok', persistence: 'memory', database: 'up', version: 'unknown' });
+    await t.raw().get('/health').expect(200, { status: 'ok', persistence: 'memory', database: 'up' });
     t.deps.repository.ping = async () => {
       throw new Error('connection refused');
     };
-    await t.raw().get('/health').expect(503, { status: 'degraded', persistence: 'memory', database: 'down', version: 'unknown' });
+    await t.raw().get('/health').expect(503, { status: 'degraded', persistence: 'memory', database: 'down' });
   });
 });
 

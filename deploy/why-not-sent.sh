@@ -13,7 +13,7 @@ ok() { printf '  OK  %s\n' "$1"; }
 no() { printf '  NO  %s\n      -> %s\n' "$1" "$2"; }
 
 echo "== Server"
-v="$(./oj exec -T api node -e "fetch('http://127.0.0.1:8080/health').then(r=>r.json()).then(j=>console.log(j.version))" 2>/dev/null)"
+v="$(./oj exec -T api printenv OPENNJOB_VERSION 2>/dev/null)"
 [ -n "$v" ] && ok "API running, version $v" || no "API not answering" "bash deploy/update.sh"
 
 echo "== Both routes need"
