@@ -24,6 +24,19 @@ function savePdf(bytes: Uint8Array, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Copies text to the clipboard for pasting into an employer's form on a phone. Nothing is sent. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Older browsers, or permission refused: the person can still read and select the text.
+  }
+  return false;
+}
+
 const FILLED: [string, string][] = [
   ['Name, contact details', 'from your profile'],
   ['Employment history', 'from your CV'],
@@ -45,6 +58,8 @@ function Review() {
   const [receiptText, setReceiptText] = useState('');
   // Nothing here starts ticked, except what this user already confirmed and the API recorded.
   const [ticked, setTicked] = useState<Set<string>>(new Set());
+  // Which value was last copied, so the button can say so. Phone-first: you paste into the form yourself.
+  const [copied, setCopied] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -126,7 +141,7 @@ function Review() {
     setNotice('');
     try {
       await saveStatement();
-      setNotice('Statement saved. The extension fills this text.');
+      setNotice('Statement saved. Copy it into the employer’s form, or it is sent with an e-mail application.');
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -141,6 +156,20 @@ function Review() {
   // work from a valid record, so they are listed under "The extension fills these", not here.
   const declarations = declarationsFor(match?.job).filter((d) => d.id !== 'ref' && !(record && d.id === 'rtw'));
   const filled: [string, string][] = record ? [...FILLED, ['Right to work and sponsorship', `filled from your record: ${describeWorkRights(record)}`]] : FILLED;
+
+  // Your own details, ready to paste into the employer's form from a phone (no extension needed).
+  const myDetails: [string, string][] = profile
+    ? ([
+        ['Full name', `${profile.firstName} ${profile.lastName}`.trim()],
+        ['Email', profile.email],
+        ['Phone', profile.phone],
+        ['Address', [profile.addressLine1, profile.addressLine2, profile.city, profile.postcode].filter(Boolean).join(', ')],
+      ] as [string, string][]).filter(([, value]) => value.trim() !== '')
+    : [];
+
+  async function copy(label: string, text: string) {
+    setCopied((await copyText(text)) ? label : '');
+  }
 
   async function approve() {
     if (!app) return;
@@ -300,6 +329,9 @@ function Review() {
                   Save changes
                 </button>
               ) : null}
+              <button className="btn" type="button" data-testid="copy-statement" onClick={() => copy('statement', statement)} disabled={statement.trim() === ''}>
+                {copied === 'statement' ? 'Copied' : 'Copy'}
+              </button>
             </div>
             <textarea id="statement" value={statement} readOnly={!editable} onChange={(e) => setStatement(e.target.value)} />
             <p className="small muted">
@@ -334,8 +366,26 @@ function Review() {
             </section>
           ) : null}
 
+          {myDetails.length > 0 ? (
+            <section className="card" aria-label="Your details for the form" data-testid="my-details">
+              <span className="label">Your details, ready to paste</span>
+              <p className="small muted">Open the form on your phone and paste each one. Tap Copy, then paste into the matching box.</p>
+              <dl className="kv">
+                {myDetails.map(([k, v]) => (
+                  <div key={k} className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span><b>{k}:</b> {v}</span>
+                    <button className="btn" type="button" onClick={() => copy(k, v)}>
+                      {copied === k ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ) : null}
+
           <section className="card">
-            <span className="label">The extension fills these</span>
+            <span className="label">From your CV and passport</span>
+            <p className="small muted">The rest of the form is answered from what you have saved. On a desktop, the optional OpennJob browser extension can fill these for you; on a phone, copy them from your CV and passport as the form asks.</p>
             <dl className="kv">
               {filled.map(([k, v]) => (
                 <div key={k} style={{ display: 'contents' }}>
@@ -395,14 +445,23 @@ function Review() {
           {status === 'confirmed' ? (
             <section className="card" aria-label="Next steps">
               <p>
-                <b>Approved, not sent yet.</b> The checklist above says what is stopping OpennJob from sending it for you. To send it now:
+                <b>Approved, not sent yet.</b> {match?.emailApply
+                  ? 'This advert gives a recruiter’s e-mail address, so OpennJob can send it for you in auto mode. To send it yourself instead, use the ready-to-submit pack below.'
+                  : 'This employer takes applications on their own form, which only you can submit. Everything you need is ready below — you can do it from your phone, no extension.'}
               </p>
               <ol className="small">
-                <li>Open the employer’s form.</li>
-                <li>Press Fill in the OpennJob extension: your details, CV and statement go in; it asks before any sensitive field.</li>
-                <li>Answer the declarations, press submit, then paste the confirmation here.</li>
+                <li>Open the employer’s form (button below).</li>
+                <li>Download your CV and cover letter above, and attach them where the form asks.</li>
+                <li>Paste your details and your supporting statement from the Copy buttons above.</li>
+                <li>Answer the declarations yourself — OpennJob never answers them for you.</li>
+                <li>Press submit on the form, then record it below.</li>
               </ol>
               <div className="row">
+                {app.tailoredCv ? (
+                  <button type="button" className="btn" onClick={() => app.tailoredCv && savePdf(cvPdf(app.tailoredCv), `${fileStem(profile)}_CV.pdf`)}>
+                    Download CV (PDF)
+                  </button>
+                ) : null}
                 <a className="btn" href={app.applyUrl} target="_blank" rel="noopener noreferrer">
                   Open the employer’s form
                 </a>

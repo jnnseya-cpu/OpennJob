@@ -161,7 +161,7 @@ export default function Landing() {
             <div className="lp-step lp-reveal">
               <div>
                 <h3>You check it and you submit</h3>
-                <p>You press submit on the employer’s form, or, under your standing authorisation, the extension submits on a certified site when every question is answered from your own records. OpennJob records the receipt and keeps the tracker.</p>
+                <p>Where an advert gives a recruiter’s e-mail address, OpennJob sends your CV and statement there for you. For an employer’s own form, you get a ready-to-submit pack — your documents, your details and your statement, ready to paste from your phone. OpennJob records the receipt and keeps the tracker.</p>
               </div>
             </div>
           </div>

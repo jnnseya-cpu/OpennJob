@@ -15,7 +15,7 @@ export const DEFAULT_THRESHOLD = 80;
 export const MODE_HELP: Record<Mode, string> = {
   review: 'You see and confirm every field before anything is filled.',
   hybrid: 'The agent prepares every match at or above the threshold. Declarations you saved on your Profile are filled; you confirm the rest and submit yourself.',
-  auto: 'The agent prepares every match at or above the threshold. The extension may submit a form only when every declaration on it is answered from your saved answers and it has no other sensitive field; any form that has one waits for you.',
+  auto: 'The agent prepares every match at or above the threshold and, where an advert gives a recruiter’s e-mail address, sends your CV and statement there for you. Employer forms only you can submit: OpennJob gives you a ready-to-submit pack to send from your phone.',
 };
 
 const MODE_LABEL: Record<Mode, string> = { review: 'Review all', hybrid: 'Hybrid', auto: 'Auto' };

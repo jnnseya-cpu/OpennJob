@@ -245,7 +245,7 @@ test('matches: the catalogue is fetched, scored against the CV, and filtered by 
 test('agent run in auto mode prepares drafts only: nothing is approved or submitted for the user', async () => {
   await page.getByRole('link', { name: 'Matches' }).click();
   await page.getByRole('group', { name: 'How much the agent does alone' }).getByRole('button', { name: 'Auto' }).click();
-  await expect(page.getByTestId('mode-help')).toContainText('any form that has one waits for you');
+  await expect(page.getByTestId('mode-help')).toContainText('ready-to-submit pack to send from your phone');
   await page.getByLabel('Industry pack').selectOption('all');
   const before = new Set((await call<{ id: string }[]>('GET', '/applications')).map((a) => a.id));
   await page.getByRole('button', { name: 'Run agent' }).click();
@@ -340,6 +340,12 @@ test('review: requirements with evidence, editable statement, every declaration 
 
   await expect(page.getByText('Approved, not sent yet.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open the employer’s form' })).toHaveAttribute('href', 'https://example.org/jobs/hca-elderly-care');
+  // Phone-first ready-to-submit pack: your details to paste, and a copy button, with no extension.
+  const details = page.getByRole('region', { name: 'Your details for the form' });
+  await expect(details.getByText(/Full name:/)).toBeVisible();
+  await expect(details.getByText(/Email:/)).toBeVisible();
+  await expect(page.getByTestId('copy-statement')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download CV (PDF)' }).first()).toBeVisible();
   await expect(statement).toHaveAttribute('readonly', '');
   const confirmed = await call<{ status: string; confirmedFields: string[] }>('GET', `/applications/${draft?.id}`);
   expect(confirmed.status).toBe('confirmed');
