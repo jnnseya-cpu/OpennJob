@@ -296,7 +296,7 @@ test('T-14: answering the held question once releases it, and the stored answer 
   // Nothing is ever attempted twice.
   const again = await runQueue(page);
   expect(again).toMatchObject({ sent: 0, held: 0, uncertain: 0 });
-  expect(again.message).toBe('Nothing is ready to send.');
+  expect(again.message).toMatch(/^Nothing is ready to send\./);
   expect(hits.filter((h) => h === 'plain')).toHaveLength(1);
   await page.close();
 });

@@ -206,6 +206,24 @@ export class ApplyingService {
   }
 
   /**
+   * "Nothing is ready to send", and why: the open applications on an application system that is
+   * switched on, which the queue skipped, each with the reason in plain words.
+   */
+  private async emptyMessage(userId: string): Promise<string> {
+    const why: string[] = [];
+    for (const a of await this.deps.repository.listApplications(userId)) {
+      if (a.attemptedAt !== undefined || !['draft', 'needs_you', 'confirmed'].includes(a.status)) continue;
+      if (!(await this.systemEnabledFor(a.applyUrl))) continue;
+      const name = `${a.jobTitle} (${a.employer})`;
+      if (a.mode !== 'auto') why.push(`${name} was prepared in ${a.mode === 'review' ? 'Review all' : 'Hybrid'} mode: choose Auto at the top of OpennJob and press Run agent`);
+      else if (a.traceFailures?.length || a.holdReasons?.includes('trace-check')) why.push(`${name} waits for you: a sentence in its documents could not be matched to your CV. Open it on the Tracker, read it, and press Approve`);
+      else if (a.holdReasons?.length) why.push(`${name} waits for you (${a.holdReasons.join(', ')}). Open it on the Tracker`);
+      else why.push(`${name} is under your automatic bar of ${await this.raisedBar(userId)}%`);
+    }
+    return why.length ? `${WAIT_MESSAGE.empty} ${why.slice(0, 3).join('. ')}.` : `${WAIT_MESSAGE.empty} No application has a page on Workday or SuccessFactors yet.`;
+  }
+
+  /**
    * How each application that would go out on its own actually can: 'email' (the advert names a
    * recruiter's address), 'form' (its application system is enabled, through the extension's queue),
    * or 'none' (no automatic route: the person applies on the site). The Tracker shows only the first
@@ -312,7 +330,7 @@ export class ApplyingService {
     const block = await this.blocked(userId);
     if (block) return { wait: block.wait, message: WAIT_MESSAGE[block.wait], ...(block.resetsAt ? { resetsAt: block.resetsAt } : {}) };
     const [application] = (await this.ready(userId)).ready;
-    if (!application) return { wait: 'empty' as const, message: WAIT_MESSAGE.empty };
+    if (!application) return { wait: 'empty' as const, message: await this.emptyMessage(userId) };
     const profile = await this.service.getProfile(userId);
     const passport = (await this.deps.repository.getPassport(userId)) ?? EMPTY_PASSPORT;
     const screening = (await this.deps.repository.getScreeningAnswers(userId)) ?? EMPTY_SCREENING;

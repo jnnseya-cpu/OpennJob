@@ -76,3 +76,25 @@ describe('jobs found on a job board: why they cannot go out, and the employer li
     expect((await t.deps.repository.getApplication(USER_ID, 'old'))?.applyUrl).toBe(job.applyUrl);
   });
 });
+
+describe('the queue says why nothing is ready, and Auto takes over applications prepared in another mode', () => {
+  it('names the job prepared in Review all; running the agent in Auto puts it in the queue', async () => {
+    t = await createTestApp({ sources: [], config: testConfig({ operatorKey: OPERATOR_KEY }) });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    await t.api.put('/passport').send(PASSPORT).expect(200);
+    await t.api.put('/agent/authorisation').send({ enabled: true, scopeVersion: STANDING_SCOPE_VERSION }).expect(200);
+    await t.raw().put('/operator/systems/workday').set('Authorization', `Bearer ${OPERATOR_KEY}`).send({ enabled: true, termsCheckedAt: '2026-10-08T10:00:00Z', supervisedSubmissionAt: '2026-10-08T11:00:00Z' }).expect(200);
+    const job: Job = { id: 'workday:x/1', source: 'workday', externalId: 'x/1', title: 'Staff Nurse (fictional)', employer: 'Example Grid (fictional)', location: 'Rugby', country: 'GB', url: 'https://example.wd5.myworkdayjobs.com/Careers/job/Rugby/PCL_R1', applyUrl: 'https://example.wd5.myworkdayjobs.com/Careers/job/Rugby/PCL_R1', description: 'A fictional vacancy. Medication rounds.', criteria: [{ label: 'Medication', essential: true, keywords: ['medication'] }], criteriaSource: 'provided', requiresRegistration: false };
+    await t.deps.repository.upsertJobs([job]);
+    await t.deps.repository.createApplication({ id: 'pcl', userId: USER_ID, jobId: job.id, jobTitle: job.title, employer: job.employer, applyUrl: job.url, mode: 'review', status: 'draft', statement: 'A fictional statement.', statementSource: 'llm', gaps: [], warnings: [], score: 100, confirmedFields: [], createdAt: '2026-10-08T06:00:00.000Z' });
+
+    const before = (await t.api.get('/agent/queue/next').expect(200)).body;
+    expect(before.wait).toBe('empty');
+    expect(before.message).toContain('Staff Nurse (fictional) (Example Grid (fictional)) was prepared in Review all mode');
+
+    await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200);
+    expect((await t.deps.repository.getApplication(USER_ID, 'pcl'))?.mode).toBe('auto');
+    expect((await t.api.get('/agent/queue/next').expect(200)).body.application?.id).toBe('pcl');
+  });
+});
+

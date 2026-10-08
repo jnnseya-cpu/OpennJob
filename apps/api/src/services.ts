@@ -630,6 +630,17 @@ export class OpennJobService {
       closedDuplicates += 1;
     }
 
+    // Run in Auto: the person's unsent applications prepared in Review all or Hybrid follow the
+    // mode they now chose, so they can go out on their own (they were otherwise skipped for good).
+    if (input.mode === 'auto') {
+      for (const a of [...existing]) {
+        if (a.mode === 'auto' || (a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined) continue;
+        const moved: Application = { ...a, mode: 'auto' };
+        await this.deps.repository.updateApplication(moved);
+        existing.splice(existing.indexOf(a), 1, moved);
+      }
+    }
+
     // An unsent application with no way out yet (no recruiter e-mail in the advert, no employer
     // link) whose advert was read only in part (a search reads the whole advert for its first
     // results only): its source is asked for the whole advert, which can name the recruiter's
