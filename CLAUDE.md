@@ -131,16 +131,23 @@ hold them, whatever a task seems to ask. If a request conflicts with one, stop a
    (`packages/core/src/work-rights.ts`): confirmed by them, answered yes or no, naming the
    document they hold, not expired. Nothing else about immigration (nationality, passport,
    share code, NI number, visa type or expiry, evidence), no question worded the other way
-   round, and no other declaration falls under it. Convictions, "I confirm" boxes and the
-   rest stay the person's, every time.
+   round, and no other declaration falls under it.
+   **Second exception, owner decision OD-6 (8 October 2026):** declarations the person answers
+   once on their Profile ("Declarations OpennJob answers for you", stored encrypted with the
+   screening answers) are answered from those answers on every form (`packages/core/src/own-answers.ts`):
+   convictions or cautions and conflict of interest (their yes or no, plain wordings only),
+   the "I certify the information is true" and privacy/terms consent boxes (when they allowed
+   it; a box claiming a fact is never ticked), and equality monitoring "Prefer not to say".
+   Health, safeguarding, fitness to practise, vetting and security clearance stay the person's.
 2. **A sensitive field is confirmed by the user before it is written. It is never
    auto-filled.** In every mode. Bulk "tick all" exists only for ordinary fields.
 3. **Auto mode never submits a form that has any sensitive field**, even after the user
    has confirmed those fields. It submits only a form with no sensitive field, at least
    one field, and no empty required field. `review` and `hybrid` never submit. Under
    OD-5 a right-to-work or sponsorship field answered from a valid record
-   (`fromWorkRights` in `policy.ts`) does not count as stopping auto mode; any other
-   sensitive field still does. Review mode still asks for it.
+   (`fromWorkRights` in `policy.ts`), and under OD-6 a declaration answered from the
+   person's own answers (`fromOwnRecord`), does not count as stopping auto mode; any other
+   sensitive field still does. Review mode still asks for them.
    **Applications by e-mail** (owner request, 6 October 2026): when an advert names a
    recruiter's e-mail address, `ApplyingService.sendByEmail` may e-mail the tailored CV (PDF)
    and the statement there, in the person's name, replies to them. Only in auto mode, under

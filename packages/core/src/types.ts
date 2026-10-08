@@ -201,6 +201,22 @@ export interface SentDocuments {
   sha256: { statement: string; tailoredCv: string };
 }
 
+/**
+ * OD-6 (owner decision, 8 October 2026): declarations the person answers once, in their own words
+ * of yes or no, and that the agent then answers for them on every form. Encrypted at rest with the
+ * screening answers. Each is the person's own declaration, made in their name.
+ */
+export interface DeclarationAnswers {
+  /** "Have you ever had a criminal conviction or caution (spent or unspent)?" */
+  everConvicted?: boolean;
+  /** "Do you have any conflict of interest with the employer?" */
+  conflictOfInterest?: boolean;
+  /** Tick "I certify the information I have given is true" and privacy / terms consent boxes. */
+  certifyAndConsent?: boolean;
+  /** Answer equality-monitoring questions "Prefer not to say". */
+  equalityPreferNotToSay?: boolean;
+}
+
 /** Ordinary screening answers, stored once and reused (SCR-1). Never declarations (SCR-3). Encrypted at rest. */
 export interface ScreeningAnswers {
   noticePeriod?: string;
@@ -210,6 +226,8 @@ export interface ScreeningAnswers {
   travel?: boolean;
   yearsExperience?: string;
   drivingLicence?: boolean;
+  /** OD-6: the person's own answers to declarations, filled on every form (owner decision, 8 October 2026). */
+  declarations?: DeclarationAnswers;
   /** Answers the person gave to other ordinary questions, keyed by the normalised question. */
   custom: Record<string, string>;
 }

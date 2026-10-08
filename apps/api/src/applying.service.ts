@@ -326,6 +326,9 @@ export class ApplyingService {
       values: { ...buildFillValues(profile, passport, application.statement, { ...(jobCountry ? { jobCountry } : {}), today }), ...screeningFillValues(screening) },
       custom: customAnswers(screening),
       ...(workRights ? { workRights } : {}),
+      // OD-6: the declarations the person answered once (convictions, conflict of interest, certify
+      // and consent, equality "Prefer not to say"), filled from their own answers.
+      ...(screening.declarations ? { declarations: screening.declarations } : {}),
       // The tailored CV, attached as a PDF to a field that asks for a CV (the extension's files.ts).
       cv: { fileName: applicationEmail(job ?? { title: application.jobTitle, employer: application.employer, description: '' }, profile, '').cvFileName, text: application.tailoredCv || profile.cvText },
       // The cover letter (the statement as a letter), attached to a field that asks for one.

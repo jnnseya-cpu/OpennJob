@@ -1,3 +1,4 @@
+import { PREFER_NOT_TO_SAY } from '@opennjob/core/browser';
 import type { FillValue } from '@opennjob/core/browser';
 import type { DetectedField } from './types';
 
@@ -21,9 +22,13 @@ function fireInputEvents(el: HTMLElement): void {
   el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
 }
 
+/** OD-6: the options that mean "prefer not to say" on equality-monitoring questions. */
+const PREFER_NOT = /prefer not|rather not|do not wish|don.t wish|not wish to|decline to|not to (say|disclose|answer|specify)|choose not/;
+
 function choiceMatches(candidate: string, value: FillValue): boolean {
   const c = norm(candidate);
   if (typeof value === 'boolean') return value ? YES.has(c) : NO.has(c);
+  if (norm(value) === norm(PREFER_NOT_TO_SAY)) return PREFER_NOT.test(c);
   return c !== '' && c === norm(value);
 }
 

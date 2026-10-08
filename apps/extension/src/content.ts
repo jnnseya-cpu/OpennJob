@@ -28,9 +28,9 @@ interface OpennJobGlobal {
 const scope = globalThis as unknown as OpennJobGlobal;
 
 /** The values and country of the last fill on this page: the submit re-check uses the same ones. */
-let lastFill: Pick<RunRequest, 'values' | 'workRights'> | undefined;
+let lastFill: Pick<RunRequest, 'values' | 'workRights' | 'declarations'> | undefined;
 const run = (request: RunRequest): RunReport => {
-  lastFill = { values: request.values, ...(request.workRights ? { workRights: request.workRights } : {}) };
+  lastFill = { values: request.values, ...(request.workRights ? { workRights: request.workRights } : {}), ...(request.declarations ? { declarations: request.declarations } : {}) };
   return runAgent(document, request);
 };
 

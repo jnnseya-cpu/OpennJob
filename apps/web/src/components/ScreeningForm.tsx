@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, errorText } from '../lib/api';
+import type { DeclarationAnswers } from '../lib/core';
 import type { ScreeningAnswers } from '../lib/types';
 
 const TEXT_FIELDS: [keyof ScreeningAnswers, string][] = [
@@ -11,6 +12,16 @@ const TEXT_FIELDS: [keyof ScreeningAnswers, string][] = [
   ['dayRate', 'Day rate (contract roles)'],
   ['yearsExperience', 'Years of relevant experience'],
 ];
+/** OD-6 (owner decision, 8 October 2026): declarations answered once, filled on every form. */
+const DECLARATIONS: [keyof DeclarationAnswers, string, string][] = [
+  ['everConvicted', 'Have you ever had a criminal conviction or caution (spent or unspent)?', 'This answer is given to every question about convictions or cautions.'],
+  ['conflictOfInterest', 'Do you have a conflict of interest with the employers you apply to?', 'This answer is given to every conflict-of-interest question.'],
+];
+const DECLARATION_TICKS: [keyof DeclarationAnswers, string][] = [
+  ['certifyAndConsent', 'Tick "I certify the information I have given is true" and the privacy-notice and terms boxes for me. Boxes that claim a fact (a licence, a qualification) are never ticked.'],
+  ['equalityPreferNotToSay', 'Answer equality-monitoring questions (gender, ethnicity, disability, age…) "Prefer not to say".'],
+];
+
 const YES_NO: [keyof ScreeningAnswers, string][] = [
   ['relocation', 'Willing to relocate'],
   ['travel', 'Willing to travel'],
@@ -18,9 +29,9 @@ const YES_NO: [keyof ScreeningAnswers, string][] = [
 ];
 
 /**
- * SCR-1: ordinary screening answers, stored once and reused by the agent. Declarations and
- * other sensitive questions are refused by the API and never stored: you answer those on the
- * employer's form every time.
+ * SCR-1: ordinary screening answers, stored once and reused by the agent. OD-6: the declarations
+ * the person chooses to answer once (convictions, conflict of interest, certify and consent,
+ * equality "Prefer not to say"). Free-text declaration questions are still refused by the API.
  */
 export function ScreeningForm() {
   const [answers, setAnswers] = useState<ScreeningAnswers>({ custom: {} });
@@ -50,6 +61,9 @@ export function ScreeningForm() {
       const v = answers[k];
       if (typeof v === 'boolean') (body as unknown as Record<string, unknown>)[k] = v;
     }
+    const d = answers.declarations ?? {};
+    const declarations = Object.fromEntries(Object.entries(d).filter(([, v]) => typeof v === 'boolean'));
+    if (Object.keys(declarations).length) body.declarations = declarations;
     try {
       setAnswers(await api<ScreeningAnswers>('/screening', { method: 'PUT', body }));
       setMsg({ ok: true, text: 'Answers saved. The agent uses them on forms that ask these questions.' });
@@ -63,7 +77,7 @@ export function ScreeningForm() {
   return (
     <form className="card" onSubmit={save} aria-label="Standard answers">
       <span className="label">Standard answers</span>
-      <p className="small muted">Ordinary questions that application forms ask again and again. Declarations, criminal record, health, right to work, sponsorship and equality questions are never stored: you answer those yourself, on each form.</p>
+      <p className="small muted">Ordinary questions that application forms ask again and again. Right to work is on the Credential passport; declarations are just below.</p>
       <div className="grid2">
         {TEXT_FIELDS.map(([k, label]) => (
           <label key={k} className="field">
@@ -83,6 +97,26 @@ export function ScreeningForm() {
           </label>
         ))}
       </div>
+      <fieldset className="field" aria-label="Declarations OpennJob answers for you">
+        <legend><b>Declarations OpennJob answers for you</b></legend>
+        <p className="small muted">Answer truthfully: OpennJob gives these answers in your name on every form, so applications can be sent without you. Health, safeguarding and vetting questions are still left for you. Change or clear an answer at any time.</p>
+        {DECLARATIONS.map(([k, label, help]) => (
+          <label key={k} className="field">
+            <span>{label}</span>
+            <select value={answers.declarations?.[k] === undefined ? '' : answers.declarations[k] ? 'yes' : 'no'} onChange={(e) => setAnswers((s) => ({ ...s, declarations: { ...s.declarations, [k]: e.target.value === '' ? undefined : e.target.value === 'yes' } }))}>
+              <option value="">Not answered (I answer it on each form)</option>
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+            <span className="small muted">{help}</span>
+          </label>
+        ))}
+        {DECLARATION_TICKS.map(([k, label]) => (
+          <label key={k} className="row small">
+            <input type="checkbox" checked={answers.declarations?.[k] === true} onChange={(e) => setAnswers((s) => ({ ...s, declarations: { ...s.declarations, [k]: e.target.checked ? true : undefined } }))} /> {label}
+          </label>
+        ))}
+      </fieldset>
       <span className="small"><b>Other questions you have answered</b></span>
       {rows.map((r, i) => (
         <div key={i} className="grid2">

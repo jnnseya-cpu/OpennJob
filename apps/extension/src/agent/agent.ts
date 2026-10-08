@@ -1,5 +1,5 @@
-import { decide, fieldsAllowedToFill, maySubmit, screeningKey, workRightsAnswer } from '@opennjob/core/browser';
-import type { FillValue, FillValues, PolicyField, WorkRightsContext } from '@opennjob/core/browser';
+import { decide, fieldsAllowedToFill, maySubmit, ownAnswer, screeningKey, workRightsAnswer } from '@opennjob/core/browser';
+import type { DeclarationAnswers, FillValue, FillValues, PolicyField, WorkRightsContext } from '@opennjob/core/browser';
 import { blockerMessage, detectBlockers } from './blockers';
 import { attachCoverLetter, attachCv, countFileInputs } from './files';
 import { fillField } from './fill';
@@ -32,8 +32,14 @@ function markSensitive(field: DetectedField, state: FieldState): void {
  * The value proposed for a field, and whether it comes from the person's own right-to-work record
  * (OD-5). Right-to-work fields go through workRightsAnswer(), which checks the country.
  */
-function proposedValue(field: DetectedField, request: Pick<RunRequest, 'values' | 'custom' | 'workRights'>): { value: FillValue | undefined; fromRecord: boolean } {
+function proposedValue(field: DetectedField, request: Pick<RunRequest, 'values' | 'custom' | 'workRights' | 'declarations'>): { value: FillValue | undefined; fromRecord: boolean } {
   if (field.category === 'right-to-work') return workRightsAnswer(field, request.values, request.workRights);
+  // OD-6: a declaration the person answered once (convictions, conflict of interest, certify and
+  // consent, equality "Prefer not to say").
+  if (field.sensitive) {
+    const own = ownAnswer(field, request.declarations);
+    if (own.fromOwnRecord) return { value: own.value, fromRecord: true };
+  }
   const value = field.key ? request.values[field.key] : !field.sensitive && request.custom ? request.custom[screeningKey(field.label)] : undefined;
   return { value, fromRecord: false };
 }
@@ -87,7 +93,7 @@ export function runAgent(doc: Document, request: RunRequest): RunReport {
   const proposed = new Map(fields.map((f) => [f.id, proposedValue(f, request)]));
   const fromRecord = new Set(fields.filter((f) => proposed.get(f.id)?.fromRecord).map((f) => f.id));
   const toPolicy = (): PolicyField[] =>
-    fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f), ...(fromRecord.has(f.id) ? { fromWorkRights: true } : {}) }));
+    fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f), ...(fromRecord.has(f.id) ? (f.category === 'right-to-work' ? { fromWorkRights: true } : { fromOwnRecord: true }) : {}) }));
   const allowed = new Set(fieldsAllowedToFill({ mode: request.mode, fields: toPolicy(), confirmedFieldIds }));
   const pendingListboxes: { id: string; value: FillValue }[] = [];
 
@@ -211,11 +217,11 @@ export function pressStart(doc: Document): { pressed: boolean } {
  * required field filled, no required file, exactly one next control. Pressing it saves this step on
  * the employer's site; it is not the final submit, which only submitNow does, after the API's go.
  */
-export function advanceNow(doc: Document, filledWith?: { values: FillValues; workRights?: WorkRightsContext }): { advanced: boolean; message: string } {
+export function advanceNow(doc: Document, filledWith?: { values: FillValues; workRights?: WorkRightsContext; declarations?: DeclarationAnswers }): { advanced: boolean; message: string } {
   if (detectBlockers(doc).length > 0) return { advanced: false, message: 'A CAPTCHA or sign-in appeared.' };
   const fields = scanFields(doc);
   const fromRecord = new Set(
-    filledWith ? fields.filter((f) => f.category === 'right-to-work' && hasValue(f) && workRightsAnswer(f, filledWith.values, filledWith.workRights).fromRecord).map((f) => f.id) : [],
+    filledWith ? fields.filter((f) => f.sensitive && hasValue(f) && proposedValue(f, filledWith).fromRecord).map((f) => f.id) : [],
   );
   if (!stepIsClean(fields, fromRecord) || countFileInputs(doc).required > 0) return { advanced: false, message: 'This step waits for you.' };
   const { next } = stepControls(doc);
@@ -232,13 +238,13 @@ export function advanceNow(doc: Document, filledWith?: { values: FillValues; wor
  * filled, no required file, exactly one submit button. Only then is submit pressed. Auto mode
  * only; the same policy function as every other path (packages/core/src/policy.ts).
  */
-export function submitNow(doc: Document, filledWith?: { values: FillValues; workRights?: WorkRightsContext }, priorFields: PolicyField[] = []): SubmitReport {
+export function submitNow(doc: Document, filledWith?: { values: FillValues; workRights?: WorkRightsContext; declarations?: DeclarationAnswers }, priorFields: PolicyField[] = []): SubmitReport {
   if (detectBlockers(doc).length > 0) return { submitted: false, message: 'A CAPTCHA or sign-in appeared. Not submitted.' };
   const fields = scanFields(doc);
   const fromRecord = new Set(
-    filledWith ? fields.filter((f) => f.category === 'right-to-work' && hasValue(f) && workRightsAnswer(f, filledWith.values, filledWith.workRights).fromRecord).map((f) => f.id) : [],
+    filledWith ? fields.filter((f) => f.sensitive && hasValue(f) && proposedValue(f, filledWith).fromRecord).map((f) => f.id) : [],
   );
-  const policyFields: PolicyField[] = fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f), ...(fromRecord.has(f.id) ? { fromWorkRights: true } : {}) }));
+  const policyFields: PolicyField[] = fields.map((f) => ({ id: f.id, sensitive: f.sensitive, required: f.required, filled: hasValue(f), ...(fromRecord.has(f.id) ? (f.category === 'right-to-work' ? { fromWorkRights: true } : { fromOwnRecord: true }) : {}) }));
   const decision = decide({ mode: 'auto', fields: [...priorFields, ...policyFields], confirmedFieldIds: [] });
   if (!maySubmit(decision) || fields.some((f) => blocksAuto(f, fromRecord)) || countFileInputs(doc).required > 0) return { submitted: false, message: 'The form changed and now waits for you. Not submitted.' };
   const control = findSubmitControl(fields, doc);

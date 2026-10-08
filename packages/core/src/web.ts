@@ -12,7 +12,7 @@ export { REGIONS, REGION_IDS, COUNTRIES, KNOWN_CITIES, countryName, cityCountry 
 export type { Region, Country } from './geo';
 export { LANGUAGES } from './languages';
 export { WORK_RIGHTS_BASES, workRightsProblem, describeWorkRights } from './work-rights';
-export type { WorkRightsRecord } from './types';
+export type { WorkRightsRecord, DeclarationAnswers } from './types';
 export type { Language } from './languages';
 export { SCORE_BANDS, OUTCOMES_BEFORE_LEARNING } from './outcomes';
 export type { BandRate, AutomaticBar } from './outcomes';

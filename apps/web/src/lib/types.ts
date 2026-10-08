@@ -1,4 +1,4 @@
-import type { Application, JobLanguage, Mode, PackId, Passport, Profile, Region } from './core';
+import type { Application, DeclarationAnswers, JobLanguage, Mode, PackId, Passport, Profile, Region } from './core';
 
 export type { Application, Mode, PackId, Passport, Profile };
 
@@ -102,6 +102,7 @@ export interface ScreeningAnswers {
   relocation?: boolean;
   travel?: boolean;
   drivingLicence?: boolean;
+  declarations?: DeclarationAnswers;
   custom: Record<string, string>;
 }
 

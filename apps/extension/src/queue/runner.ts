@@ -1,4 +1,4 @@
-import type { FillValues, PolicyField, WorkRightsContext } from '@opennjob/core/browser';
+import type { DeclarationAnswers, FillValues, PolicyField, WorkRightsContext } from '@opennjob/core/browser';
 import type { Confirmation } from '../agent/confirmation';
 import type { RunReport, SubmitReport } from '../agent/types';
 import { holdReasonsOf, stepHoldReasons } from './reasons';
@@ -39,6 +39,8 @@ interface NextReply {
   custom?: Record<string, string>;
   /** The job's country and whether right to work comes from the person's record (OD-5). */
   workRights?: WorkRightsContext;
+  /** OD-6: declarations the person answered once. */
+  declarations?: DeclarationAnswers;
   /** The tailored CV, attached to a field that asks for a CV. */
   cv?: { fileName: string; text: string };
   /** The cover letter, attached to a field that asks for one. */
@@ -201,7 +203,7 @@ export async function runQueue(): Promise<QueueState> {
       let keepTab = false;
       try {
         await waitForLoad(tabId);
-        const runRequest = { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true, ...(next.workRights ? { workRights: next.workRights } : {}), ...(next.cv ? { cv: next.cv } : {}), ...(next.coverLetter ? { coverLetter: next.coverLetter } : {}) };
+        const runRequest = { type: 'OPENNJOB_RUN', mode: 'auto', values: next.values, custom: next.custom ?? {}, confirmedFieldIds: [], holdSubmit: true, ...(next.workRights ? { workRights: next.workRights } : {}), ...(next.declarations ? { declarations: next.declarations } : {}), ...(next.cv ? { cv: next.cv } : {}), ...(next.coverLetter ? { coverLetter: next.coverLetter } : {}) };
         const prior: PolicyField[] = [];
         let stepsDone = 0;
         let report: RunReport | undefined;

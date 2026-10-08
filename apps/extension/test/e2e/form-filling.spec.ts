@@ -329,6 +329,44 @@ test.describe('agency quick-apply form (no declarations)', () => {
   });
 });
 
+test.describe('OD-6: declarations answered from the person\'s own answers (owner decision, 8 October 2026)', () => {
+  const ALL = { everConvicted: false, conflictOfInterest: false, certifyAndConsent: true, equalityPreferNotToSay: true };
+
+  test('auto: every declaration answered from the record, so the form is submitted', async ({ page }) => {
+    await openFixture(page, 'declarations-application.html');
+    const report = await runAgent(page, 'auto', [], { declarations: ALL });
+    const form = await formSnapshot(page);
+    expect(form['d-conv-no']).toBe(true);
+    expect(form['d-coi-no']).toBe(true);
+    expect(form['d-gender']).toBe('Prefer not to say');
+    expect(form['d-eth-x']).toBe(true);
+    expect(form['d-certify']).toBe(true);
+    expect(form['d-privacy']).toBe(true);
+    expect(report.decision).toBe('submit');
+    expect(report.submitted).toBe(true);
+    expect((await fixtureLog(page)).submitCount).toBe(1);
+  });
+
+  test('auto: one declaration not answered in the record still stops the submit, and nothing is assumed', async ({ page }) => {
+    await openFixture(page, 'declarations-application.html');
+    const report = await runAgent(page, 'auto', [], { declarations: { ...ALL, everConvicted: undefined } as unknown as Record<string, boolean> });
+    const form = await formSnapshot(page);
+    expect(form['d-conv-no']).toBe(false);
+    expect(form['d-conv-yes']).toBe(false);
+    expect(report.submitted).toBe(false);
+    expect((await fixtureLog(page)).submitCount).toBe(0);
+  });
+
+  test('no recorded answers: nothing sensitive is filled and nothing is submitted, as before', async ({ page }) => {
+    await openFixture(page, 'declarations-application.html');
+    const report = await runAgent(page, 'auto', []);
+    const form = await formSnapshot(page);
+    expect(form['d-certify']).toBe(false);
+    expect(form['d-gender']).toBe('');
+    expect(report.submitted).toBe(false);
+  });
+});
+
 test.describe('pages the agent must stop on', () => {
   for (const mode of MODES) {
     test(`${mode}: stops on the CAPTCHA fixture, fills nothing, does not submit, and tells the user`, async ({ page }) => {

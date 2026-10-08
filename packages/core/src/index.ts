@@ -27,3 +27,4 @@ export * from './sources';
 export * from './outcomes';
 export * from './title-translations';
 export * from './pay';
+export * from './own-answers';

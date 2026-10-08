@@ -25,8 +25,11 @@ import type { Mode } from './types';
  * answered from the person's own confirmed, unexpired right-to-work record for the job's country
  * (fromWorkRights: true, set only by workRightsAnswer() in fields.ts) counts as confirmed in
  * hybrid and auto, and does not stop auto mode from submitting. Review mode still asks for it.
- * Every other sensitive field - convictions, conflicts of interest, any declaration or
- * "I confirm" box - still stops auto mode, exactly as before.
+ * Second exception (owner decision OD-6, 8 October 2026): a declaration answered from the
+ * person's own recorded answers (fromOwnRecord: true, set only by ownAnswer() in own-answers.ts:
+ * convictions and conflict of interest from their yes/no, certify-and-consent boxes they allowed,
+ * equality monitoring "Prefer not to say") is treated the same way. Any other sensitive field -
+ * health, safeguarding, vetting, a declaration not answered from the record - still stops auto mode.
  */
 
 export interface PolicyField {
@@ -38,6 +41,8 @@ export interface PolicyField {
   filled?: boolean;
   /** OD-5: right to work or sponsorship, answered from the person's own valid record. */
   fromWorkRights?: boolean;
+  /** OD-6: a declaration answered from the person's own recorded answers. */
+  fromOwnRecord?: boolean;
 }
 
 export interface PolicyInput {
@@ -53,7 +58,7 @@ export function decide(input: PolicyInput): PolicyDecision {
   if (!input || !Array.isArray(input.fields) || !Array.isArray(input.confirmedFieldIds)) return 'await-confirmation';
   const confirmed = new Set(input.confirmedFieldIds);
   const sensitive = input.fields.filter((f) => f.sensitive !== false); // anything not explicitly non-sensitive counts as sensitive
-  const fromRecord = (f: PolicyField) => f.fromWorkRights === true;
+  const fromRecord = (f: PolicyField) => f.fromWorkRights === true || f.fromOwnRecord === true;
   const unconfirmedSensitive = sensitive.some((f) => !confirmed.has(f.id) && !fromRecord(f));
   const blocking = sensitive.filter((f) => !fromRecord(f)); // what stops auto mode submitting
 
@@ -83,7 +88,7 @@ export function fieldsAllowedToFill(input: PolicyInput): string[] {
       return input.fields.filter((f) => confirmed.has(f.id)).map((f) => f.id);
     case 'hybrid':
     case 'auto':
-      return input.fields.filter((f) => f.sensitive === false || confirmed.has(f.id) || f.fromWorkRights === true).map((f) => f.id);
+      return input.fields.filter((f) => f.sensitive === false || confirmed.has(f.id) || f.fromWorkRights === true || f.fromOwnRecord === true).map((f) => f.id);
     default:
       return [];
   }

@@ -129,6 +129,13 @@ test('PRO-1 and SCR-1: a PDF CV becomes text to check before saving; standard an
   await answers.getByRole('button', { name: 'Save answers' }).click();
   await expect(answers.getByText('Answers saved.')).toBeVisible();
   expect(await call('GET', '/screening')).toEqual({ noticePeriod: 'Four weeks', drivingLicence: true, custom: {} });
+
+  // OD-6: declarations answered once, in the person's own words of yes or no.
+  await answers.getByLabel(/ever had a criminal conviction or caution/).selectOption('no');
+  await answers.getByLabel(/I certify the information I have given is true/).check();
+  await answers.getByRole('button', { name: 'Save answers' }).click();
+  await expect(answers.getByText('Answers saved.')).toBeVisible();
+  expect(await call('GET', '/screening')).toEqual({ noticePeriod: 'Four weeks', drivingLicence: true, declarations: { everConvicted: false, certifyAndConsent: true }, custom: {} });
 });
 
 test('WEB-3: standing authorisation shows its wording, needs agreement, can be paused and turned off', async () => {

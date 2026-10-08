@@ -83,6 +83,18 @@ describe('APP-2: standing authorisation is explicit, dated, to a named wording, 
   });
 });
 
+describe('OD-6: the declarations the person answered once go to the queue', () => {
+  it('saves them with the screening answers and hands them out with the next application; free-text declarations are still refused', async () => {
+    await queued(1);
+    const declarations = { everConvicted: false, conflictOfInterest: false, certifyAndConsent: true, equalityPreferNotToSay: true };
+    await t.api.put('/screening').send({ declarations: { ...declarations, extra: true }, custom: {} }).expect(400); // .strict()
+    await t.api.put('/screening').send({ declarations, custom: {} }).expect(200);
+    expect((await t.api.get('/screening').expect(200)).body.declarations).toEqual(declarations);
+    expect((await t.api.get('/agent/queue/next').expect(200)).body.declarations).toEqual(declarations);
+    await t.api.put('/screening').send({ custom: { 'Do you have any criminal convictions?': 'No' } }).expect(400);
+  });
+});
+
 describe('spec T-07: with standing authorisation on, a form with no sensitive field is submitted without approval', () => {
   it('hands out the next application with what may be filled, gives the go once, and records the receipt', async () => {
     const [app] = await queued(1);

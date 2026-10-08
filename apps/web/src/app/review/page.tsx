@@ -339,7 +339,7 @@ function Review() {
                   <span>
                     {d.label}
                     <br />
-                    <span className="muted small">The agent never answers this for you.</span>
+                    <span className="muted small">OpennJob answers this only if you answered it under “Declarations OpennJob answers for you” on your Profile.</span>
                   </span>
                 </label>
               );
@@ -453,7 +453,7 @@ function AutoChecklist({ agent, verified, declarations, rightToWork, emailApply 
     {
       formOnly: true,
       ok: declarations.length === 0,
-      text: declarations.length ? `This job’s form asks for things only you answer (${declarations.join('; ')}). A form with any of them waits for you.` : 'No declaration expected.',
+      text: declarations.length ? `This job’s form asks for things only you answer (${declarations.join('; ')}). A form with any of them waits for you. Ones you answered under Declarations on your Profile are answered for you.` : 'No declaration expected.',
     },
   ];
   // By e-mail there is no form: the form-only lines do not apply.

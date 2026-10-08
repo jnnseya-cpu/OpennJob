@@ -306,6 +306,16 @@ export const screeningSchema = z
     relocation: z.boolean().optional(),
     travel: z.boolean().optional(),
     drivingLicence: z.boolean().optional(),
+    // OD-6 (owner decision, 8 October 2026): declarations the person answers once.
+    declarations: z
+      .object({
+        everConvicted: z.boolean().optional(),
+        conflictOfInterest: z.boolean().optional(),
+        certifyAndConsent: z.boolean().optional(),
+        equalityPreferNotToSay: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     custom: z.record(z.string().trim().min(1).max(300), z.string().trim().min(1).max(2000)).refine((r) => Object.keys(r).length <= 200, 'at most 200 answers').default({}),
   })
   .strict();

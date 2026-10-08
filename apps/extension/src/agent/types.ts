@@ -1,4 +1,4 @@
-import type { FieldKey, FillValue, FillValues, Mode, PolicyDecision, PolicyField, SensitiveCategory, WorkRightsContext } from '@opennjob/core/browser';
+import type { FieldKey, FillValue, FillValues, Mode, PolicyDecision, PolicyField, SensitiveCategory, WorkRightsContext, DeclarationAnswers } from '@opennjob/core/browser';
 
 /** 'listbox': a button that opens a list of options (Workday's drop-downs), chosen by clicking. */
 export type FieldKind = 'text' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'listbox';
@@ -67,6 +67,8 @@ export interface RunRequest {
   holdSubmit?: boolean;
   /** The job's country and whether the right-to-work answers come from the person's record (OD-5). */
   workRights?: WorkRightsContext;
+  /** OD-6: declarations the person answered once, filled from their own answers. */
+  declarations?: DeclarationAnswers;
   /** The tailored CV, attached as a PDF to a field that asks for a CV (files.ts). */
   cv?: { fileName: string; text: string };
   /** The cover letter, attached as a PDF to a field that asks for a cover letter (files.ts). */

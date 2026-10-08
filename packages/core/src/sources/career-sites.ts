@@ -22,6 +22,7 @@
  */
 import { arr, decodeEntities, getJson, getText, normaliseJob, obj, postJson, present, str, stripTags, tidy, toIso } from './common';
 import type { FetchLike, SearchSource } from './common';
+import { inferPlace } from '../geo';
 import type { Job } from '../types';
 
 export interface CareerSite {
@@ -107,6 +108,11 @@ async function workdayJobs(site: CareerSite, what: string, fetchFn: FetchLike, l
     } catch {
       // The advert could not be read: the posting is kept with what the list gave.
     }
+    // A worldwide careers site lists jobs in many countries: one whose location names another
+    // country is not this site's country's job.
+    const where = str(info.location) || str(p.locationsText);
+    const named = inferPlace(where).country;
+    if (named && named !== site.country) continue;
     const external = str(info.externalUrl);
     const page = /^https:\/\//i.test(external) ? external : `https://${site.host}/${site.site ?? ''}${path}`;
     const job = normaliseJob({
