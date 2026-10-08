@@ -1,3 +1,5 @@
+import { isEmployerLink } from '../adapters';
+import { recruiterEmailIn } from '../email-apply';
 import type { Job } from '../types';
 
 const norm = (s: string) =>
@@ -23,18 +25,33 @@ export function dedupeKey(job: Pick<Job, 'title' | 'employer' | 'location'> & Pa
   return `${norm(job.title)}|${firstWord(job.employer)}|${(job.country ?? '').toUpperCase()}`;
 }
 
-/** Keeps the first occurrence of each vacancy (so list your preferred sources first). */
+/**
+ * Can an application to this copy of a vacancy go out on its own: the advert names a recruiter's
+ * address, or the link is the employer's own page (not a job board's or an aggregator's)?
+ */
+export const hasWayOut = (job: Pick<Job, 'description' | 'url' | 'applyUrl'>): boolean =>
+  recruiterEmailIn(job.description) !== undefined || isEmployerLink(job.applyUrl ?? job.url);
+
+/**
+ * Keeps one copy of each vacancy: the first (so list your preferred sources first), unless a
+ * later copy has a way out the first lacks (a recruiter's address, the employer's own link). The
+ * kept copy stays where the first one was.
+ */
 export function dedupeJobs(jobs: readonly Job[]): { jobs: Job[]; duplicates: Job[] } {
-  const seen = new Set<string>();
+  const at = new Map<string, number>();
   const kept: Job[] = [];
   const duplicates: Job[] = [];
   for (const job of jobs) {
     const key = dedupeKey(job);
-    if (seen.has(key)) duplicates.push(job);
-    else {
-      seen.add(key);
+    const i = at.get(key);
+    const first = i === undefined ? undefined : kept[i];
+    if (i === undefined || !first) {
+      at.set(key, kept.length);
       kept.push(job);
-    }
+    } else if (!hasWayOut(first) && hasWayOut(job)) {
+      duplicates.push(first);
+      kept[i] = job;
+    } else duplicates.push(job);
   }
   return { jobs: kept, duplicates };
 }

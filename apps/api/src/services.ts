@@ -16,6 +16,7 @@ import {
   searchPlan,
   targetEmployerOf,
   isEmployerLink,
+  hasWayOut,
   COUNTRY_LANGUAGES,
   automaticBar,
   automaticOrder,
@@ -603,6 +604,23 @@ export class OpennJobService {
       await this.deps.repository.upsertJobs([fuller]);
       jobsById.set(fuller.id, fuller);
       jobs.splice(jobs.indexOf(job), 1, fuller);
+    }
+
+    // The same vacancy found on another source (Adzuna and Reed, Reed and Jooble) whose copy names
+    // the recruiter's address or the employer's own page, when the application's copy has neither:
+    // the application moves to that copy, so it can go out without the person finding the link.
+    const wayOutByKey = new Map<string, Job>();
+    for (const j of jobs) if (hasWayOut(j) && !wayOutByKey.has(dedupeKey(j))) wayOutByKey.set(dedupeKey(j), j);
+    for (const a of [...existing]) {
+      if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined || isEmployerLink(a.applyUrl)) continue;
+      const job = jobsById.get(a.jobId);
+      if (!job || recruiterEmailIn(job.description)) continue;
+      const other = wayOutByKey.get(dedupeKey(job));
+      if (!other || other.id === job.id) continue;
+      const otherLink = other.applyUrl ?? other.url;
+      const moved: Application = { ...a, jobId: other.id, ...(isEmployerLink(otherLink) ? { applyUrl: otherLink } : {}) };
+      await this.deps.repository.updateApplication(moved);
+      existing.splice(existing.indexOf(a), 1, moved);
     }
 
     // A job first seen with a job board's link may later give the employer's own (Reed's externalUrl):

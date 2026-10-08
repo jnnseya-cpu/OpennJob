@@ -92,3 +92,22 @@ describe('why a link cannot be used by the queue', () => {
     expect(isEmployerLink('https://www.linkedin.com/jobs/view/1')).toBe(false);
   });
 });
+
+describe('duplicates: the copy that can go out on its own is kept', () => {
+  it('prefers a later copy with a recruiter address or an employer link, in the first copy\'s place', async () => {
+    const { dedupeJobs, hasWayOut } = await import('../src');
+    const base = { title: 'Planner (fictional)', employer: 'Example Build Ltd (fictional)', location: 'Leeds', country: 'GB', criteria: [], criteriaSource: 'fallback' as const, requiresRegistration: false };
+    const adzuna = { ...base, id: 'adzuna:1', source: 'adzuna' as const, externalId: '1', url: 'https://www.adzuna.co.uk/jobs/land/ad/1', description: 'A fictional snippet.' };
+    const reed = { ...base, id: 'reed:1', source: 'reed' as const, externalId: '1', url: 'https://www.reed.co.uk/jobs/planner/1', description: 'A fictional advert. Send your CV to jobs@example.org.' };
+    const other = { ...base, title: 'Estimator (fictional)', id: 'adzuna:2', source: 'adzuna' as const, externalId: '2', url: 'https://www.adzuna.co.uk/jobs/land/ad/2', description: 'A fictional snippet.' };
+    expect(hasWayOut(adzuna)).toBe(false);
+    expect(hasWayOut(reed)).toBe(true);
+    expect(hasWayOut({ ...adzuna, applyUrl: 'https://example.wd3.myworkdayjobs.com/job/1' })).toBe(true);
+    expect(hasWayOut({ ...adzuna, url: 'https://reliefweb.int/job/1' })).toBe(false); // an advert page, not the employer's
+    const r = dedupeJobs([adzuna, other, reed]);
+    expect(r.jobs.map((j) => j.id)).toEqual(['reed:1', 'adzuna:2']);
+    expect(r.duplicates.map((j) => j.id)).toEqual(['adzuna:1']);
+    // Neither has a way out: the first stays.
+    expect(dedupeJobs([adzuna, { ...reed, description: 'A fictional advert.' }]).jobs.map((j) => j.id)).toEqual(['adzuna:1']);
+  });
+});

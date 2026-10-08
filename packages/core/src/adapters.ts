@@ -74,7 +74,7 @@ export const STANDING_SCOPE_TEXT = [
 /** Job boards whose own apply button OpennJob never presses (CLAUDE.md rule 5): the person applies there. */
 const JOB_BOARDS = ['reed.co.uk', 'indeed.com', 'indeed.co.uk', 'linkedin.com', 'totaljobs.com', 'cv-library.co.uk', 'cwjobs.co.uk', 'monster.co.uk', 'monster.com', 'glassdoor.co.uk', 'glassdoor.com', 'jobs.nhs.uk', 'trac.jobs', 'jobsite.co.uk'];
 /** Aggregators whose links lead on to the advert somewhere else. */
-const AGGREGATORS = ['adzuna.co.uk', 'adzuna.com', 'adzuna.fr', 'adzuna.be', 'adzuna.ca', 'jooble.org'];
+const AGGREGATORS = ['adzuna.co.uk', 'adzuna.com', 'adzuna.fr', 'adzuna.be', 'adzuna.ca', 'jooble.org', 'reliefweb.int'];
 
 export type NoRouteReason = 'job-board' | 'aggregator' | `system-off:${string}` | 'unknown-site';
 

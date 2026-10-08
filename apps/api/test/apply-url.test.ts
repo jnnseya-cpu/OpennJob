@@ -62,5 +62,23 @@ for (const backend of BACKENDS) {
       expect((await t.deps.repository.getApplication(USER_ID, 'app-down'))?.applyUrl).toBe('https://www.reed.co.uk/jobs/staff-nurse/down');
       expect((await t.api.get('/agent/status').expect(200)).body.routes).toMatchObject({ 'app-mail': 'email', 'app-known': 'email', 'app-link': 'none', 'app-down': 'none' });
     });
+
+    it('moves an application to another source\'s copy of the same vacancy that can go out on its own', async () => {
+      made = await backend.make();
+      t = await createTestApp({ repository: made.repository, usageMeter: made.usageMeter, persistence: backend.persistence, sources: [] });
+      await t.api.put('/profile').send(PROFILE).expect(200);
+      await t.api.put('/passport').send(PASSPORT).expect(200);
+      const base = { title: 'Staff Nurse (fictional)', employer: 'Example Care Ltd (fictional)', location: 'Leeds', country: 'GB', criteria: [{ label: 'Medication', essential: true, keywords: ['medication'] }], criteriaSource: 'provided' as const, requiresRegistration: false };
+      const adzuna: Job = { ...base, id: 'adzuna:7', source: 'adzuna', externalId: '7', url: 'https://www.adzuna.co.uk/jobs/land/ad/7', description: 'A fictional snippet. Medication rounds.' };
+      const reed: Job = { ...base, location: 'Central Leeds', id: 'reed:7', source: 'reed', externalId: '7', url: 'https://www.reed.co.uk/jobs/staff-nurse/7', description: 'A fictional advert. Medication rounds. Send your CV to jobs@example.org.' };
+      await t.deps.repository.upsertJobs([adzuna, reed]);
+      await t.deps.repository.createApplication({ id: 'app-7', userId: USER_ID, jobId: adzuna.id, jobTitle: adzuna.title, employer: adzuna.employer, applyUrl: adzuna.url, mode: 'auto', status: 'draft', statement: 'A fictional statement.', statementSource: 'fallback', gaps: [], warnings: [], score: 100, confirmedFields: [], createdAt: '2026-10-08T06:00:00.000Z' });
+      expect((await t.api.get('/agent/status').expect(200)).body.routes).toEqual({ 'app-7': 'none' });
+
+      const run = (await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200)).body;
+      expect(run.prepared).toHaveLength(0); // the Reed copy is the same vacancy: not prepared twice
+      expect((await t.deps.repository.getApplication(USER_ID, 'app-7'))?.jobId).toBe('reed:7');
+      expect((await t.api.get('/agent/status').expect(200)).body.routes).toEqual({ 'app-7': 'email' });
+    });
   });
 }
