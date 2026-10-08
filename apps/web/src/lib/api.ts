@@ -215,7 +215,12 @@ export interface RequestOptions {
   passwordCheck?: boolean;
   /** Internal: already retried once after renewing the session. */
   retried?: boolean;
+  /** Stop waiting after this long and throw an ApiError with status TIMED_OUT (the server may carry on). */
+  timeoutMs?: number;
 }
+
+/** ApiError status for a request the page stopped waiting for (timeoutMs). */
+export const TIMED_OUT = -1;
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true, passwordCheck = false } = options;
@@ -238,8 +243,12 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
       credentials: 'omit',
       cache: 'no-store',
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(options.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}),
     });
-  } catch {
+  } catch (err) {
+    if (options.timeoutMs && err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new ApiError(TIMED_OUT, 'The service is taking longer than expected.');
+    }
     throw new ApiError(0, 'The OpennJob service could not be reached. Check your connection and try again.');
   }
   const text = await res.text();

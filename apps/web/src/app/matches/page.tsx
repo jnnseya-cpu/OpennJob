@@ -5,11 +5,16 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../components/AppShell';
 import { Histogram, scoreBins } from '../../components/Charts';
-import { ApiError, api, errorText } from '../../lib/api';
+import { ApiError, TIMED_OUT, api, errorText } from '../../lib/api';
 import { REGION_IDS, countryName, getPack } from '../../lib/core';
 import type { Region } from '../../lib/core';
 import { ADZUNA_URL, STATUS_LABEL, isAdzuna, needsLabel, placeOf, regionLabel } from '../../lib/labels';
 import type { AgentRunResult, Application, MatchView, Profile, SearchPlanView } from '../../lib/types';
+
+/** How long "Look for jobs now" waits for the server before saying the search carries on there. */
+const REFRESH_TIMEOUT_MS = 40_000;
+const STILL_SEARCHING =
+  'Still searching: this many searches take a few minutes, and the search carries on without this page. Come back in 5 minutes and press Run agent; the new jobs will be in your matches.';
 
 export default function MatchesPage() {
   const router = useRouter();
@@ -54,15 +59,17 @@ export default function MatchesPage() {
   async function refresh() {
     setBusy('refresh');
     try {
-      const r = await api<{ running: true } | { running: false; new: number; stored: number; searches: number; errors: unknown[] }>('/jobs/refresh', { method: 'POST' });
+      const r = await api<{ running: true } | { running: false; new: number; stored: number; searches: number; errors: unknown[] }>('/jobs/refresh', { method: 'POST', timeoutMs: REFRESH_TIMEOUT_MS });
       if (r.running) {
-        setFound('Still searching: this many searches take a few minutes, and the search carries on without this page. Come back in 5 minutes and press Run agent; the new jobs will be in your matches.');
+        setFound(STILL_SEARCHING);
         return;
       }
       setFound(`${r.searches} search${r.searches === 1 ? '' : 'es'} made: ${r.new} new job${r.new === 1 ? '' : 's'} found.${r.errors.length ? ` ${r.errors.length} source${r.errors.length === 1 ? '' : 's'} did not answer.` : ''}`);
       await load();
     } catch (err) {
-      setError(errorText(err));
+      // The server answers within 25 seconds; if it does not, the search still runs there.
+      if (err instanceof ApiError && err.status === TIMED_OUT) setFound(STILL_SEARCHING);
+      else setError(errorText(err));
     } finally {
       setBusy('');
     }
