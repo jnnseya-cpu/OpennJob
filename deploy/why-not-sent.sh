@@ -44,3 +44,9 @@ hosts="$(q "select n || '  ' || host from (select split_part(apply_url,'/',3) as
 if [ -n "$hosts" ]; then printf '%s\n' "$hosts" | sed 's/^/        /'; else echo "        (could not read them: run bash deploy/update.sh, then this again)"; fi
 echo "      Only links on myworkdayjobs.com / successfactors (with the system ON) go out on a form."
 echo "      For a Reed or Adzuna link: Tracker > 'Ready, but you apply' > paste the employer's application page."
+
+echo "== Job searches (last 5) and the newest job found"
+q "select '  ' || to_char(occurred_at at time zone 'Europe/London','DD/MM HH24:MI') || '  ' || coalesce(payload->>'searches','?') || ' searches, ' || coalesce(payload->>'fetched','?') || ' fetched, ' || coalesce(payload->>'new','?') || ' new, ' || coalesce(payload->>'sourceErrors','0') || ' sources failed' from events where type='jobs.refreshed' order by occurred_at desc limit 5"
+q "select '  newest job stored: ' || to_char(max(fetched_at) at time zone 'Europe/London','DD/MM HH24:MI') || ', jobs stored in all: ' || count(*) from jobs"
+q "select '  06:00 run: ' || key || ' = ' || left(value::text, 40) from platform_settings where key like 'discovery.%' order by key desc limit 4"
+echo "      No line today: the search did not finish (an API restart stops it). Matches > Look for jobs now, then wait 5 minutes."

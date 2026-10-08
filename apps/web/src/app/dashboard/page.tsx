@@ -6,6 +6,7 @@ import { useApp } from '../../components/AppShell';
 import { BarList, Histogram, StageBar, StatTiles, scoreBins } from '../../components/Charts';
 import { ApiError, api, errorText } from '../../lib/api';
 import { PACKS } from '../../lib/core';
+import { SHOW_FROM } from '../../lib/labels';
 import type { Application, MatchView, PassportView } from '../../lib/types';
 
 interface Inbox {
@@ -28,7 +29,7 @@ export default function DashboardPage() {
       try {
         const query = pack === 'all' ? '' : `&pack=${pack}`;
         const [m, a, n] = await Promise.all([
-          api<MatchView[]>(`/jobs/matches?min=0${query}`).catch((err) => {
+          api<MatchView[]>(`/jobs/matches?min=${SHOW_FROM}${query}`).catch((err) => {
             if (err instanceof ApiError && err.status === 404) return undefined;
             throw err;
           }),

@@ -76,4 +76,40 @@ describe('try again after signing in once', () => {
     await t.deps.repository.updateApplication({ ...(await t.deps.repository.getApplication(USER_ID, 'wall')) as Application, attemptedAt: '2026-10-07T06:00:00.000Z' });
     await t.api.post('/applications/wall/retry').expect(409); // never after the go
   });
+
+  it('writes again with AI an approved application written before AI was set up, but keeps one the person edited', async () => {
+    t = await createTestApp({ sources: [], llm: scriptedLlm() });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    await t.api.put('/passport').send(PASSPORT).expect(200);
+    const criteria = [
+      { label: 'Medication rounds', essential: true, keywords: ['medication'] },
+      { label: 'Care plans', essential: true, keywords: ['care plans'] },
+    ];
+    const a = job('alpha', 'provided', criteria);
+    const b = job('beta', 'provided', criteria);
+    await t.deps.repository.upsertJobs([a, b]);
+    await t.deps.repository.createApplication(draft('old-approved', a, { status: 'confirmed' }));
+    await t.deps.repository.createApplication(draft('old-edited', b, { status: 'confirmed' }));
+    await t.api.put('/applications/old-edited/statement').send({ statement: 'I completed medication rounds and kept care plans up to date.' }).expect(200);
+
+    const run = (await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200)).body;
+    expect(run.redrafted).toBe(1);
+    expect((await t.deps.repository.getApplication(USER_ID, 'old-approved'))?.status).toBe('closed');
+    const fresh = (await t.deps.repository.listApplications(USER_ID)).filter((x) => x.jobId === a.id && x.status !== 'closed');
+    expect(fresh).toHaveLength(1);
+    expect(fresh[0]).toMatchObject({ statementSource: 'llm', mode: 'auto' });
+    expect(await t.deps.repository.getApplication(USER_ID, 'old-edited')).toMatchObject({ status: 'confirmed', statement: 'I completed medication rounds and kept care plans up to date.' });
+  });
+
+  it('closes an approved application whose score is now under 70%: nothing under 70% is shown or sent', async () => {
+    t = await createTestApp({ sources: [] });
+    await t.api.put('/profile').send(PROFILE).expect(200);
+    await t.api.put('/passport').send(PASSPORT).expect(200);
+    // One keyword-read requirement: capped at 60%.
+    const one = job('one', 'fallback', [{ label: 'Medication rounds', essential: true, keywords: ['medication'] }]);
+    await t.deps.repository.upsertJobs([one]);
+    await t.deps.repository.createApplication(draft('approved-low', one, { status: 'confirmed' }));
+    await t.api.post('/agent/run').send({ mode: 'auto' }).expect(200);
+    expect(await t.deps.repository.getApplication(USER_ID, 'approved-low')).toMatchObject({ status: 'closed', score: 60 });
+  });
 });

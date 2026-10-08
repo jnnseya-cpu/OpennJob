@@ -73,6 +73,10 @@ const DAY_MS = 86_400_000;
 export const ADVERTS_READ_PER_RUN = 40;
 /** How long "Look for jobs now" waits before it answers that the search carries on in the background. */
 export const REFRESH_WAIT_MS = 25_000;
+/** How many applications written without AI are written again with AI in one agent run. */
+export const REDRAFTS_PER_RUN = 20;
+/** An approved application whose score falls under this is closed: it is neither shown nor sent. */
+export const MIN_KEEP_SCORE = 70;
 
 /** Adds and removes hold reasons, moving the status to needs_you and back to draft as they come and go. */
 export function withHolds(application: Application, add: string[], remove: (h: string) => boolean = () => false): Application {
@@ -671,8 +675,9 @@ export class OpennJobService {
       if (!job) continue;
       const now = matchJob(job, profile.cvText, passport, preferences);
       // Approved applications and jobs the person chose stay open, but show today's score, the
-      // same one the review page shows.
-      const keep = a.status === 'confirmed' || job.source === 'link' || now.score >= threshold;
+      // same one the review page shows; an approved one under MIN_KEEP_SCORE is closed (owner's
+      // request, 8 October 2026: nothing under 70% is shown or sent).
+      const keep = job.source === 'link' || now.score >= threshold || (a.status === 'confirmed' && now.score >= MIN_KEEP_SCORE);
       if (keep) {
         if (now.score !== a.score) {
           const rescored: Application = { ...a, score: now.score };
@@ -689,9 +694,17 @@ export class OpennJobService {
 
     // Drafts written without AI because the daily AI budget was used up are written again with AI
     // once it is available: the old draft is closed and a new one takes its place.
+    // Also any unsent one written without AI before AI was set up (approved ones too: the new draft
+    // goes the same way), unless the person edited its statement: their words are kept.
     let redrafted = 0;
+    const edited = this.deps.llm
+      ? new Set((await this.deps.repository.listEvents(userId)).filter((e) => e.type === 'application.statement.edited').map((e) => String(e.payload.applicationId)))
+      : new Set<string>();
     for (const a of [...existing]) {
-      if ((a.status !== 'draft' && a.status !== 'needs_you') || a.attemptedAt !== undefined || !a.holdReasons?.includes('llm-ceiling')) continue;
+      if (redrafted >= REDRAFTS_PER_RUN) break;
+      if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined) continue;
+      const withoutAi = a.holdReasons?.includes('llm-ceiling') || (a.statementSource === 'fallback' && !edited.has(a.id));
+      if (!withoutAi) continue;
       if (!this.deps.llm || (await this.llmCeilingReached(userId))) break;
       const job = jobsById.get(a.jobId);
       if (!job) continue;

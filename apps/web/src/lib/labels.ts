@@ -48,4 +48,7 @@ export function needsLabel(credential: string | undefined): string {
 
 /** Adzuna's terms ask for "Jobs by Adzuna" wherever its adverts are shown (docs/sources.md). */
 export const isAdzuna = (job: { source: string }): boolean => job.source === 'adzuna' || job.source.startsWith('adzuna:');
+/** Matches and Home list only jobs scoring at least this (owner's request, 8 October 2026). */
+export const SHOW_FROM = 70;
+
 export const ADZUNA_URL = 'https://www.adzuna.co.uk';

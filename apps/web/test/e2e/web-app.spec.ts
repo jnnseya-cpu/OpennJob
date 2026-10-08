@@ -195,11 +195,14 @@ test('matches: the catalogue is fetched, scored against the CV, and filtered by 
   await expect(page).toHaveURL(/\/matches\/$/);
   // A fresh API has an empty catalogue until someone looks for jobs.
   await page.getByRole('button', { name: 'Look for jobs now' }).click();
+  // Matches under 70% are hidden unless asked for (owner's request); this test looks at all of them.
+  await page.getByLabel(/Show matches under 70%/).check();
   const cards = page.getByTestId('match');
   await expect(cards.first()).toBeVisible();
   await expect(page.getByText('Sample jobs.')).toBeVisible();
 
   // Healthcare pack (chosen on the Profile page) and the preferences: UK (Birmingham only) and Ireland.
+  await expect(cards.filter({ hasText: 'Staff Nurse - Medical Ward' })).toHaveCount(1); // listed once the box is ticked
   const titles = await cards.locator('h3').allTextContents();
   expect(titles).toContain('Healthcare Assistant - Elderly Care');
   expect(titles).toContain('Staff Nurse - Medical Ward'); // Dublin, Ireland
@@ -226,6 +229,7 @@ test('matches: the catalogue is fetched, scored against the CV, and filtered by 
   await expect(page.getByText('Credential passport saved.')).toBeVisible();
   expect((await call<{ passport: { credentials: Record<string, string> } }>('GET', '/passport')).passport.credentials).toEqual({ pin: PIN });
   await page.getByRole('link', { name: 'Matches' }).click();
+  await page.getByLabel(/Show matches under 70%/).check(); // the box starts unticked on each visit
   await expect(nurse.getByText('Needs professional registration number')).toHaveCount(0);
   await expect(nurse.getByText(/essential gap/)).toBeVisible();
   await expect(hca.getByText('Agent prepares')).toBeVisible();
@@ -358,6 +362,7 @@ test('review all mode also needs "I have checked every field"; a credential-depe
   await page.getByRole('link', { name: 'Matches' }).click();
   await page.getByRole('group', { name: 'How much the agent does alone' }).getByRole('button', { name: 'Review all' }).click();
   await expect(page.getByTestId('mode-help')).toHaveText('You see and confirm every field before anything is filled.');
+  await page.getByLabel(/Show matches under 70%/).check(); // this nurse post scores under 70%
   await page.getByTestId('match').filter({ hasText: 'Staff Nurse - Medical Ward' }).click();
   await page.getByRole('button', { name: 'Prepare application' }).click();
 

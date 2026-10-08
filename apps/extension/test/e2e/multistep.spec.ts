@@ -213,6 +213,9 @@ async function runQueue(page: Page): Promise<{ message: string; sent: number; he
 const openTabs = () => context.pages().map((p) => p.url());
 
 test('Workday-style and SuccessFactors-style applications: walked step by step, submitted only at the end, held at declarations and sign-in', async () => {
+  // Five applications over many pages take about 25 seconds alone, more when the whole suite runs:
+  // the test gets the same 120 seconds runQueue gives the queue, not the default 30.
+  test.setTimeout(120_000);
   const page = await popup();
   const state = await runQueue(page);
   expect(state).toMatchObject({ sent: 2, held: 3, uncertain: 0 });

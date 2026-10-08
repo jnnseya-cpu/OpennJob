@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../../components/AppShell';
 import { Histogram, scoreBins } from '../../components/Charts';
 import { ApiError, TIMED_OUT, api, errorText } from '../../lib/api';
 import { REGION_IDS, countryName, getPack } from '../../lib/core';
 import type { Region } from '../../lib/core';
-import { ADZUNA_URL, STATUS_LABEL, isAdzuna, needsLabel, placeOf, regionLabel } from '../../lib/labels';
+import { ADZUNA_URL, SHOW_FROM, STATUS_LABEL, isAdzuna, needsLabel, placeOf, regionLabel } from '../../lib/labels';
 import type { AgentRunResult, Application, MatchView, Profile, SearchPlanView } from '../../lib/types';
 
 /** How long "Look for jobs now" waits for the server before saying the search carries on there. */
@@ -28,6 +28,10 @@ export default function MatchesPage() {
   const [busy, setBusy] = useState<'' | 'refresh' | 'agent'>('');
   const [plan, setPlan] = useState<SearchPlanView>();
   const [found, setFound] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  // Read when a load runs, so a search that ends later reloads with the box as it is now.
+  const showAllNow = useRef(false);
+  showAllNow.current = showAll;
 
   const load = useCallback(async () => {
     setError('');
@@ -36,7 +40,7 @@ export default function MatchesPage() {
       const p = profile.preferences;
       setHasPrefs(Boolean(p && (p.languages.length || p.countries.length || p.cities.length)));
       const query = pack === 'all' ? '' : `&pack=${pack}`;
-      const [list, applications] = await Promise.all([api<MatchView[]>(`/jobs/matches?min=0${query}`), api<Application[]>('/applications')]);
+      const [list, applications] = await Promise.all([api<MatchView[]>(`/jobs/matches?min=${showAllNow.current ? 0 : SHOW_FROM}${query}`), api<Application[]>('/applications')]);
       setMatches(list);
       setApps(applications);
       setPlan(await api<SearchPlanView>('/jobs/search-plan').catch(() => undefined));
@@ -45,7 +49,7 @@ export default function MatchesPage() {
       if (err instanceof ApiError && err.status === 404) setNoProfile(true);
       else setError(errorText(err));
     }
-  }, [pack]);
+  }, [pack, showAll]);
 
   useEffect(() => {
     void load();
@@ -171,6 +175,9 @@ export default function MatchesPage() {
           </div>
         </section>
       ) : null}
+      <label className="row small muted">
+        <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show matches under {SHOW_FROM}% (they are never applied for)
+      </label>
       {regions.length ? (
         <div className="row" role="group" aria-label="Region">
           {(['all', ...regions] as (Region | 'all')[]).map((r) => (
