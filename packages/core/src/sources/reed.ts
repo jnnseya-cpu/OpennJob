@@ -45,6 +45,13 @@ export function createReedSearch(options: { apiKey: string; fetch: FetchLike; de
     countries: ['GB'],
     search: (q) =>
       q.country.toUpperCase() === 'GB' ? reedSearch(options.apiKey, options.fetch, q.what, q.where, options.detailsPerSearch ?? REED_DETAILS_PER_SEARCH) : Promise.resolve([]),
+    // A job past the first results of its search was read from the snippet only: the agent asks
+    // for its whole advert before the application goes out.
+    details: async (job) => {
+      if (job.source !== 'reed' || !job.externalId) return {};
+      const d = await reedDetails(options.apiKey, options.fetch, job.externalId);
+      return { ...(d.text ? { description: d.text } : {}), ...(d.externalUrl ? { applyUrl: d.externalUrl } : {}) };
+    },
   };
 }
 

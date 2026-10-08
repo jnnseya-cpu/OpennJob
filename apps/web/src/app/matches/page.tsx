@@ -54,7 +54,11 @@ export default function MatchesPage() {
   async function refresh() {
     setBusy('refresh');
     try {
-      const r = await api<{ new: number; stored: number; searches: number; errors: unknown[] }>('/jobs/refresh', { method: 'POST' });
+      const r = await api<{ running: true } | { running: false; new: number; stored: number; searches: number; errors: unknown[] }>('/jobs/refresh', { method: 'POST' });
+      if (r.running) {
+        setFound('Still searching: this many searches take a few minutes, and the search carries on without this page. Come back in 5 minutes and press Run agent; the new jobs will be in your matches.');
+        return;
+      }
       setFound(`${r.searches} search${r.searches === 1 ? '' : 'es'} made: ${r.new} new job${r.new === 1 ? '' : 's'} found.${r.errors.length ? ` ${r.errors.length} source${r.errors.length === 1 ? '' : 's'} did not answer.` : ''}`);
       await load();
     } catch (err) {

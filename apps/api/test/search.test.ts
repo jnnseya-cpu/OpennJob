@@ -135,3 +135,60 @@ describe('job search from the CV (no server keywords)', () => {
     expect(USER_ID).toBe('dev-user');
   });
 });
+
+describe('"Look for jobs now" never hangs', () => {
+  it('answers that the search carries on when it takes longer than the wait, and a second press joins it', async () => {
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (open = r));
+    let calls = 0;
+    const slow: SearchSource = {
+      name: 'reed',
+      label: 'reed',
+      countries: ['GB'],
+      search: async () => {
+        calls += 1;
+        await gate;
+        return [];
+      },
+    };
+    const t = await createTestApp({ sources: [], searchSources: [slow] });
+    try {
+      await t.api.put('/profile').send({ ...PROFILE, preferences: { languages: [], countries: ['GB'], cities: [] } }).expect(200);
+      const service = t.app.get(OpennJobService);
+      expect(await service.refreshJobsNow(USER_ID, 20)).toEqual({ running: true });
+      const asked = calls;
+      expect(asked).toBeGreaterThan(0);
+      expect(await service.refreshJobsNow(USER_ID, 20)).toEqual({ running: true });
+      open();
+      expect(await service.refreshJobsNow(USER_ID, 5_000)).toMatchObject({ running: false, new: 0 });
+      // The later presses joined the first search: no search was asked twice while it ran.
+      expect(calls).toBe(asked);
+    } finally {
+      await t.app.close();
+    }
+  });
+});
+
+describe('sources are asked a few at a time', () => {
+  it('keeps their order whatever answers first, and one failure does not stop the rest', async () => {
+    const { collectJobs } = await import('@opennjob/core');
+    const job = (id: string): Job => ({ id: `employer:${id}`, source: 'employer', externalId: id, title: `Planner ${id} (fictional)`, employer: `Example ${id} Ltd (fictional)`, location: 'Leeds', url: `https://example.org/${id}`, description: 'A fictional vacancy.', criteria: [], criteriaSource: 'provided', requiresRegistration: false, origin: 'employer' });
+    let inFlight = 0;
+    let most = 0;
+    const source = (id: string, ms: number, fail = false) => ({
+      label: id,
+      fetchJobs: async () => {
+        inFlight += 1;
+        most = Math.max(most, inFlight);
+        await new Promise((r) => setTimeout(r, ms));
+        inFlight -= 1;
+        if (fail) throw new Error('did not answer');
+        return [job(id)];
+      },
+    });
+    const r = await collectJobs([source('a', 30), source('b', 5), source('c', 1, true), source('d', 10), source('e', 1), source('f', 1)], 3);
+    expect(r.jobs.map((j) => j.externalId)).toEqual(['a', 'b', 'd', 'e', 'f']);
+    expect(r.errors).toEqual([{ source: 'c', message: 'did not answer' }]);
+    expect(most).toBe(3);
+  });
+});

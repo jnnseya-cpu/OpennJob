@@ -34,6 +34,12 @@ export interface SearchSource {
   /** Countries it can search (ISO alpha-2, upper case); undefined means it is asked for every country. */
   readonly countries?: readonly string[];
   search(query: SearchQuery): Promise<Job[]>;
+  /**
+   * The whole advert for one job this source found, when its search gave only part of it: the
+   * full text and, when the job is applied for on the employer's site, that address. Empty when
+   * the source could not give it.
+   */
+  details?(job: Job): Promise<{ description?: string; applyUrl?: string }>;
 }
 
 export class SourceError extends Error {

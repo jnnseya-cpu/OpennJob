@@ -313,7 +313,13 @@ export function buildSearchSources(env: Env, fetchFn: FetchLike): SearchSource[]
  * LLM only when a key is present. Outside production a missing OPENNJOB_JWT_SECRET is
  * replaced by a random one for this process (every token dies with the process).
  */
-export function createDefaultDeps(env: Env = process.env, fetchFn: FetchLike = fetch as unknown as FetchLike, logger: Logger = consoleJsonLogger): OpennJobDeps {
+/** How long one call to a job source may take before it counts as not answering. */
+export const SOURCE_TIMEOUT_MS = 20_000;
+
+/** fetch with a time limit: a source that never answers cannot hold up a search. */
+export const timedFetch: FetchLike = (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) }) as unknown as ReturnType<FetchLike>;
+
+export function createDefaultDeps(env: Env = process.env, fetchFn: FetchLike = timedFetch, logger: Logger = consoleJsonLogger): OpennJobDeps {
   const config = loadConfig(env);
   if (!config.jwtSecret && !isProduction(env)) {
     config.jwtSecret = randomBytes(48).toString('base64url');

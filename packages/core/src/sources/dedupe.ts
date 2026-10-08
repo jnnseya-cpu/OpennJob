@@ -47,17 +47,36 @@ export interface CollectResult {
 }
 
 /** Runs every adapter, tolerating individual failures, then de-duplicates across sources. */
+/** How many sources are asked at the same time. */
+export const COLLECT_CONCURRENCY = 4;
+
 export async function collectJobs(
   sources: ReadonlyArray<{ label: string; fetchJobs(): Promise<Job[]> }>,
+  concurrency = COLLECT_CONCURRENCY,
 ): Promise<CollectResult> {
+  // A few sources at a time; results are kept in the sources' order, so the same copy of a
+  // duplicate wins whatever answers first.
+  const results: Array<{ jobs: Job[] } | { error: { source: string; message: string } }> = new Array(sources.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < sources.length) {
+      const i = next++;
+      const source = sources[i];
+      if (!source) continue;
+      try {
+        results[i] = { jobs: await source.fetchJobs() };
+      } catch (err) {
+        results[i] = { error: { source: source.label, message: err instanceof Error ? err.message : String(err) } };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, sources.length) }, worker));
   const all: Job[] = [];
   const errors: CollectResult['errors'] = [];
-  for (const source of sources) {
-    try {
-      all.push(...(await source.fetchJobs()));
-    } catch (err) {
-      errors.push({ source: source.label, message: err instanceof Error ? err.message : String(err) });
-    }
+  for (const r of results) {
+    if (!r) continue;
+    if ('jobs' in r) all.push(...r.jobs);
+    else errors.push(r.error);
   }
   const { jobs, duplicates } = dedupeJobs(all);
   return { jobs, fetched: all.length, duplicates: duplicates.length, errors };

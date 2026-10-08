@@ -67,6 +67,10 @@ function compact<T extends object>(value: T): T {
 export const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 const DAY_MS = 86_400_000;
+/** How many unsent applications, at most, get their whole advert read in one agent run. */
+export const ADVERTS_READ_PER_RUN = 40;
+/** How long "Look for jobs now" waits before it answers that the search carries on in the background. */
+export const REFRESH_WAIT_MS = 25_000;
 
 /** Adds and removes hold reasons, moving the status to needs_you and back to draft as they come and go. */
 export function withHolds(application: Application, add: string[], remove: (h: string) => boolean = () => false): Application {
@@ -206,6 +210,32 @@ export class OpennJobService {
     }
     return [...seen.values()];
   }
+
+  /**
+   * "Look for jobs now": the search, answered within REFRESH_WAIT_MS. A search that takes longer
+   * (dozens of searches, whole adverts, AI reading requirements) carries on in the background and
+   * the answer says so; pressing again meanwhile joins the same search instead of starting another.
+   */
+  async refreshJobsNow(userId: string, waitMs = REFRESH_WAIT_MS) {
+    let running = this.refreshing.get(userId);
+    if (!running) {
+      running = this.refreshJobs(userId).finally(() => this.refreshing.delete(userId));
+      this.refreshing.set(userId, running);
+      running.catch(() => undefined); // a search that fails in the background is recorded by its own errors
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const later = new Promise<'running'>((resolve) => {
+      timer = setTimeout(() => resolve('running'), waitMs);
+    });
+    try {
+      const first = await Promise.race([running, later]);
+      return first === 'running' ? { running: true as const } : { running: false as const, ...first };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private readonly refreshing = new Map<string, ReturnType<OpennJobService['refreshJobs']>>();
 
   async refreshJobs(userId: string) {
     const queries = (this.deps.searchSources ?? []).length > 0 ? await this.refreshQueries(userId) : [];
@@ -552,6 +582,29 @@ export class OpennJobService {
       closedDuplicates += 1;
     }
 
+    // An unsent application with no way out yet (no recruiter e-mail in the advert, no employer
+    // link) whose advert was read only in part (a search reads the whole advert for its first
+    // results only): its source is asked for the whole advert, which can name the recruiter's
+    // address or the employer's own application page. A few per run.
+    let advertsRead = 0;
+    for (const a of existing) {
+      if (advertsRead >= ADVERTS_READ_PER_RUN) break;
+      if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined || isEmployerLink(a.applyUrl)) continue;
+      const job = jobsById.get(a.jobId);
+      if (!job || recruiterEmailIn(job.description)) continue;
+      const source = (this.deps.searchSources ?? []).find((s) => s.name === job.source && s.details);
+      if (!source?.details) continue;
+      advertsRead += 1;
+      const d = await source.details(job).catch(() => ({}) as { description?: string; applyUrl?: string });
+      const longer = d.description && d.description.length > job.description.length ? d.description : undefined;
+      const link = d.applyUrl && isEmployerLink(d.applyUrl) && d.applyUrl !== job.applyUrl ? d.applyUrl : undefined;
+      if (!longer && !link) continue;
+      const fuller: Job = { ...job, ...(longer ? { description: longer } : {}), ...(link ? { applyUrl: link } : {}) };
+      await this.deps.repository.upsertJobs([fuller]);
+      jobsById.set(fuller.id, fuller);
+      jobs.splice(jobs.indexOf(job), 1, fuller);
+    }
+
     // A job first seen with a job board's link may later give the employer's own (Reed's externalUrl):
     // an unsent application still on the board's link takes the employer's.
     for (const a of [...existing]) {
@@ -628,8 +681,8 @@ export class OpennJobService {
       prepared.push(await this.draftFor(userId, job, profile, passport, match, input.mode));
     }
 
-    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted });
-    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted };
+    await this.emit(userId, 'agent.run', { threshold, considered: jobs.length, prepared: prepared.length, ...skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted, advertsRead });
+    return { threshold, mode: input.mode, considered: jobs.length, prepared, skipped, closedOtherField, closedDuplicates, closedBelowBar, redrafted, advertsRead };
   }
 
   /** The score the agent needs before it prepares or sends an application on its own, and why. */

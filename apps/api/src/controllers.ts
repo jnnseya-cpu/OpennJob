@@ -216,7 +216,7 @@ export class JobsController {
   @Post('refresh')
   @HttpCode(200)
   refresh(@CurrentUser() userId: string) {
-    return this.service.refreshJobs(userId);
+    return this.service.refreshJobsNow(userId);
   }
 
   /** What the job-search APIs are asked for this person: titles from the CV, places from the preferences. */

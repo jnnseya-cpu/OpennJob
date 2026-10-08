@@ -200,6 +200,18 @@ describe('per-person searches read more than the snippet', () => {
     expect(jobs[0]?.applyUrl).toBe('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1');
     expect(jobs[0]?.url).toContain('reed.co.uk');
     expect(jobs[1]?.applyUrl).toContain('reed.co.uk');
+
+    // One job's whole advert, asked later (an application about to go out): its text and the employer's link.
+    const source = createReedSearch({ apiKey: 'k', fetch, detailsPerSearch: 0 });
+    const job = jobs[0];
+    if (!job) throw new Error('no job');
+    calls.length = 0;
+    const d = (await source.details?.({ ...job, externalId: '55001122' })) ?? {};
+    expect(calls).toEqual(['https://www.reed.co.uk/api/1.0/jobs/55001122']);
+    expect(d.description).toContain('NMC registration');
+    expect(d.applyUrl).toBe('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1');
+    expect(await source.details?.({ ...job, source: 'adzuna' })).toEqual({}); // not Reed's job: nothing asked
+    expect(calls).toHaveLength(1);
   });
 
   it('adzuna: sends the CV job title as an exact phrase', async () => {

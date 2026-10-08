@@ -128,6 +128,7 @@ describe('POST /jobs/refresh', () => {
     });
     const res = await t.api.post('/jobs/refresh').expect(200);
     expect(res.body).toEqual({
+      running: false,
       sources: ['sample (fictional demo jobs)', 'greenhouse:examplecare', 'lever:examplesupport', 'lever:broken'],
       fetched: 7,
       duplicatesRemoved: 1,
