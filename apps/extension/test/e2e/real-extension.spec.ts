@@ -373,6 +373,22 @@ test('auto, through the popup: does not submit the form that has declarations', 
   await popup.close();
 });
 
+test('the popup never scans or fills OpennJob itself, and lists only applications still to send', async () => {
+  const own = await context.newPage();
+  await own.goto(`${apiBase}/health`);
+  const tabId = await worker.evaluate(async (target) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(target))?.id, `${apiBase}/health`);
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html?tabId=${tabId}`);
+  await expect(popup.locator('#status')).toHaveText('Loaded details for Amara Okafor.');
+  await popup.locator('#scan').click();
+  await expect(popup.locator('#status')).toContainText('this is OpennJob itself');
+  const listed = await popup.locator('#application option').allTextContents();
+  const open = (await call<{ status: string }[]>('GET', '/applications')).filter((a) => ['draft', 'needs_you', 'confirmed'].includes(a.status));
+  expect(listed).toHaveLength(open.length + 1); // plus "No statement"
+  await popup.close();
+  await own.close();
+});
+
 test('through the popup: stops on the CAPTCHA page and says why', async () => {
   const { form, popup } = await openPopupFor('captcha-application.html');
   for (const mode of ['review', 'hybrid', 'auto']) {

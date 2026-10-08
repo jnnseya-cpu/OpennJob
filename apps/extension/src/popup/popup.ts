@@ -173,7 +173,8 @@ async function loadData(): Promise<void> {
     async () => {
       profile = await api<Profile>('/profile');
       passport = (await api<{ passport: Passport }>('/passport'))?.passport;
-      applications = ((await api<Application[]>('/applications')) ?? []).filter((a) => a.status !== 'submitted');
+      // Only applications still to send: not ones sent, closed or skipped.
+      applications = ((await api<Application[]>('/applications')) ?? []).filter((a) => a.status === 'draft' || a.status === 'needs_you' || a.status === 'confirmed');
     },
     (message) => {
       profile = undefined;
@@ -243,8 +244,22 @@ async function targetTabId(): Promise<number> {
   return tab.id;
 }
 
+/** OpennJob's own site (the same origin as its API): never scanned or filled. */
+async function refuseOwnSite(tabId: number): Promise<void> {
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: () => location.origin });
+  const { apiBase } = await loadSettings();
+  let own = false;
+  try {
+    own = typeof result?.result === 'string' && result.result === new URL(apiBase).origin;
+  } catch {
+    own = false; // an API address that cannot be read: nothing to compare
+  }
+  if (own) throw new Error('this is OpennJob itself. Open the employer’s application page in this tab first; Start the queue below works from any tab.');
+}
+
 async function sendToPage(request: RunRequest): Promise<RunReport> {
   const tabId = await targetTabId();
+  await refuseOwnSite(tabId);
   await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
   const reply = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_RUN', ...request })) as RunReport | { error: string } | undefined;
   if (!reply) throw new Error('The page did not answer.');
@@ -255,6 +270,7 @@ async function sendToPage(request: RunRequest): Promise<RunReport> {
 /** The site's confirmation on the target tab, if one is showing (APP-7). */
 async function readConfirmation(): Promise<Confirmation | undefined> {
   const tabId = await targetTabId();
+  await refuseOwnSite(tabId);
   await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
   const reply = (await chrome.tabs.sendMessage(tabId, { type: 'OPENNJOB_CONFIRMATION' })) as { confirmation: Confirmation | null } | undefined;
   const c = reply?.confirmation;
