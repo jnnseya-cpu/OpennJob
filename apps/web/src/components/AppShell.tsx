@@ -62,7 +62,7 @@ function writePref(key: string, value: string): void {
 
 const PUBLIC_PATHS = ['/signin', '/register', '/forgot-password'];
 /** Pages a link in an e-mail opens: they work whether or not this browser is signed in. */
-const LINK_PATHS = ['/verify-email', '/reset-password'];
+const LINK_PATHS = ['/verify-email', '/reset-password', '/score'];
 const TABS: [string, string][] = [
   ['/dashboard', 'Home'],
   ['/matches', 'Matches'],

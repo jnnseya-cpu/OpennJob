@@ -17,3 +17,8 @@ export type { Language } from './languages';
 export { SCORE_BANDS, OUTCOMES_BEFORE_LEARNING } from './outcomes';
 export type { BandRate, AutomaticBar } from './outcomes';
 export { cvPdf, coverLetterPdf, coverLetterText, coverLetterFileName } from './email-apply';
+// ATS-readiness and the deterministic match it can run on (client-side public scorer, no AI, no I/O).
+export { atsReadiness } from './ats';
+export type { AtsReadiness, AtsCheck, AtsHit } from './ats';
+export { matchJob, extractCriteriaFallback } from './matching';
+export type { MatchResult, CriterionHit, ExtractedCriteria } from './matching';

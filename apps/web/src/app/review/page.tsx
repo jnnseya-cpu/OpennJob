@@ -7,7 +7,7 @@ import { useApp } from '../../components/AppShell';
 import { api, errorText } from '../../lib/api';
 import { ALL_FIELDS_CHECKED, STATEMENT_FIELD, declarationField, declarationsFor } from '../../lib/declarations';
 import { ADZUNA_URL, HOLD_LABEL, STATUS_LABEL, isAdzuna, needsLabel, placeOf } from '../../lib/labels';
-import { coverLetterFileName, coverLetterPdf, coverLetterText, cvPdf, describeWorkRights, workRightsProblem } from '../../lib/core';
+import { atsReadiness, coverLetterFileName, coverLetterPdf, coverLetterText, cvPdf, describeWorkRights, workRightsProblem } from '../../lib/core';
 import type { Profile, WorkRightsRecord } from '../../lib/core';
 import type { AgentStatus, Application, MatchView, PassportView, PublicUser } from '../../lib/types';
 
@@ -270,6 +270,44 @@ function Review() {
         </section>
       ) : null}
 
+      {match && profile ? (
+        (() => {
+          const ats = atsReadiness(match.hits, profile.cvText);
+          const bandWord = ats.band === 'strong' ? 'Strong' : ats.band === 'fair' ? 'Fair' : 'Needs work';
+          return (
+            <section className="card" aria-label="ATS readiness" data-testid="ats">
+              <div className="row">
+                <span className="label grow">ATS readiness</span>
+                <span className="num" data-testid="ats-score">{ats.score}/100 · {bandWord}</span>
+              </div>
+              <p className="small muted">
+                Most employers filter CVs with an applicant-tracking system (ATS) before a person reads them. This checks how well this
+                application would pass: {ats.coverage.matched} of {ats.coverage.total} of the advert’s requirements are evidenced in your CV ({ats.coverage.percent}%).
+              </p>
+              <div className="bar" aria-hidden="true"><span style={{ width: `${ats.score}%` }} /></div>
+              <dl className="kv">
+                {ats.checks.map((c) => (
+                  <div key={c.id} className="crit">
+                    <span className={`chip ${c.ok ? '' : 'gap'}`}>{c.ok ? 'OK' : 'Fix'}</span>
+                    <span>{c.label}{c.detail ? <span className="muted small"> — {c.detail}</span> : null}</span>
+                  </div>
+                ))}
+              </dl>
+              {ats.tips.length > 0 ? (
+                <>
+                  <span className="label">How to improve it</span>
+                  <ul className="small">
+                    {ats.tips.map((t) => (
+                      <li key={t}>{t}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </section>
+          );
+        })()
+      ) : null}
+
       {!app ? (
         <>
           {error ? <div className="note bad" role="alert">{error}</div> : null}
@@ -343,6 +381,7 @@ function Review() {
           {app.tailoredCv ? (
             <section className="card" aria-label="What will be sent" data-testid="documents">
               <span className="label">What will be sent</span>
+              <p className="small" data-testid="truth-badge">✓ Every line is checked against your own CV. Anything it could not support was removed, never invented.</p>
               <details>
                 <summary>
                   CV for this job ·{' '}

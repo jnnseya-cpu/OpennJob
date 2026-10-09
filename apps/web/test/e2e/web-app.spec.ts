@@ -301,6 +301,13 @@ test('review: requirements with evidence, editable statement, every declaration 
   await expect(page.getByText('“I hold the Care Certificate and an NVQ Level 2 in Health and Social Care.”')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Prepare application' })).toHaveCount(0);
 
+  // ATS-readiness card (from the competitive brief): score, checks and the truthful improvement note.
+  await expect(page.getByTestId('ats')).toBeVisible();
+  await expect(page.getByTestId('ats-score')).toContainText('/100');
+  await expect(page.getByRole('region', { name: 'ATS readiness' }).getByText(/applicant-tracking system/)).toBeVisible();
+  // The truth-check badge is shown as a feature, not a side effect.
+  await expect(page.getByTestId('truth-badge')).toContainText('checked against your own CV');
+
   const statement = page.getByLabel(/^Supporting statement/);
   await expect(statement).not.toHaveValue('');
   await expect(page.getByText('Built from your CV without AI.')).toBeVisible();

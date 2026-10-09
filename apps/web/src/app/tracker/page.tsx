@@ -157,11 +157,17 @@ export default function TrackerPage() {
       {apps && apps.length ? (
         <>
           <StatTiles
-            items={[
-              { label: 'Open applications', value: apps.filter((a) => a.status !== 'closed').length },
-              { label: 'Average match', value: `${Math.round(apps.reduce((n, a) => n + a.score, 0) / apps.length)}%` },
-              { label: 'Submitted', value: apps.filter((a) => a.status === 'submitted').length },
-            ]}
+            items={(() => {
+              const submitted = apps.filter((a) => a.submittedAt).length;
+              const interviews = apps.filter((a) => a.outcome === 'interview' || a.status === 'interview').length;
+              return [
+                { label: 'Open applications', value: apps.filter((a) => a.status !== 'closed').length },
+                { label: 'Submitted', value: submitted },
+                { label: 'Interviews', value: interviews },
+                // Honest headline metric: of what you actually sent, how many led to an interview.
+                { label: 'Interview rate (of submitted)', value: submitted ? `${Math.round((100 * interviews) / submitted)}%` : '—' },
+              ];
+            })()}
           />
           <section className="card">
             <StageBar
