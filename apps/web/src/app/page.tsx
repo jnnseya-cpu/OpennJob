@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { SiteFooter } from '../components/SiteFooter';
 import { useEffect, useRef } from 'react';
 import './landing.css';
 
@@ -216,14 +217,7 @@ export default function Landing() {
           </div>
         </section>
 
-        <footer className="lp-foot">
-          <span>© {new Date().getFullYear()} OpennJob</span>
-          <span>
-            Contact: <a href="mailto:support@opennjob.com">support@opennjob.com</a>
-          </span>
-          <span>Pilot build. Terms and privacy notice in preparation.</span>
-          <span>No job or interview is guaranteed.</span>
-        </footer>
+        <SiteFooter />
       </div>
     </div>
   );

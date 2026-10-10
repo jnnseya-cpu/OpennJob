@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { api, errorText, isSignedIn, onSessionChange, restoreSession, takeNextPath } from '../lib/api';
 import { PACKS } from '../lib/core';
 import { ThemeToggle } from './ThemeToggle';
+import { SiteFooter } from './SiteFooter';
 import type { Application, Mode, PackId, PublicUser } from '../lib/types';
 
 /** Shown until the API answers with the real bar (GET /agent/interview-rates, or an agent run). */
@@ -62,7 +63,7 @@ function writePref(key: string, value: string): void {
 
 const PUBLIC_PATHS = ['/signin', '/register', '/forgot-password'];
 /** Pages a link in an e-mail opens: they work whether or not this browser is signed in. */
-const LINK_PATHS = ['/verify-email', '/reset-password', '/score'];
+const LINK_PATHS = ['/verify-email', '/reset-password', '/score', '/about', '/how-it-works', '/terms', '/privacy', '/acceptable-use', '/cookies', '/contact'];
 const TABS: [string, string][] = [
   ['/dashboard', 'Home'],
   ['/matches', 'Matches'],
@@ -242,6 +243,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         ) : null}
         <main className={isPublic || isLink ? 'narrow' : undefined}>{showPage ? children : <p className="muted small">Loading…</p>}</main>
+        <SiteFooter />
       </div>
     </AppContext.Provider>
   );
