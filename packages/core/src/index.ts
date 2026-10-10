@@ -11,6 +11,7 @@ export * from './preferences';
 export * from './passport';
 export * from './matching';
 export * from './ats';
+export * from './score-keywords';
 export * from './criteria-llm';
 export * from './statement';
 export * from './policy';

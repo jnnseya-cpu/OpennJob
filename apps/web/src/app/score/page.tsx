@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { atsReadiness, extractCriteriaFallback, matchJob } from '../../lib/core';
+import { atsReadiness, keywordMatch } from '../../lib/core';
 import type { AtsReadiness } from '../../lib/core';
 
 /**
- * Public, sign-in-free CV check (competitive brief, October 2026): paste a CV and a job advert and
- * see the match and ATS-readiness. It runs entirely in the browser — nothing is sent to the server
- * or stored — using the same scoring the app uses. A top-of-funnel tool, honest by construction.
+ * Public, sign-in-free CV check (competitive brief, October 2026). It compares the CV and the advert
+ * entirely in the browser — nothing is sent to the server or stored, and no AI is called, so it is
+ * free to run at any scale. Because it has no AI it can only compare word stems (a forgiving keyword
+ * match, not synonym understanding), so it is a rough estimate: the accurate, AI-read score is on the
+ * signed-in Review screen.
  */
 export default function ScorePage() {
   const [cv, setCv] = useState('');
@@ -17,20 +19,23 @@ export default function ScorePage() {
   const [result, setResult] = useState<{ match: number; ats: AtsReadiness } | undefined>();
 
   function run() {
-    const { criteria } = extractCriteriaFallback(advert, title);
-    const m = matchJob({ criteria, requiresRegistration: false, criteriaSource: 'fallback', title }, cv, undefined);
-    const hits = m.hits.map((h) => ({ label: h.criterion.label, essential: h.criterion.essential, matched: h.matched }));
-    setResult({ match: m.score, ats: atsReadiness(hits, cv) });
+    const km = keywordMatch(advert, title, cv);
+    setResult({ match: km.percent, ats: atsReadiness(km.hits, cv) });
   }
 
   const ready = cv.trim().length > 50 && advert.trim().length > 50;
+  const bandWord = (b: AtsReadiness['band']) => (b === 'strong' ? 'Strong' : b === 'fair' ? 'Fair' : 'Needs work');
 
   return (
     <>
       <h2>Check your CV against a job — free</h2>
       <p className="small muted">
-        Paste your CV and a job advert. You will see how well they match and how ready the CV is for an applicant-tracking
-        system (ATS). It runs in your browser only: nothing is sent anywhere or saved.
+        Paste your CV and a job advert for a quick keyword match and an applicant-tracking-system (ATS) readiness check.
+        It runs in your browser only — nothing is sent anywhere or saved, and it uses no AI.
+      </p>
+      <p className="small muted">
+        This is a <b>rough keyword estimate</b>: it compares words, so close wording may not line up.{' '}
+        <Link href="/register/">Create a free account</Link> for the accurate, AI-read score and a tailored CV for each job.
       </p>
 
       <section className="card">
@@ -58,16 +63,16 @@ export default function ScorePage() {
         <>
           <section className="card" aria-label="Result">
             <div className="row">
-              <span className="label grow">Match</span>
+              <span className="label grow">Keyword match (rough)</span>
               <span className="num">{result.match}%</span>
             </div>
             <div className="bar" aria-hidden="true"><span style={{ width: `${result.match}%` }} /></div>
             <div className="row" style={{ marginTop: 12 }}>
               <span className="label grow">ATS readiness</span>
-              <span className="num">{result.ats.score}/100 · {result.ats.band === 'strong' ? 'Strong' : result.ats.band === 'fair' ? 'Fair' : 'Needs work'}</span>
+              <span className="num">{result.ats.score}/100 · {bandWord(result.ats.band)}</span>
             </div>
             <div className="bar" aria-hidden="true"><span style={{ width: `${result.ats.score}%` }} /></div>
-            <p className="small muted">{result.ats.coverage.matched} of {result.ats.coverage.total} of the advert’s requirements are evidenced in your CV.</p>
+            <p className="small muted">{result.ats.coverage.matched} of {result.ats.coverage.total} of the advert’s keywords appear in your CV (by word, not meaning — the AI check understands synonyms).</p>
             <dl className="kv">
               {result.ats.checks.map((c) => (
                 <div key={c.id} className="crit">
@@ -84,7 +89,7 @@ export default function ScorePage() {
             </ul>
           </section>
           <section className="card">
-            <p className="small">Want OpennJob to find matching jobs, write a trace-checked CV and statement for each, and apply by e-mail where it can?</p>
+            <p className="small">Want the accurate, AI-read score — plus matching jobs, a trace-checked CV and statement for each, and apply-by-e-mail where it can?</p>
             <Link className="btn primary" href="/register/">Create a free account</Link>
           </section>
         </>

@@ -20,5 +20,7 @@ export { cvPdf, coverLetterPdf, coverLetterText, coverLetterFileName } from './e
 // ATS-readiness and the deterministic match it can run on (client-side public scorer, no AI, no I/O).
 export { atsReadiness } from './ats';
 export type { AtsReadiness, AtsCheck, AtsHit } from './ats';
+export { keywordMatch, stemWord } from './score-keywords';
+export type { KeywordMatch } from './score-keywords';
 export { matchJob, extractCriteriaFallback } from './matching';
 export type { MatchResult, CriterionHit, ExtractedCriteria } from './matching';
