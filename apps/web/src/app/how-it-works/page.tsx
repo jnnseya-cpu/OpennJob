@@ -52,6 +52,20 @@ export default function HowItWorksPage() {
         <li><b>Auto:</b> OpennJob sends by e-mail where it can; employer forms still come to you as a pack.</li>
       </ul>
 
+      <h3>On your phone</h3>
+      <p>
+        Everything above works in your phone’s browser — there is <b>no app to install</b> (you can “Add to Home Screen” for an icon if you like).
+      </p>
+      <ul>
+        <li><b>Set up and find jobs:</b> upload or paste your CV, set preferences, then <i>Look for jobs</i> and <i>Run agent</i>. The finding, scoring and writing all happen on our servers, so your phone just waits a moment.</li>
+        <li><b>Automatic by e-mail:</b> where an advert names a recruiter’s address and you’ve turned on Auto, OpennJob sends for you — nothing to tap.</li>
+        <li><b>Employer forms — the pack:</b> on the Review screen, tap <i>Copy</i> for your details and your statement, download the CV and cover letter PDFs, open the employer’s form, paste them in, answer the declarations yourself, and press submit. About a minute.</li>
+        <li><b>Track:</b> your tracker shows what was sent and your interview rate; submitted jobs drop out of your matches.</li>
+      </ul>
+      <p className="small muted">
+        Honest summary: on a phone it is <b>review-light, not zero-touch</b> — automatic where it is safe (e-mail), a quick copy-and-paste pack for employer forms. There is no browser extension on mobile, so forms are always the manual pack.
+      </p>
+
       <p className="small muted">
         OpennJob does not guarantee a job or an interview. Ready to try the free check? <Link href="/score/">Check your CV against a job</Link>, or <Link href="/register/">create an account</Link>.
       </p>
