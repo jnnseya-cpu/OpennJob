@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGreenhouseSource, createLeverSource, createSampleSource, CV_TAILOR_SYSTEM_PROMPT } from '@opennjob/core';
-import type { FetchLike } from '@opennjob/core';
+import type { Application, FetchLike } from '@opennjob/core';
 import { CV_TEXT, NOW, PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
@@ -218,6 +218,16 @@ describe('GET /jobs/matches', () => {
     const med = nurse.hits.find((h: { label: string }) => h.label === 'Medication administration');
     expect(med).toEqual({ label: 'Medication administration', essential: true, matched: true, evidence: 'Completed medication rounds for 28 patients and acted as second checker for controlled drugs.' });
     expect(nurse.hits.find((h: { label: string }) => h.label === 'Venepuncture and cannulation')).toMatchObject({ essential: false, matched: false });
+  });
+
+  it('does not list a job that has already been submitted', async () => {
+    await seeded();
+    expect((await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id)).toContain(HCA_JOB);
+    const app = (await t.api.post('/applications').send({ jobId: HCA_JOB, mode: 'review' }).expect(201)).body as Application;
+    await t.api.post(`/applications/${app.id}/submitted`).send(RECEIPT).expect(200);
+    const after = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
+    expect(after).not.toContain(HCA_JOB); // applied → gone from search
+    expect(after).toContain(NURSE_JOB); // others unaffected
   });
 
   it('filters with ?min= and validates it', async () => {

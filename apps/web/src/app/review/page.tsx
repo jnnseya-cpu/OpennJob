@@ -7,9 +7,9 @@ import { useApp } from '../../components/AppShell';
 import { api, errorText } from '../../lib/api';
 import { ALL_FIELDS_CHECKED, STATEMENT_FIELD, declarationField, declarationsFor } from '../../lib/declarations';
 import { ADZUNA_URL, HOLD_LABEL, STATUS_LABEL, isAdzuna, needsLabel, placeOf } from '../../lib/labels';
-import { atsReadiness, coverLetterFileName, coverLetterPdf, coverLetterText, cvPdf, describeWorkRights, workRightsProblem } from '../../lib/core';
-import type { Profile, WorkRightsRecord } from '../../lib/core';
-import type { AgentStatus, Application, MatchView, PassportView, PublicUser } from '../../lib/types';
+import { atsReadiness, coverLetterFileName, coverLetterPdf, coverLetterText, cvPdf, describeWorkRights, workRightsFor } from '../../lib/core';
+import type { DeclarationAnswers, Profile, WorkRightsRecord } from '../../lib/core';
+import type { AgentStatus, Application, MatchView, PassportView, PublicUser, ScreeningAnswers } from '../../lib/types';
 
 /** The person's name as a file name: Jane_Example_CV.pdf. */
 const fileStem = (p: Profile | undefined): string => (p ? `${p.firstName}_${p.lastName}`.replace(/[^A-Za-z0-9_-]+/g, '_') : 'OpennJob');
@@ -67,6 +67,9 @@ function Review() {
   const [verified, setVerified] = useState<boolean>();
   const [workRights, setWorkRights] = useState<WorkRightsRecord[]>([]);
   const [profile, setProfile] = useState<Profile>();
+  // OD-6: the declarations the person answers once on their Profile, used to stop the checklist
+  // nagging about ones already answered for them.
+  const [ownDeclarations, setOwnDeclarations] = useState<DeclarationAnswers>();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   /** SCR-2: answers a question that held this application; the API keeps it for next time and lifts the hold. */
   async function answerQuestion(question: string, answer: string) {
@@ -87,6 +90,7 @@ function Review() {
     api<PublicUser>('/account').then((u) => setVerified(u.emailVerified)).catch(() => undefined);
     api<PassportView>('/passport').then((v) => setWorkRights(v.passport.workRights ?? [])).catch(() => undefined);
     api<Profile>('/profile').then(setProfile).catch(() => undefined);
+    api<ScreeningAnswers>('/screening').then((s) => setOwnDeclarations(s.declarations)).catch(() => undefined);
   }, []);
 
   const showApp = useCallback((a: Application | undefined) => {
@@ -150,11 +154,22 @@ function Review() {
   }
 
   // OD-5: a valid right-to-work record for the job's country answers right to work and sponsorship.
+  // Matched the same (country-code–normalised) way the agent does, so "GB" matches a UK job however
+  // the code is cased or spelled.
   const today = new Date().toISOString().slice(0, 10);
-  const record = workRights.find((r) => r.country === match?.job.country && !workRightsProblem(r, today));
+  const record = workRightsFor({ workRights }, match?.job.country, today);
   // Referees are filled from the passport after the person confirms them on the form, and right to
   // work from a valid record, so they are listed under "The extension fills these", not here.
   const declarations = declarationsFor(match?.job).filter((d) => d.id !== 'ref' && !(record && d.id === 'rtw'));
+  // OD-6: a declaration the person has already answered on their Profile is answered for them, so it
+  // does not stop auto mode — don't list it as a blocker in "Can OpennJob send this for you?".
+  const answeredByOwn = (d: { id: string; label: string }): boolean => {
+    const l = d.label.toLowerCase();
+    if ((d.id === 'conv' || /conviction|caution/.test(l)) && ownDeclarations?.everConvicted !== undefined) return true;
+    if ((d.id === 'conflict' || /conflict of interest/.test(l)) && ownDeclarations?.conflictOfInterest !== undefined) return true;
+    return false;
+  };
+  const unansweredDeclarations = declarations.filter((d) => !answeredByOwn(d));
   const filled: [string, string][] = record ? [...FILLED, ['Right to work and sponsorship', `filled from your record: ${describeWorkRights(record)}`]] : FILLED;
 
   // Your own details, ready to paste into the employer's form from a phone (no extension needed).
@@ -462,7 +477,7 @@ function Review() {
             })}
           </section>
 
-          {appMode === 'auto' && status !== 'submitted' ? <AutoChecklist agent={agent} verified={verified} declarations={declarations.map((d) => d.label)} rightToWork={record ? describeWorkRights(record) : null} emailApply={match?.emailApply === true} /> : null}
+          {appMode === 'auto' && status !== 'submitted' ? <AutoChecklist agent={agent} verified={verified} declarations={unansweredDeclarations.map((d) => d.label)} rightToWork={record ? describeWorkRights(record) : null} emailApply={match?.emailApply === true} /> : null}
 
           {error ? <div className="note bad" role="alert">{error}</div> : null}
           {notice ? <div className="note ok" role="status">{notice}</div> : null}
