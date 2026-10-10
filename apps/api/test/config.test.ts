@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryRepository } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
 import { silentLogger } from '../src/logging';
-import { buildSources, createDefaultDeps, loadConfig } from '../src/deps';
+import { buildLlm, buildSearchSources, buildSources, createDefaultDeps, loadConfig } from '../src/deps';
 
 const noFetch: FetchLike = async () => { throw new Error('tests must not make live calls'); };
 
@@ -17,14 +17,32 @@ describe('loadConfig', () => {
       authRateLimitMax: 10,
       authRateLimitWindowMs: 900_000,
       corsOrigins: [],
+      registrationAllowlist: [],
       corsAllowAnyExtension: true,
       bodyLimit: '256kb',
       llmCriteria: false,
       llmCriteriaMaxJobs: 25,
+      duplicateDays: 30,
+      dailyApplicationLimit: 20,
+      llmDailyAcuPerUser: 50,
+      llmDailyAcuTotal: 500,
+      searchMaxQueriesPerUser: 6,
+      searchMaxQueriesPerRefresh: 60,
     };
     expect(loadConfig({})).toEqual(defaults);
     expect(loadConfig({ OPENNJOB_JWT_SECRET: ' abc ', OPENNJOB_LLM_CRITERIA: 'true', OPENNJOB_LLM_CRITERIA_MAX_JOBS: '3' })).toEqual({ ...defaults, jwtSecret: 'abc', llmCriteria: true, llmCriteriaMaxJobs: 3 });
     expect(loadConfig({ OPENNJOB_LLM_CRITERIA: 'maybe', OPENNJOB_LLM_CRITERIA_MAX_JOBS: 'lots' })).toMatchObject({ llmCriteria: false, llmCriteriaMaxJobs: 25 });
+  });
+
+  it('reads the owner limits (APP-6, APP-8, NFR-5) and ignores values out of range', () => {
+    expect(loadConfig({ OPENNJOB_DUPLICATE_DAYS: '14', OPENNJOB_DAILY_APPLICATION_LIMIT: '5', OPENNJOB_LLM_DAILY_ACU_PER_USER: '10', OPENNJOB_LLM_DAILY_ACU_TOTAL: '0' })).toMatchObject({ duplicateDays: 14, dailyApplicationLimit: 5, llmDailyAcuPerUser: 10, llmDailyAcuTotal: 0 });
+    // "unlimited" removes the AI ceiling and the per-refresh cap on AI-read adverts (owner's choice).
+    expect(loadConfig({ OPENNJOB_LLM_DAILY_ACU_PER_USER: 'unlimited', OPENNJOB_LLM_DAILY_ACU_TOTAL: 'off', OPENNJOB_LLM_CRITERIA_MAX_JOBS: 'unlimited' })).toMatchObject({
+      llmDailyAcuPerUser: Number.POSITIVE_INFINITY,
+      llmDailyAcuTotal: Number.POSITIVE_INFINITY,
+      llmCriteriaMaxJobs: Number.POSITIVE_INFINITY,
+    });
+    expect(loadConfig({ OPENNJOB_DUPLICATE_DAYS: '0', OPENNJOB_DAILY_APPLICATION_LIMIT: 'many', OPENNJOB_LLM_DAILY_ACU_PER_USER: '-1' })).toMatchObject({ duplicateDays: 30, dailyApplicationLimit: 20, llmDailyAcuPerUser: 50 });
   });
 });
 
@@ -43,28 +61,47 @@ describe('buildSources', () => {
         ADZUNA_APP_ID: 'id',
         ADZUNA_APP_KEY: 'key',
         REED_API_KEY: 'reed',
-        OPENNJOB_SEARCH_KEYWORDS: 'healthcare assistant',
-        OPENNJOB_SEARCH_LOCATION: 'Leeds',
       },
       noFetch,
     );
-    expect(sources.map((s) => s.label)).toEqual(['sample (fictional demo jobs)', 'greenhouse:boardone', 'greenhouse:boardtwo', 'lever:leverco', 'ashby:ashbyco', 'adzuna', 'reed']);
+    // Adzuna and Reed are asked per person (buildSearchSources), not listed here.
+    expect(sources.map((s) => s.label)).toEqual(['sample (fictional demo jobs)', 'greenhouse:boardone', 'greenhouse:boardtwo', 'lever:leverco', 'ashby:ashbyco']);
   });
 
-  it('needs both Adzuna credentials', () => {
-    expect(buildSources({ ADZUNA_APP_ID: 'id' }, noFetch)).toEqual([]);
-  });
-
-  it('passes search terms and employer names through to the adapters', async () => {
-    const urls: string[] = [];
-    const recording: FetchLike = async (url) => {
-      urls.push(url);
-      return { ok: true, status: 200, json: async () => ({ jobs: [{ id: 1, title: 'Nurse', absolute_url: 'u', location: { name: 'Leeds' }, content: '' }], results: [] }) };
-    };
-    const sources = buildSources({ OPENNJOB_GREENHOUSE_BOARDS: 'b1:Board One Ltd', REED_API_KEY: 'k', OPENNJOB_SEARCH_KEYWORDS: 'support worker', OPENNJOB_SEARCH_LOCATION: 'Leeds' }, recording);
-    const jobs = (await Promise.all(sources.map((s) => s.fetchJobs()))).flat();
+  it('passes employer names through to the board adapters', async () => {
+    const recording: FetchLike = async () => ({ ok: true, status: 200, json: async () => ({ jobs: [{ id: 1, title: 'Nurse', absolute_url: 'u', location: { name: 'Leeds' }, content: '' }] }) });
+    const jobs = (await Promise.all(buildSources({ OPENNJOB_GREENHOUSE_BOARDS: 'b1:Board One Ltd' }, recording).map((s) => s.fetchJobs()))).flat();
     expect(jobs[0]?.employer).toBe('Board One Ltd');
-    expect(urls[1]).toBe('https://www.reed.co.uk/api/1.0/search?keywords=support+worker&locationName=Leeds');
+  });
+});
+
+describe('buildSearchSources: the job-search APIs take only keys; what they are asked comes from each person', () => {
+  it('needs both Adzuna credentials; Reed needs its key', () => {
+    expect(buildSearchSources({}, noFetch)).toEqual([]);
+    expect(buildSearchSources({ ADZUNA_APP_ID: 'id' }, noFetch)).toEqual([]);
+    expect(buildSearchSources({ ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key', REED_API_KEY: 'k' }, noFetch).map((s) => s.label)).toEqual(['adzuna', 'reed']);
+    // ReliefWeb and Jooble only when configured.
+    const both = buildSearchSources({ OPENNJOB_RELIEFWEB_APPNAME: 'approved-name', JOOBLE_API_KEYS: 'ae:k1, SA:k2' }, noFetch);
+    expect(both.map((s) => s.label)).toEqual(['reliefweb', 'jooble']);
+    expect(both[1]?.countries).toEqual(['AE', 'SA']); // asked only where a country key exists
+    expect(buildSearchSources({ OPENNJOB_RELIEFWEB_APPNAME: '  ', JOOBLE_API_KEYS: 'not a key list' }, noFetch)).toEqual([]);
+    // Employers' careers sites only when the operator listed them, one source per kind.
+    const sites = buildSearchSources({ OPENNJOB_CAREER_SITES: 'https://examplegrid.wd3.myworkdayjobs.com/en-GB/Careers|Example Grid (fictional)|GB, https://jobs.example.org|Example Build (fictional)|AE' }, noFetch);
+    expect(sites.map((s) => [s.label, s.countries])).toEqual([['workday', ['GB']], ['successfactors', ['AE']]]);
+    expect(buildSearchSources({ OPENNJOB_CAREER_SITES: 'http://not-https.example.org|X|GB' }, noFetch)).toEqual([]);
+  });
+
+  it('ignores the old server-wide search settings: the query is the one it is given', async () => {
+    const urls: string[] = [];
+    const recording: FetchLike = async (url) => (urls.push(url), { ok: true, status: 200, json: async () => ({ results: [] }) });
+    const [adzuna, reed] = buildSearchSources({ ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key', REED_API_KEY: 'k', OPENNJOB_SEARCH_KEYWORDS: 'nurse', OPENNJOB_SEARCH_LOCATION: 'Leeds' }, recording);
+    await adzuna?.search({ what: 'site manager', where: 'Lyon', country: 'FR' });
+    await reed?.search({ what: 'site manager', where: 'London', country: 'GB' });
+    await reed?.search({ what: 'site manager', country: 'FR' }); // Reed is UK only: not asked
+    expect(urls).toEqual([
+      'https://api.adzuna.com/v1/api/jobs/fr/search/1?app_id=id&app_key=key&results_per_page=50&what_phrase=site+manager&where=Lyon',
+      'https://www.reed.co.uk/api/1.0/search?keywords=site+manager&resultsToTake=100&locationName=London',
+    ]);
   });
 });
 
@@ -83,3 +120,17 @@ describe('createDefaultDeps', () => {
     expect((deps.llm as { model?: string } | undefined)?.model).toBe('some-model');
   });
 });
+
+describe('buildLlm: which AI the API uses', () => {
+  it('Gemini or OpenAI when chosen and keyed; Claude by default; none without a key', async () => {
+    const { AnthropicLlm, OpenAiCompatibleLlm } = await import('@opennjob/core');
+    const gemini = buildLlm({ OPENNJOB_LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'g-not-a-secret', ANTHROPIC_API_KEY: 'sk-ant-not-a-secret' });
+    expect(gemini).toBeInstanceOf(OpenAiCompatibleLlm);
+    expect(gemini).toMatchObject({ provider: 'gemini', model: 'gemini-2.5-flash' });
+    expect(buildLlm({ OPENNJOB_LLM_PROVIDER: 'OpenAI', OPENAI_API_KEY: 'o', OPENNJOB_LLM_MODEL: 'example-model', OPENNJOB_MODEL: 'claude-opus-5-5' })).toMatchObject({ provider: 'openai', model: 'example-model' });
+    expect(buildLlm({ OPENNJOB_LLM_PROVIDER: 'gemini' })).toBeUndefined(); // chosen but no key: no AI
+    expect(buildLlm({ ANTHROPIC_API_KEY: 'sk-ant-not-a-secret' })).toBeInstanceOf(AnthropicLlm);
+    expect(buildLlm({})).toBeUndefined();
+  });
+});
+

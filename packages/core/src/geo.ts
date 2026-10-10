@@ -138,7 +138,6 @@ export function cityCountry(value: string): string | undefined {
   return parseCity(value).country;
 }
 
-export const sameCity = (a: string, b: string): boolean => foldPlace(parseCity(a).city) === foldPlace(parseCity(b).city);
 
 const NAME_LOOKUP: ReadonlyArray<[string, string]> = [
   ...COUNTRIES.map((c): [string, string] => [foldPlace(c.name), c.code]),

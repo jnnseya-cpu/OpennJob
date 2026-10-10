@@ -8,7 +8,9 @@ import {
   createAshbySource,
   createGreenhouseSource,
   createLeverSource,
+  createReedSearch,
   createReedSource,
+  createAdzunaSearch,
   createSampleSource,
   decodeEntities,
   dedupeJobs,
@@ -109,12 +111,22 @@ describe('ashby adapter', () => {
 });
 
 describe('adzuna adapter', () => {
+  it('asks for the largest page (50) by default; a configured size is kept within 1 to 50', async () => {
+    const sizes: (string | null)[] = [];
+    for (const resultsPerPage of [undefined, 20, 500, 0]) {
+      const { fetch, calls } = fakeFetch(fixture('adzuna.json'));
+      await createAdzunaSource({ appId: 'a', appKey: 'b', what: 'site manager', fetch, ...(resultsPerPage !== undefined ? { resultsPerPage } : {}) }).fetchJobs();
+      sizes.push(new URL(calls[0]?.url ?? '').searchParams.get('results_per_page'));
+    }
+    expect(sizes).toEqual(['50', '20', '50', '1']);
+  });
+
   it('builds the gb search URL with credentials and query, and normalises results', async () => {
     const { fetch, calls } = fakeFetch(fixture('adzuna.json'));
     const jobs = await createAdzunaSource({ appId: 'ID123', appKey: 'KEY456', what: 'healthcare assistant', where: 'Leeds', page: 2, fetch }).fetchJobs();
     const url = new URL(calls[0]?.url as string);
     expect(url.origin + url.pathname).toBe('https://api.adzuna.com/v1/api/jobs/gb/search/2');
-    expect(Object.fromEntries(url.searchParams)).toEqual({ app_id: 'ID123', app_key: 'KEY456', what: 'healthcare assistant', where: 'Leeds' });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ app_id: 'ID123', app_key: 'KEY456', results_per_page: '50', what: 'healthcare assistant', where: 'Leeds' });
     expect(jobs).toHaveLength(2);
     expect(jobs[0]).toMatchObject({
       id: 'adzuna:5123456789',
@@ -133,7 +145,7 @@ describe('adzuna adapter', () => {
   it('defaults to page 1 and omits where when not given', async () => {
     const { fetch, calls } = fakeFetch({ results: [] });
     await createAdzunaSource({ appId: 'a', appKey: 'b', what: 'nurse', fetch }).fetchJobs();
-    expect(calls[0]?.url).toBe('https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id=a&app_key=b&what=nurse');
+    expect(calls[0]?.url).toBe('https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id=a&app_key=b&results_per_page=50&what=nurse');
   });
 });
 
@@ -141,7 +153,7 @@ describe('reed adapter', () => {
   it('uses HTTP Basic auth with the API key as username and an empty password', async () => {
     const { fetch, calls } = fakeFetch(fixture('reed.json'));
     await createReedSource({ apiKey: 'my-reed-key', keywords: 'mental health nurse', locationName: 'Birmingham', fetch }).fetchJobs();
-    expect(calls[0]?.url).toBe('https://www.reed.co.uk/api/1.0/search?keywords=mental+health+nurse&locationName=Birmingham');
+    expect(calls[0]?.url).toBe('https://www.reed.co.uk/api/1.0/search?keywords=mental+health+nurse&resultsToTake=100&locationName=Birmingham');
     const auth = calls[0]?.headers.Authorization as string;
     expect(auth).toBe(reedAuthHeader('my-reed-key'));
     expect(Buffer.from(auth.replace('Basic ', ''), 'base64').toString('utf8')).toBe('my-reed-key:');
@@ -163,6 +175,50 @@ describe('reed adapter', () => {
     });
     expect(jobs[1]?.salaryMin).toBeUndefined();
     expect(jobs[1]?.salaryMax).toBeUndefined();
+  });
+});
+
+describe('per-person searches read more than the snippet', () => {
+  it('reed: reads the full advert for the first results, so requirements come from the whole text', async () => {
+    const calls: string[] = [];
+    const fetch: FetchLike = async (url) => {
+      calls.push(url);
+      const body = url.includes('/jobs/55001122')
+        ? { jobDescription: `<p>${'A fictional mental health unit looking for a registered nurse. '.repeat(4)}</p><p>Essential:</p><ul><li>NMC registration</li><li>Medication administration and care planning</li></ul>`, externalUrl: 'https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1 ' }
+        : url.includes('/jobs/')
+          ? null
+          : fixture('reed.json');
+      return { ok: body !== null, status: body !== null ? 200 : 500, json: async () => body };
+    };
+    const jobs = await createReedSearch({ apiKey: 'k', fetch, detailsPerSearch: 2 }).search({ what: 'nurse', country: 'GB' });
+    expect(calls.filter((u) => u.includes('/api/1.0/jobs/'))).toHaveLength(2);
+    expect(jobs[0]?.description).toContain('Medication administration and care planning');
+    expect(jobs[0]?.criteria.map((c) => c.label)).toContain('Care planning');
+    // A failed detail call keeps the snippet.
+    expect(jobs[1]?.description.length).toBeGreaterThan(0);
+    // Applied for on the employer's own site (here a fictional Workday tenant): the queue applies there.
+    expect(jobs[0]?.applyUrl).toBe('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1');
+    expect(jobs[0]?.url).toContain('reed.co.uk');
+    expect(jobs[1]?.applyUrl).toContain('reed.co.uk');
+
+    // One job's whole advert, asked later (an application about to go out): its text and the employer's link.
+    const source = createReedSearch({ apiKey: 'k', fetch, detailsPerSearch: 0 });
+    const job = jobs[0];
+    if (!job) throw new Error('no job');
+    calls.length = 0;
+    const d = (await source.details?.({ ...job, externalId: '55001122' })) ?? {};
+    expect(calls).toEqual(['https://www.reed.co.uk/api/1.0/jobs/55001122']);
+    expect(d.description).toContain('NMC registration');
+    expect(d.applyUrl).toBe('https://example.wd3.myworkdayjobs.com/en-GB/careers/job/Leeds/Nurse_R1');
+    expect(await source.details?.({ ...job, source: 'adzuna' })).toEqual({}); // not Reed's job: nothing asked
+    expect(calls).toHaveLength(1);
+  });
+
+  it('adzuna: sends the CV job title as an exact phrase', async () => {
+    const { fetch, calls } = fakeFetch(fixture('adzuna.json'));
+    await createAdzunaSearch({ appId: 'id', appKey: 'key', fetch }).search({ what: 'project manager', where: 'Leeds', country: 'GB' });
+    expect(calls[0]?.url).toContain('what_phrase=project+manager');
+    expect(calls[0]?.url).not.toContain('&what=');
   });
 });
 
@@ -208,16 +264,26 @@ describe('de-duplication across sources', () => {
     id, source: 'sample', externalId: id, title, employer, location, url: '', description: '', criteria: [], criteriaSource: 'fallback', requiresRegistration: false,
   });
 
-  it('treats the same normalised title + employer + location as one vacancy', () => {
+  it('treats the same normalised title + employer as one vacancy, however the place is written', () => {
     expect(dedupeKey(job('1', 'Healthcare Assistant', 'Example Care', 'Leeds, UK'))).toBe(dedupeKey(job('2', '  healthcare   assistant ', 'EXAMPLE CARE', 'Leeds UK')));
     expect(dedupeKey(job('1', 'Nurse', 'Smith & Sons', 'York'))).toBe(dedupeKey(job('2', 'Nurse', 'Smith and Sons', 'York')));
+    // Sources spell the same employer and place differently (fictional employers).
+    expect(dedupeKey(job('1', 'Senior Construction Delivery Manager', 'Clarion (example)', 'Birmingham'))).toBe(dedupeKey(job('2', 'Senior Construction Delivery Manager', 'Clarion Housing (example)', 'Birmingham, West Midlands')));
+    expect(dedupeKey(job('1', 'Quantity Surveyor', 'Example Gordon Recruitment', 'Leeds'))).toBe(dedupeKey(job('2', 'Quantity Surveyor', 'Example Gordon Recruitment Limited', 'Leeds')));
+    expect(dedupeKey(job('1', 'Quantity Surveyor', 'Example Build', 'Leeds'))).not.toBe(dedupeKey(job('2', 'Quantity Surveyor', 'Sample Build', 'Leeds')));
   });
 
-  it('keeps jobs that differ in title, employer or location', () => {
+  it('keeps jobs that differ in title, employer or country', () => {
     const base = job('1', 'Healthcare Assistant', 'Example Care', 'Leeds');
-    const r = dedupeJobs([base, job('2', 'Senior Healthcare Assistant', 'Example Care', 'Leeds'), job('3', 'Healthcare Assistant', 'Other Care', 'Leeds'), job('4', 'Healthcare Assistant', 'Example Care', 'York')]);
+    const r = dedupeJobs([base, job('2', 'Senior Healthcare Assistant', 'Example Care', 'Leeds'), job('3', 'Healthcare Assistant', 'Other Care', 'Leeds'), { ...job('4', 'Healthcare Assistant', 'Example Care', 'Dublin'), country: 'IE' }]);
     expect(r.jobs).toHaveLength(4);
     expect(r.duplicates).toHaveLength(0);
+  });
+
+  it('one vacancy that two sources place differently is one vacancy (Reed "London", Adzuna "Central London")', () => {
+    const reed = { ...job('r', 'Senior Project Manager', 'Example Housing (fictional)', 'London'), country: 'GB' };
+    const adzuna = { ...job('a', 'Senior Project Manager', 'Example Housing Group (fictional)', 'Central London'), country: 'GB' };
+    expect(dedupeJobs([reed, adzuna]).jobs.map((j) => j.id)).toEqual(['r']);
   });
 
   it('keeps the first occurrence', () => {

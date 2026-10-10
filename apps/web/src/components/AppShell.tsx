@@ -1,0 +1,248 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { api, errorText, isSignedIn, onSessionChange, restoreSession, takeNextPath } from '../lib/api';
+import { PACKS } from '../lib/core';
+import { ThemeToggle } from './ThemeToggle';
+import type { Application, Mode, PackId, PublicUser } from '../lib/types';
+
+/** Shown until the API answers with the real bar (GET /agent/interview-rates, or an agent run). */
+export const DEFAULT_THRESHOLD = 80;
+
+export const MODE_HELP: Record<Mode, string> = {
+  review: 'You see and confirm every field before anything is filled.',
+  hybrid: 'The agent prepares every match at or above the threshold. Declarations you saved on your Profile are filled; you confirm the rest and submit yourself.',
+  auto: 'The agent prepares every match at or above the threshold and, where an advert gives a recruiter’s e-mail address, sends your CV and statement there for you. Employer forms only you can submit: OpennJob gives you a ready-to-submit pack to send from your phone.',
+};
+
+const MODE_LABEL: Record<Mode, string> = { review: 'Review all', hybrid: 'Hybrid', auto: 'Auto' };
+
+export type PackChoice = PackId | 'all';
+
+interface AppState {
+  mode: Mode;
+  setMode(mode: Mode): void;
+  pack: PackChoice;
+  setPack(pack: PackChoice): void;
+  threshold: number;
+  setThreshold(n: number): void;
+  agentMessage: string;
+  setAgentMessage(text: string): void;
+  waiting: number;
+  unread: number;
+  refreshWaiting(): void;
+}
+
+const AppContext = createContext<AppState | undefined>(undefined);
+
+export function useApp(): AppState {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp outside AppShell');
+  return ctx;
+}
+
+/** Per-viewer conveniences only (chosen mode and pack). Never personal data. */
+function readPref(key: string): string | undefined {
+  try {
+    return window.localStorage.getItem(key) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+function writePref(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // storage refused: the choice lasts for this page only
+  }
+}
+
+const PUBLIC_PATHS = ['/signin', '/register', '/forgot-password'];
+/** Pages a link in an e-mail opens: they work whether or not this browser is signed in. */
+const LINK_PATHS = ['/verify-email', '/reset-password', '/score'];
+const TABS: [string, string][] = [
+  ['/dashboard', 'Home'],
+  ['/matches', 'Matches'],
+  ['/tracker', 'Tracker'],
+  ['/interview', 'Interview'],
+  ['/profile', 'Profile'],
+];
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = (usePathname() ?? '/').replace(/\/+$/, '') || '/';
+  const router = useRouter();
+  const [signedIn, setSignedIn] = useState<boolean | undefined>(undefined);
+  const [mode, setModeState] = useState<Mode>('hybrid');
+  const [pack, setPackState] = useState<PackChoice>('all');
+  const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
+  const [agentMessage, setAgentMessage] = useState('');
+  const [waiting, setWaiting] = useState(0);
+  const [unread, setUnread] = useState(0);
+  const [unverified, setUnverified] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState('');
+
+  useEffect(() => {
+    const m = readPref('opennjob.mode');
+    if (m === 'review' || m === 'hybrid' || m === 'auto') setModeState(m);
+    const p = readPref('opennjob.pack');
+    if (p === 'all' || PACKS.some((x) => x.id === p)) setPackState(p as PackChoice);
+    const update = () => setSignedIn(isSignedIn());
+    // "Keep me signed in": with no live session, renew it from the kept token before deciding.
+    if (isSignedIn()) update();
+    else void restoreSession().then(update);
+    return onSessionChange(update);
+  }, []);
+
+  const isLanding = pathname === '/';
+  const isPublic = PUBLIC_PATHS.includes(pathname);
+  const isLink = LINK_PATHS.includes(pathname);
+  useEffect(() => {
+    if (signedIn === undefined || isLink) return;
+    if (!signedIn && !isPublic && !isLanding) router.replace(takeNextPath() ?? '/signin/');
+    else if (signedIn && (isPublic || isLanding)) router.replace(takeNextPath() ?? '/dashboard/');
+  }, [signedIn, isPublic, isLink, isLanding, pathname, router]);
+
+  const refreshWaiting = useCallback(() => {
+    if (!isSignedIn()) return;
+    api<Application[]>('/applications')
+      .then((apps) => setWaiting(apps.filter((a) => a.status === 'draft').length))
+      .catch(() => undefined);
+    api<{ unread: number }>('/notifications')
+      .then((n) => setUnread(n.unread))
+      .catch(() => undefined);
+    api<PublicUser>('/account')
+      .then((u) => setUnverified(!u.emailVerified))
+      .catch(() => undefined);
+    // The bar the agent really uses (server setting, the person's own minimum, their interview target).
+    api<{ bar: { bar: number } }>('/agent/interview-rates')
+      .then((r) => setThreshold(r.bar.bar))
+      .catch(() => undefined);
+  }, []);
+
+  async function resendVerification() {
+    setVerifyMsg('');
+    try {
+      const r = await api<{ verified: boolean; sent: boolean }>('/account/verification', { method: 'POST', body: {} });
+      if (r.verified) setUnverified(false);
+      else setVerifyMsg('A new link was sent. Check your inbox.');
+    } catch (err) {
+      setVerifyMsg(errorText(err));
+    }
+  }
+  useEffect(() => {
+    if (signedIn) refreshWaiting();
+  }, [signedIn, pathname, refreshWaiting]);
+
+  const state = useMemo<AppState>(
+    () => ({
+      mode,
+      setMode: (m) => {
+        setModeState(m);
+        writePref('opennjob.mode', m);
+      },
+      pack,
+      setPack: (p) => {
+        setPackState(p);
+        writePref('opennjob.pack', p);
+      },
+      threshold,
+      setThreshold,
+      agentMessage,
+      setAgentMessage,
+      waiting,
+      unread,
+      refreshWaiting,
+    }),
+    [mode, pack, threshold, agentMessage, waiting, unread, refreshWaiting],
+  );
+
+  if (isLanding && signedIn === false) return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
+
+  // Until the session is known, and while a redirect is pending, show nothing personal.
+  const showPage = signedIn !== undefined && (isLink || (isPublic ? !signedIn : signedIn && pathname !== '/'));
+  const current = pathname.startsWith('/review') ? '/matches' : pathname;
+
+  return (
+    <AppContext.Provider value={state}>
+      <header className="top">
+        <div className="top-in">
+          <div className="brand">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
+            <img className="logo" src="/brand/opennjob-logo-192.png" alt="" width={52} height={52} />
+            <b>OpennJob</b>
+            <span className="muted small grow"><span className="tagline">Six industry packs · UK and worldwide</span></span>
+            {!signedIn || isPublic ? <ThemeToggle /> : null}
+            {signedIn && !isPublic ? (
+              <span className="row" style={{ gap: 4 }}>
+                <ThemeToggle />
+                <Link href="/notifications/" className="iconlink" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'} aria-current={pathname === '/notifications' ? 'page' : undefined}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.3 15.4A1 1 0 0 0 5.2 17h13.6a1 1 0 0 0 .9-1.6L18 12.6V9a6 6 0 0 0-6-6zm0 19a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 22z" fill="currentColor" /></svg>
+                  {unread > 0 ? <span className="count">{unread}</span> : null}
+                </Link>
+                <Link href="/account/" className="iconlink" aria-current={pathname === '/account' ? 'page' : undefined}>
+                  Account
+                </Link>
+              </span>
+            ) : null}
+          </div>
+          {signedIn && !isPublic && !isLink ? (
+            <>
+              <div className="controls">
+                <select className="pack" aria-label="Industry pack" value={pack} onChange={(e) => state.setPack(e.target.value as PackChoice)}>
+                  <option value="all">All industry packs</option>
+                  {PACKS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="seg" role="group" aria-label="How much the agent does alone">
+                  {(['review', 'hybrid', 'auto'] as Mode[]).map((m) => (
+                    <button key={m} type="button" aria-pressed={mode === m} onClick={() => state.setMode(m)}>
+                      {MODE_LABEL[m]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="small muted mode-help" data-testid="mode-help">
+                {MODE_HELP[mode]}
+              </p>
+            </>
+          ) : null}
+          {signedIn && !isPublic ? (
+            <nav className="tabs" aria-label="Sections">
+              <div>
+                {TABS.map(([href, label]) => (
+                  <Link key={href} href={`${href}/`} aria-current={current === href ? 'page' : undefined}>
+                    {label}
+                    {href === '/tracker' && waiting > 0 ? (
+                      <span className="count" aria-label={`${waiting} waiting`}>
+                        {waiting}
+                      </span>
+                    ) : null}
+                  </Link>
+                ))}
+              </div>
+            </nav>
+          ) : null}
+        </div>
+      </header>
+      <div className="wrap">
+        {signedIn && !isPublic && !isLink && unverified ? (
+          <div className="note" role="region" aria-label="E-mail verification" data-testid="verify-banner">
+            Confirm your e-mail address: nothing is sent to an employer for you until you do. Use the link or code we e-mailed you.{' '}
+            <Link href="/verify-email/">Enter a code</Link> ·{' '}
+            <button type="button" className="link" onClick={resendVerification}>
+              Send a new link
+            </button>
+            {verifyMsg ? <span className="small"> {verifyMsg}</span> : null}
+          </div>
+        ) : null}
+        <main className={isPublic || isLink ? 'narrow' : undefined}>{showPage ? children : <p className="muted small">Loading…</p>}</main>
+      </div>
+    </AppContext.Provider>
+  );
+}

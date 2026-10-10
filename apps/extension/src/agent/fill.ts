@@ -1,3 +1,4 @@
+import { PREFER_NOT_TO_SAY } from '@opennjob/core/browser';
 import type { FillValue } from '@opennjob/core/browser';
 import type { DetectedField } from './types';
 
@@ -21,15 +22,58 @@ function fireInputEvents(el: HTMLElement): void {
   el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
 }
 
+/** OD-6: the options that mean "prefer not to say" on equality-monitoring questions. */
+const PREFER_NOT = /prefer not|rather not|do not wish|don.t wish|not wish to|decline to|not to (say|disclose|answer|specify)|choose not/;
+
 function choiceMatches(candidate: string, value: FillValue): boolean {
   const c = norm(candidate);
   if (typeof value === 'boolean') return value ? YES.has(c) : NO.has(c);
+  if (norm(value) === norm(PREFER_NOT_TO_SAY)) return PREFER_NOT.test(c);
   return c !== '' && c === norm(value);
 }
 
 export interface FillOutcome {
   filled: boolean;
   reason?: string;
+  /** A drop-down button: chosen afterwards by selectListboxOption, which has to wait for the list. */
+  pending?: true;
+}
+
+const LISTBOX_EMPTY = /^(select one|select|select\.\.\.|choose|choose one|please select|please choose|--.*--|)$/i;
+const shownChoice = (el: HTMLElement): string => {
+  const t = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+  return LISTBOX_EMPTY.test(t) ? '' : t;
+};
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Chooses an option in a drop-down built from a button and a list (Workday): opens it, waits for
+ * the options, clicks the one whose text matches, and checks the button now shows it. Never changes
+ * a choice already made. Gives up after `timeoutMs`.
+ */
+export async function selectListboxOption(button: HTMLElement, value: FillValue, timeoutMs = 2000): Promise<FillOutcome> {
+  const current = shownChoice(button);
+  if (current) return choiceMatches(current, value) ? { filled: true } : { filled: false, reason: 'already has a selection; left as it is' };
+  button.click();
+  const doc = button.ownerDocument;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const controlled = button.getAttribute('aria-controls');
+    const scope: ParentNode = (controlled && doc.getElementById(controlled)) || doc;
+    const options = Array.from(scope.querySelectorAll<HTMLElement>('[role="option"]')).filter((o) => o.getAttribute('aria-disabled') !== 'true' && o.getClientRects().length > 0);
+    if (options.length > 0) {
+      const target = options.find((o) => choiceMatches(o.textContent ?? '', value) || choiceMatches(o.getAttribute('data-value') ?? '', value));
+      if (!target) {
+        doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        return { filled: false, reason: 'no matching option in this list' };
+      }
+      target.click();
+      await sleep(50);
+      return choiceMatches(shownChoice(button), value) ? { filled: true } : { filled: false, reason: 'the page did not accept this choice' };
+    }
+    await sleep(50);
+  }
+  return { filled: false, reason: 'the list did not open' };
 }
 
 /**
@@ -86,6 +130,11 @@ export function fillField(field: DetectedField, value: FillValue): FillOutcome {
       if (!target) return { filled: false, reason: 'no matching option' };
       target.click();
       return { filled: target.checked };
+    }
+    case 'listbox': {
+      const current = shownChoice(first as HTMLElement);
+      if (current) return choiceMatches(current, value) ? { filled: true } : { filled: false, reason: 'already has a selection; left as it is' };
+      return { filled: false, pending: true, reason: 'chosen from the list after the page is filled' };
     }
   }
 }

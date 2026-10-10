@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { EmailTakenError, SYSTEM_USER_ID, createSampleSource } from '@opennjob/core';
-import type { Application, DomainEvent, Job, Passport, Profile, Repository, UsageMeter, UsageRecord, User } from '@opennjob/core';
+import type { Application, DomainEvent, Job, Notification, NotificationDelivery, Passport, Profile, Repository, UsageMeter, UsageRecord, User } from '@opennjob/core';
 
 /**
  * THE REPOSITORY CONTRACT. One suite, run against every implementation of Repository
@@ -122,6 +122,13 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         expect(await repo.getUserById(a)).toEqual(stored);
         expect(await repo.getUserByEmail(stored.email)).toEqual(stored);
         expect(stored).toMatchObject({ acceptedTermsVersion: 'terms-1', acceptedPrivacyVersion: 'privacy-2', consentAt: '2026-10-06T09:00:01.000Z' });
+      });
+
+      it('keeps the e-mail verification time given at creation, and absent when absent', async () => {
+        const id = unique('user-v');
+        await repo.createUser({ ...user(id), emailVerifiedAt: '2026-10-06T09:05:00.000Z' });
+        expect((await repo.getUserById(id))?.emailVerifiedAt).toBe('2026-10-06T09:05:00.000Z');
+        expect((await repo.getUserById(a))?.emailVerifiedAt).toBeUndefined();
       });
 
       it('returns undefined for an unknown id or email', async () => {
@@ -290,6 +297,9 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         const submitted: Application = { ...confirmed, status: 'submitted', submittedAt: '2026-10-06T09:06:00.123Z' };
         await repo.updateApplication(submitted);
         expect(await repo.getApplication(a, app.id)).toEqual(submitted);
+        const edited: Application = { ...confirmed, statement: 'My own wording, edited after the draft. (fictional)' };
+        await repo.updateApplication(edited);
+        expect(await repo.getApplication(a, app.id)).toEqual(edited);
         await expect(repo.updateApplication({ ...app, id: unique('missing') })).rejects.toThrow(/not found/);
       });
 
@@ -334,6 +344,186 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         await repo.appendEvent(system);
         expect(await repo.listEvents(SYSTEM_USER_ID)).toContainEqual(system);
         expect(await repo.listEvents(a)).toEqual([]);
+      });
+    });
+
+    describe('notifications', () => {
+      const note = (id: string, userId: string, extra: Partial<Notification> = {}): Notification => ({ id, userId, eventKey: 'agent.review_needed', category: 'AI agent', severity: 'warning', subject: 'Action needed: review Site Manager (fictional)', body: 'A draft waits for you.', createdAt: '2026-10-06T09:00:00.000Z', ...extra });
+
+      it('stores an inbox per user, newest first, and marks read only the owner\'s', async () => {
+        const [n1, n2, other] = [note(unique('n'), a), note(unique('n'), a, { severity: 'success', createdAt: '2026-10-06T09:01:00.000Z' }), note(unique('n'), b)];
+        for (const n of [n1, other, n2]) await repo.saveNotification(n);
+        expect(await repo.listNotifications(a)).toEqual([n2, n1]);
+        expect(await repo.listNotifications(a, 1)).toEqual([n2]);
+        expect(await repo.markNotificationsRead(b, [n1.id], NOW)).toBe(0); // not B's
+        expect(await repo.markNotificationsRead(a, [n1.id], NOW)).toBe(1);
+        expect(await repo.markNotificationsRead(a, [n1.id], NOW)).toBe(0); // already read
+        expect(await repo.markNotificationsRead(a, undefined, NOW)).toBe(1);
+        expect((await repo.listNotifications(a)).every((n) => n.readAt === NOW)).toBe(true);
+        expect((await repo.listNotifications(b))[0]?.readAt).toBeUndefined();
+      });
+
+      it('keeps a delivery log and preferences per user; deleting the account removes them', async () => {
+        const d = (id: string, userId: string, channel: NotificationDelivery['channel'], status: NotificationDelivery['status']): NotificationDelivery => ({ id, userId, eventKey: 'account.test', channel, status, provider: 'sandbox', at: NOW });
+        const mine = [d(unique('d'), a, 'email', 'logged'), d(unique('d'), a, 'sms', 'skipped')];
+        await repo.appendDelivery(mine[0] as NotificationDelivery); await repo.appendDelivery(d(unique('d'), b, 'inapp', 'delivered')); await repo.appendDelivery(mine[1] as NotificationDelivery);
+        expect(await repo.listDeliveries(a)).toEqual([mine[1], mine[0]]);
+        expect(await repo.getNotificationPreferences(a)).toBeUndefined();
+        const prefs = { email: false, sms: true, push: false, whatsapp: false, muted: ['profile.saved'] };
+        await repo.saveNotificationPreferences(a, prefs);
+        await repo.saveNotificationPreferences(a, { ...prefs, push: true });
+        expect(await repo.getNotificationPreferences(a)).toEqual({ ...prefs, push: true });
+        expect(await repo.getNotificationPreferences(b)).toBeUndefined();
+        await repo.saveNotification(note(unique('n'), a));
+        expect(await repo.deleteUser(a)).toBe(true);
+        expect(await repo.listNotifications(a)).toEqual([]);
+        expect(await repo.listDeliveries(a)).toEqual([]);
+        expect(await repo.getNotificationPreferences(a)).toBeUndefined();
+        expect((await repo.listDeliveries(b)).length).toBe(1);
+      });
+    });
+
+    describe('applying data', () => {
+      let jobId: string;
+      beforeEach(async () => {
+        const j = job(unique('j'));
+        jobId = j.id;
+        await repo.upsertJobs([j]);
+      });
+
+      it('round-trips the new application fields, including the private block, and every status', async () => {
+        const app = application(unique('app'), a, jobId);
+        const full: Application = {
+          ...app,
+          status: 'needs_you',
+          holdReasons: ['A declaration needs your answer: Criminal convictions'],
+          dedupeKey: 'example ltd|site manager|leeds',
+          tailoredCv: 'Site manager (fictional).\nLed a 40-home scheme.',
+          traceFailures: ['Holds a PhD in physics.'],
+          sentDocuments: { statement: 'I led a scheme. (fictional)', tailoredCv: 'Site manager (fictional).', sha256: { statement: 'a'.repeat(64), tailoredCv: 'b'.repeat(64) } },
+        };
+        await repo.createApplication(full);
+        expect(await repo.getApplication(a, full.id)).toEqual(full);
+        for (const status of ['draft', 'confirmed', 'uncertain', 'interview', 'closed'] as const) {
+          await repo.updateApplication({ ...full, status });
+          expect((await repo.getApplication(a, full.id))?.status).toBe(status);
+        }
+        const sent: Application = { ...full, status: 'submitted', submittedAt: NOW, automatic: true, holdReasons: undefined, receipt: { at: NOW, pageUrl: 'https://jobs.example.org/thanks', confirmationText: 'Application received (fictional)', documentsSha256: { statement: 'a'.repeat(64) }, automatic: true } };
+        await repo.updateApplication(sent);
+        expect(await repo.getApplication(a, full.id)).toEqual(sent);
+        // The person's record of what came of it, and a skip, survive a round trip.
+        const answered: Application = { ...sent, status: 'interview', outcome: 'interview', outcomeAt: NOW, skippedAt: NOW, tailoredCvSource: 'llm' };
+        await repo.updateApplication(answered);
+        expect(await repo.getApplication(a, full.id)).toEqual(answered);
+        expect(await repo.deleteApplication(b, full.id)).toBe(false); // not B's
+        expect(await repo.deleteApplication(a, full.id)).toBe(true);
+        expect(await repo.getApplication(a, full.id)).toBeUndefined();
+      });
+
+      it('spec T-06: the documents sent come back byte for byte (line endings, spaces, accents and symbols kept)', async () => {
+        const statement = 'Première ligne (fictional).\r\n  Indented, with a trailing space \nTabs\tand NBSP\u00a0here — £1,250 · ✓ 🙂';
+        const tailoredCv = 'Ligne une (fictional)\n\nLigne trois\r\n';
+        const sentDocuments = { statement, tailoredCv, sha256: { statement: 'd'.repeat(64), tailoredCv: 'e'.repeat(64) } };
+        const app: Application = { ...application(unique('app'), a, jobId), status: 'submitted', submittedAt: NOW, statement, tailoredCv, sentDocuments };
+        await repo.createApplication(app);
+        const back = await repo.getApplication(a, app.id);
+        expect(Buffer.from(back?.sentDocuments?.statement ?? '', 'utf8').equals(Buffer.from(statement, 'utf8'))).toBe(true);
+        expect(Buffer.from(back?.sentDocuments?.tailoredCv ?? '', 'utf8').equals(Buffer.from(tailoredCv, 'utf8'))).toBe(true);
+        expect(back?.sentDocuments).toEqual(sentDocuments);
+      });
+
+      it('stores screening answers and standing authorisation per user, and removes them with the account', async () => {
+        const answers = { noticePeriod: '4 weeks', relocation: true, custom: { 'years managing teams': '6 (fictional)' } };
+        await repo.saveScreeningAnswers(a, answers);
+        expect(await repo.getScreeningAnswers(a)).toEqual(answers);
+        expect(await repo.getScreeningAnswers(b)).toBeUndefined();
+        const auth = { enabled: true, scopeVersion: 'od1-2026-10-06', consentAt: NOW, paused: false };
+        await repo.saveAuthorisation(a, auth);
+        expect(await repo.getAuthorisation(a)).toEqual(auth);
+        await repo.saveAuthorisation(a, { ...auth, enabled: false, revokedAt: NOW });
+        expect((await repo.getAuthorisation(a))?.revokedAt).toBe(NOW);
+        await repo.deleteUser(a);
+        expect(await repo.getScreeningAnswers(a)).toBeUndefined();
+        expect(await repo.getAuthorisation(a)).toBeUndefined();
+      });
+
+      it('verifies e-mail, changes the password hash, and consumes a token once, only before it expires', async () => {
+        await repo.markEmailVerified(a, NOW);
+        await repo.markEmailVerified(a, '2030-01-01T00:00:00.000Z'); // the first date stays
+        expect((await repo.getUserById(a))?.emailVerifiedAt).toBe(NOW);
+        expect((await repo.getUserById(b))?.emailVerifiedAt).toBeUndefined();
+        await repo.updatePasswordHash(a, '$2b$04$fictionalhashfictionalhashfictionalhashfictiona');
+        expect((await repo.getUserById(a))?.passwordHash).toBe('$2b$04$fictionalhashfictionalhashfictionalhashfictiona');
+        const hash = 'c'.repeat(64);
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'reset-password', tokenHash: hash, expiresAt: '2026-10-06T10:00:00.000Z', createdAt: NOW });
+        expect(await repo.consumeAuthToken('verify-email', hash, NOW)).toBeUndefined(); // wrong kind
+        expect(await repo.consumeAuthToken('reset-password', hash, '2026-10-06T11:00:00.000Z')).toBeUndefined(); // expired
+        expect(await repo.consumeAuthToken('reset-password', hash, NOW)).toBe(a);
+        expect(await repo.consumeAuthToken('reset-password', hash, NOW)).toBeUndefined(); // used
+        expect(await repo.listUserIds()).toEqual(expect.arrayContaining([a, b]));
+      });
+
+      it('"keep me signed in": refresh tokens are revoked for one account and one kind only', async () => {
+        const later = '2026-12-01T00:00:00.000Z';
+        const [r1, r2, rb, verify] = ['d', 'e', 'f', '1'].map((c) => c.repeat(64)) as [string, string, string, string];
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'refresh', tokenHash: r1, expiresAt: later, createdAt: NOW });
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'refresh', tokenHash: r2, expiresAt: later, createdAt: NOW });
+        await repo.saveAuthToken({ id: unique('tok'), userId: b, kind: 'refresh', tokenHash: rb, expiresAt: later, createdAt: NOW });
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'verify-email', tokenHash: verify, expiresAt: later, createdAt: NOW });
+        expect(await repo.revokeAuthTokens(a, 'refresh', NOW)).toBe(2);
+        expect(await repo.consumeAuthToken('refresh', r1, NOW)).toBeUndefined();
+        expect(await repo.consumeAuthToken('refresh', r2, NOW)).toBeUndefined();
+        expect(await repo.consumeAuthToken('refresh', rb, NOW)).toBe(b); // B's untouched
+        expect(await repo.consumeAuthToken('verify-email', verify, NOW)).toBe(a); // other kinds untouched
+        expect(await repo.usedAuthToken('refresh', r1)).toEqual({ userId: a, usedAt: NOW });
+        expect(await repo.usedAuthToken('verify-email', r1)).toBeUndefined(); // wrong kind
+        const fresh = '2'.repeat(64);
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'refresh', tokenHash: fresh, expiresAt: later, createdAt: NOW });
+        expect(await repo.usedAuthToken('refresh', fresh)).toBeUndefined(); // not used yet
+      });
+
+      it('platform settings, one-off claims and shared rate-limit windows', async () => {
+        const key = unique('setting');
+        expect(await repo.getPlatformSetting(key)).toBeUndefined();
+        await repo.setPlatformSetting(key, { paused: true });
+        expect(await repo.getPlatformSetting(key)).toEqual({ paused: true });
+        const claim = unique('claim');
+        expect(await repo.claimOnce(claim, NOW)).toBe(true);
+        expect(await repo.claimOnce(claim, NOW)).toBe(false);
+        const rl = unique('rl');
+        expect(await repo.hitRateLimit(rl, NOW)).toBe(1);
+        expect(await repo.hitRateLimit(rl, NOW)).toBe(2);
+        expect(await repo.hitRateLimit(rl, '2026-10-06T09:15:00.000Z')).toBe(1);
+      });
+
+      it('purgeBefore deletes records older than the cutoff and keeps newer ones (DP-5)', async () => {
+        const OLD = '2026-01-01T00:00:00.000Z';
+        const CUTOFF = '2026-06-01T00:00:00.000Z';
+        const oldApp = { ...application(unique('app'), a, jobId), createdAt: OLD };
+        const newApp = application(unique('app'), a, jobId);
+        await repo.createApplication(oldApp);
+        await repo.createApplication(newApp);
+        const oldEv = { ...event(unique('ev'), a, 'profile.updated', {}), occurredAt: OLD };
+        const newEv = event(unique('ev'), a, 'profile.updated', {});
+        await repo.appendEvent(oldEv);
+        await repo.appendEvent(newEv);
+        await repo.saveAuthToken({ id: unique('tok'), userId: a, kind: 'verify-email', tokenHash: unique('h').padEnd(64, '0'), expiresAt: OLD, createdAt: OLD });
+        const counts = await repo.purgeBefore(CUTOFF);
+        expect(counts.applications).toBeGreaterThanOrEqual(1);
+        expect(counts.events).toBeGreaterThanOrEqual(1);
+        expect(counts.tokens).toBeGreaterThanOrEqual(1);
+        expect(await repo.getApplication(a, oldApp.id)).toBeUndefined();
+        expect(await repo.getApplication(a, newApp.id)).toEqual(newApp);
+        const ids = (await repo.listEvents(a)).map((e) => e.id);
+        expect(ids).not.toContain(oldEv.id);
+        expect(ids).toContain(newEv.id);
+        expect(await repo.getUserById(a)).toBeDefined(); // the account itself is never purged by age
+      });
+
+      it('stores the job contract type', async () => {
+        const job = { ...(await repo.getJob(jobId))!, id: unique('sample:ct'), externalId: unique('ct'), contractType: 'contract' as const };
+        await repo.upsertJobs([job]);
+        expect((await repo.getJob(job.id))?.contractType).toBe('contract');
       });
     });
 

@@ -1,0 +1,38 @@
+# Outside uptime check: from GitHub's machines, not the server, every 10 minutes.
+# A failed run is e-mailed by GitHub to the repository owner (Settings > Notifications > Actions).
+# Scheduled workflows run only from the default branch: this file must be on main to start.
+name: uptime
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SITE: https://opennjob.com
+    steps:
+      - name: API answers and its database is up
+        run: |
+          for i in 1 2 3; do
+            body="$(curl -fsS --max-time 10 "$SITE/api/health")" && echo "$body" | grep -q '"status":"ok"' && { echo "API ok"; exit 0; }
+            sleep 20
+          done
+          echo "::error::$SITE/api/health did not answer ok three times in a row"; exit 1
+      - name: Web app is served with its scripts and its script policy
+        run: |
+          page="$(curl -fsS --max-time 10 "$SITE/signin/")"
+          echo "$page" | grep -q '/_next/static/' || { echo "::error::sign-in page is missing its scripts"; exit 1; }
+          echo "$page" | grep -q 'http-equiv="Content-Security-Policy"' || echo "::warning::sign-in page has no script policy tag (an older build?)"
+          echo "web ok"
+      - name: Certificate is valid for at least 14 more days
+        run: |
+          end="$(echo | openssl s_client -servername opennjob.com -connect opennjob.com:443 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)"
+          left=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+          echo "certificate ends $end ($left days)"
+          [ "$left" -ge 14 ] || { echo "::error::TLS certificate ends in $left days"; exit 1; }

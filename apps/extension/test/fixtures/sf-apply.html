@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Apply - Senior Project Manager - Example Networks (fictional)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="queue.js"></script>
+</head>
+<body>
+  <!-- A FICTIONAL application page shaped like SuccessFactors (one long form). ?variant=plain | consent -->
+  <header class="site"><strong>Example Networks (fictional)</strong></header>
+  <form id="fbclc_form" data-name="sf" data-after="thanks" data-careersite-propertyid="applicationForm">
+    <h2>Personal information</h2>
+    <label for="fbclc_fName">First Name *</label><input id="fbclc_fName" name="firstName" autocomplete="given-name" required>
+    <label for="fbclc_lName">Last Name *</label><input id="fbclc_lName" name="lastName" autocomplete="family-name" required>
+    <label for="fbclc_email">Email *</label><input id="fbclc_email" type="email" name="email" required>
+    <label for="fbclc_phone">Phone *</label><input id="fbclc_phone" type="tel" name="phone" required>
+    <h2>Resume</h2>
+    <label for="fbclc_resume">Upload your resume / CV *</label><input id="fbclc_resume" type="file" name="resume" accept=".pdf,.doc,.docx" required>
+    <h2>Questions</h2>
+    <label for="fbclc_notice">What is your notice period? *</label><input id="fbclc_notice" name="notice" required>
+    <div id="consent-box"></div>
+    <p><button type="submit" id="fbclc_submitButton">Apply</button></p>
+  </form>
+  <script>
+    const variant = new URLSearchParams(location.search).get('variant') || 'plain';
+    document.getElementById('fbclc_form').dataset.name = 'sf-' + variant;
+    if (variant === 'consent') document.getElementById('consent-box').innerHTML = '<label><input type="checkbox" id="fbclc_dps" required> I have read and accept the Data Privacy Statement *</label>';
+  </script>
+</body>
+</html>

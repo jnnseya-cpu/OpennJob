@@ -197,3 +197,106 @@ describe('policy: exhaustive sweep', () => {
     }
   });
 });
+
+/**
+ * OD-5 (owner decision, 6 October 2026): right to work and sponsorship answered from the person's
+ * own valid record (fromWorkRights) count as confirmed in hybrid and auto and do not stop auto
+ * mode submitting. Every other sensitive field still does. Same sweep, with three more field
+ * states: a sensitive field answered from the record (optional / required filled / required empty),
+ * and the flag on a non-sensitive field (which must change nothing).
+ */
+describe('policy: exhaustive sweep with right to work from the record (OD-5)', () => {
+  const FIELD_STATES: Array<Omit<PolicyField, 'id'>> = [
+    { sensitive: false },
+    { sensitive: false, required: true, filled: true },
+    { sensitive: false, required: true, filled: false },
+    { sensitive: true },
+    { sensitive: true, required: true, filled: true },
+    { sensitive: true, required: true, filled: false },
+    { sensitive: true, fromWorkRights: true },
+    { sensitive: true, required: true, filled: true, fromWorkRights: true },
+    { sensitive: true, required: true, filled: false, fromWorkRights: true },
+    { sensitive: false, fromWorkRights: true },
+  ];
+
+  function* forms(maxFields: number): Generator<PolicyField[]> {
+    for (let n = 0; n <= maxFields; n++) {
+      const total = FIELD_STATES.length ** n;
+      for (let code = 0; code < total; code++) {
+        const fields: PolicyField[] = [];
+        let c = code;
+        for (let i = 0; i < n; i++) {
+          fields.push({ id: `f${i}`, ...(FIELD_STATES[c % FIELD_STATES.length] as Omit<PolicyField, 'id'>) });
+          c = Math.floor(c / FIELD_STATES.length);
+        }
+        yield fields;
+      }
+    }
+  }
+  function* subsets(ids: string[]): Generator<string[]> {
+    for (let mask = 0; mask < 1 << ids.length; mask++) yield ids.filter((_, i) => mask & (1 << i));
+  }
+
+  /** Written out independently of the implementation. */
+  function expected(mode: Mode, fields: PolicyField[], confirmed: string[]): PolicyDecision {
+    const cleared = (x: PolicyField) => confirmed.includes(x.id) || x.fromWorkRights === true;
+    const sensitive = fields.filter((x) => x.sensitive);
+    if (mode === 'review') return fields.every((x) => confirmed.includes(x.id)) ? 'fill-only' : 'await-confirmation';
+    if (!sensitive.every(cleared)) return 'await-confirmation';
+    if (mode === 'hybrid') return 'fill-only';
+    const otherSensitive = sensitive.filter((x) => x.fromWorkRights !== true);
+    const requiredEmpty = fields.filter((x) => x.required && !x.filled);
+    return otherSensitive.length === 0 && fields.length > 0 && requiredEmpty.length === 0 ? 'submit' : 'fill-only';
+  }
+
+  it('matches the specification and the safety invariants for every combination', () => {
+    let combinations = 0;
+    let submitsWithRecord = 0;
+    const failures: string[] = [];
+    for (const mode of MODES) {
+      for (const fields of forms(3)) {
+        for (const confirmed of subsets(fields.map((x) => x.id))) {
+          combinations += 1;
+          const input: PolicyInput = { mode, fields, confirmedFieldIds: confirmed };
+          const decision = decide(input);
+          const allowed = fieldsAllowedToFill(input);
+          const check = (ok: boolean, rule: string) => {
+            if (!ok && failures.length < 20) failures.push(`${rule}: got ${decision} for ${JSON.stringify(input)}`);
+          };
+          const otherSensitive = fields.filter((x) => x.sensitive && x.fromWorkRights !== true);
+          check(decision === expected(mode, fields, confirmed), 'specification');
+          check(mode === 'auto' || decision !== 'submit', 'review/hybrid never submit');
+          // Any sensitive field not answered from the record still stops submission, confirmed or not.
+          check(otherSensitive.length === 0 || decision !== 'submit', 'other sensitive form never submitted');
+          check(otherSensitive.filter((x) => !confirmed.includes(x.id)).every((x) => !allowed.includes(x.id)), 'other unconfirmed sensitive not fillable');
+          // Review mode ignores the record: the person confirms every field.
+          check(mode !== 'review' || allowed.every((id) => confirmed.includes(id)), 'review fills confirmed only');
+          if (decision === 'submit') {
+            check(fields.every((x) => !x.required || x.filled === true), 'submit implies required filled');
+            if (fields.some((x) => x.sensitive)) submitsWithRecord += 1;
+          }
+          // The flag on a non-sensitive field changes nothing.
+          const withoutStrayFlags = fields.map((x) => {
+            if (x.sensitive) return x;
+            const { fromWorkRights: _stray, ...rest } = x;
+            return rest;
+          });
+          check(decide({ ...input, fields: withoutStrayFlags }) === decision, 'flag on non-sensitive field is inert');
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+    // 3 modes x sum over n=0..3 of (10^n forms x 2^n subsets) = 3 x (1 + 20 + 400 + 8000)
+    expect(combinations).toBe(3 * 8421);
+    expect(submitsWithRecord).toBeGreaterThan(0);
+  });
+
+  it('a form with right to work from the record and a convictions question is never submitted', () => {
+    const fields: PolicyField[] = [
+      { id: 'rtw', sensitive: true, required: true, filled: true, fromWorkRights: true },
+      { id: 'conv', sensitive: true, required: true, filled: true },
+    ];
+    expect(decide({ mode: 'auto', fields, confirmedFieldIds: ['conv'] })).toBe('fill-only');
+    expect(decide({ mode: 'auto', fields: [fields[0] as PolicyField], confirmedFieldIds: [] })).toBe('submit');
+  });
+});

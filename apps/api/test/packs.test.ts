@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createSampleSource } from '@opennjob/core';
+import { createSampleSource, CV_TAILOR_SYSTEM_PROMPT } from '@opennjob/core';
 import type { FetchLike } from '@opennjob/core';
-import { DEFAULT_APPLY_THRESHOLD, applyThresholdOf, buildSources, loadConfig } from '../src/deps';
+import { buildSearchSources, DEFAULT_APPLY_THRESHOLD, applyThresholdOf, buildSources, loadConfig } from '../src/deps';
 import type { OpennJobDeps } from '../src/deps';
 import { PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
+
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
 
 let t: TestApp;
 afterEach(async () => {
@@ -414,7 +417,7 @@ describe('POST /agent/run: the 80% rule', () => {
     await t.api.post('/jobs/refresh').expect(200);
     res = await t.api.post('/agent/run').send({}).expect(200);
     expect(res.body.prepared).toHaveLength(1);
-    expect(llm.calls).toHaveLength(1);
+    expect(llm.calls.filter((c) => c.system !== CV_TAILOR_SYSTEM_PROMPT)).toHaveLength(1); // one call drafts the statement, one rewrites the CV for the advert
     expect(llm.calls[0]?.system).toMatch(/formal French/);
     expect(llm.calls[0]?.system).toMatch(/Use only evidence that is present in the CV/);
     expect(llm.calls[0]?.prompt).toMatch(/NOT IN THE CV\. The applicant states in their profile that they speak French/);
@@ -429,7 +432,7 @@ describe('POST /agent/run: the 80% rule', () => {
     await t.api.post('/agent/run').send({ threshold: 10 }).expect(400); // the threshold is the operator's setting, not a request field
     await t.api.post('/agent/run').send({}).expect(200);
     const event = (await t.deps.repository.listEvents('dev-user')).find((e) => e.type === 'agent.run');
-    expect(event?.payload).toEqual({ threshold: 80, considered: 28, prepared: 4, outOfScope: 0, belowThreshold: 24, ineligible: 0, alreadyPrepared: 0 });
+    expect(event?.payload).toEqual({ threshold: 80, considered: 28, prepared: 4, outOfScope: 0, belowThreshold: 24, ineligible: 0, alreadyPrepared: 0, closedOtherField: 0, closedDuplicates: 0, closedBelowBar: 0, closedBelowPay: 0, redrafted: 0, advertsRead: 0 });
     await t.raw().post('/agent/run').send({}).expect(401);
   });
 });
@@ -444,7 +447,7 @@ describe('POST /employer/jobs: optional, never required', () => {
     expect((await t.api.post('/agent/run').send({}).expect(200)).body.prepared).toHaveLength(4);
     const application = (await t.api.post('/applications').send({ jobId: 'sample:c4', mode: 'review' }).expect(201)).body;
     await t.api.post(`/applications/${application.id}/confirm`).send({ confirmedFields: ['rightToWork'] }).expect(200);
-    await t.api.post(`/applications/${application.id}/submitted`).expect(200);
+    await t.api.post(`/applications/${application.id}/submitted`).send(RECEIPT).expect(200);
     await t.api.get('/interview/questions?pack=con').expect(200);
     // The route is closed, not broken, when no key is configured: the user's token does not open it either.
     const closed = await employerPost(EMPLOYER_JOB, TOKEN).expect(401);
@@ -599,11 +602,10 @@ describe('configuration', () => {
     expect(loadConfig({ OPENNJOB_JWT_SECRET: 'user', OPENNJOB_EMPLOYER_KEY: ' emp ' })).toMatchObject({ jwtSecret: 'user', employerKey: 'emp' });
   });
 
-  it('ADZUNA_COUNTRIES builds one adapter per country code, defaulting to gb', () => {
-    const env = { ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key' };
-    expect(buildSources(env, noFetch).map((s) => s.label)).toEqual(['adzuna']);
-    expect(buildSources({ ...env, ADZUNA_COUNTRIES: 'gb, FR ,de,za,fr' }, noFetch).map((s) => s.label)).toEqual(['adzuna', 'adzuna:fr', 'adzuna:de', 'adzuna:za']);
-    expect(buildSources({ ...env, ADZUNA_COUNTRIES: 'france, 12' }, noFetch).map((s) => s.label)).toEqual(['adzuna']);
+  it('Adzuna searches the countries each person chose (not ADZUNA_COUNTRIES); it is asked only where it operates', () => {
+    const [adzuna] = buildSearchSources({ ADZUNA_APP_ID: 'id', ADZUNA_APP_KEY: 'key', ADZUNA_COUNTRIES: 'gb' }, noFetch);
+    expect(adzuna?.countries).toEqual(expect.arrayContaining(['GB', 'FR', 'DE', 'ZA']));
+    expect(adzuna?.countries).not.toContain('CD');
   });
 
   it('OPENNJOB_DEMO_JOBS loads fictional jobs for every pack', async () => {

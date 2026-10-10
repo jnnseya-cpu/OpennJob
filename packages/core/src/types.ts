@@ -12,7 +12,7 @@ export interface Criterion {
   keywords: string[];
 }
 
-export type JobSource = 'greenhouse' | 'lever' | 'ashby' | 'adzuna' | 'reed' | 'sample' | 'employer';
+export type JobSource = 'greenhouse' | 'lever' | 'ashby' | 'adzuna' | 'reed' | 'reliefweb' | 'jooble' | 'sample' | 'employer' | 'link' | 'workday' | 'successfactors';
 
 /** Industry packs. See packs.ts. */
 export type PackId = 'con' | 'dc' | 'en' | 'rail' | 'fr' | 'hc';
@@ -53,7 +53,14 @@ export interface Job {
   language?: JobLanguage;
   /** Absent means 'discovered'. Matching treats both origins alike. */
   origin?: JobOrigin;
+  /** Permanent or contract, when the source says or the advert makes it clear. Absent = not known. */
+  contractType?: ContractType;
 }
+
+export type ContractType = 'permanent' | 'contract';
+/** What the candidate is looking for. Nothing selected means all three. */
+export type SearchType = 'uk-permanent' | 'uk-contract' | 'international';
+export const SEARCH_TYPES: readonly SearchType[] = ['uk-permanent', 'uk-contract', 'international'];
 
 /**
  * What the candidate asked to see. IF NOTHING IS SELECTED, EVERYTHING IS AVAILABLE:
@@ -66,6 +73,20 @@ export interface Preferences {
   countries: string[];
   /** City names; a city only narrows the country it belongs to. */
   cities: string[];
+  /** UK permanent, UK contract, international. Empty or absent means all three. */
+  searchTypes?: SearchType[];
+  /** The person's own minimum match score (50-100). The agent uses the higher of this and the platform's threshold. */
+  minScore?: number;
+  /**
+   * Companies to search for by name, on top of the CV's job titles (for example an employer and the
+   * contractors it works with). Their jobs are still scored against the CV like any other.
+   */
+  targetEmployers?: string[];
+  /**
+   * The interview rate the person aims for (0-100). With enough recorded outcomes, the agent's
+   * score bar for automatic applications rises until applications at or above it reach this.
+   */
+  targetInterviewRate?: number;
 }
 
 export interface Profile {
@@ -118,13 +139,134 @@ export interface Passport {
   dbs?: DbsDetails;
   /** The user's own confirmation that they have the right to work in the UK. Not a verification. */
   rightToWorkConfirmed: boolean;
+  /**
+   * Right to work and sponsorship per country, each resting on a document the person says they
+   * hold (owner decision OD-5, work-rights.ts). Used to answer those two questions on forms for
+   * jobs in that country without asking again. OpennJob does not see or check the document.
+   */
+  workRights?: WorkRightsRecord[];
   training: TrainingRecord[];
   referees: Referee[];
 }
 
+export interface WorkRightsRecord {
+  /** ISO 3166-1 alpha-2, upper case. */
+  country: string;
+  /** "Do you have the right to work in <country>?" */
+  rightToWork: boolean;
+  /** "Will you now or in future need visa sponsorship to work in <country>?" */
+  requiresSponsorship: boolean;
+  /** The document the person holds as evidence, from WORK_RIGHTS_BASES. */
+  basis: string;
+  /** YYYY-MM-DD. After this date the record is not used. Absent for a document without expiry. */
+  documentExpires?: string;
+  /** ISO time the person confirmed this record. A record without it is never used. */
+  confirmedAt: string;
+}
+
 export const EMPTY_PASSPORT: Passport = { rightToWorkConfirmed: false, training: [], referees: [] };
 
-export type ApplicationStatus = 'draft' | 'confirmed' | 'submitted';
+/**
+ * draft      prepared by the agent, waiting for the person (or for the queue)
+ * confirmed  approved by the person, not yet sent
+ * needs_you  held: a declaration to answer, a question with no stored answer, a failed truth
+ *            check, a CAPTCHA or login wall, the daily limit... (holdReasons says which)
+ * submitted  sent, with a receipt
+ * uncertain  submit was pressed but no confirmation was seen; never retried automatically
+ * interview  the person recorded an interview invitation
+ * closed     finished (rejected, withdrawn, filled)
+ */
+export type ApplicationStatus = 'draft' | 'confirmed' | 'needs_you' | 'submitted' | 'uncertain' | 'interview' | 'closed';
+export type ApplicationOutcome = 'interview' | 'rejected' | 'no-reply';
+export const APPLICATION_OUTCOMES: readonly ApplicationOutcome[] = ['interview', 'rejected', 'no-reply'];
+
+export const APPLICATION_STATUSES: readonly ApplicationStatus[] = ['draft', 'confirmed', 'needs_you', 'submitted', 'uncertain', 'interview', 'closed'];
+
+/** Proof that an application was sent (APP-7). Encrypted at rest. */
+export interface ApplicationReceipt {
+  at: string;
+  pageUrl: string;
+  /** The site's own confirmation text, as shown after submitting. */
+  confirmationText: string;
+  /** SHA-256 of each document sent, as computed where it was sent. */
+  documentsSha256: Record<string, string>;
+  /** true when sent by the agent under standing authorisation. */
+  automatic: boolean;
+}
+
+/** The exact documents an application used (TAI-6). Encrypted at rest. */
+export interface SentDocuments {
+  statement: string;
+  tailoredCv: string;
+  sha256: { statement: string; tailoredCv: string };
+}
+
+/**
+ * OD-6 (owner decision, 8 October 2026): declarations the person answers once, in their own words
+ * of yes or no, and that the agent then answers for them on every form. Encrypted at rest with the
+ * screening answers. Each is the person's own declaration, made in their name.
+ */
+export interface DeclarationAnswers {
+  /** "Have you ever had a criminal conviction or caution (spent or unspent)?" */
+  everConvicted?: boolean;
+  /** "Do you have any conflict of interest with the employer?" */
+  conflictOfInterest?: boolean;
+  /** Tick "I certify the information I have given is true" and privacy / terms consent boxes. */
+  certifyAndConsent?: boolean;
+  /** Answer equality-monitoring questions "Prefer not to say". */
+  equalityPreferNotToSay?: boolean;
+}
+
+/** Ordinary screening answers, stored once and reused (SCR-1). Never declarations (SCR-3). Encrypted at rest. */
+export interface ScreeningAnswers {
+  noticePeriod?: string;
+  salaryExpectation?: string;
+  dayRate?: string;
+  relocation?: boolean;
+  travel?: boolean;
+  yearsExperience?: string;
+  drivingLicence?: boolean;
+  /** OD-6: the person's own answers to declarations, filled on every form (owner decision, 8 October 2026). */
+  declarations?: DeclarationAnswers;
+  /** Answers the person gave to other ordinary questions, keyed by the normalised question. */
+  custom: Record<string, string>;
+}
+
+/** Standing authorisation (APP-2): explicit, dated, revocable. Scope per OD-1. */
+export interface StandingAuthorisation {
+  enabled: boolean;
+  /** The wording the person agreed to (versioned), and when. */
+  scopeVersion: string;
+  consentAt?: string;
+  revokedAt?: string;
+  /** The person's pause (APP-10). */
+  paused: boolean;
+}
+
+/** One in-app notification. Subject and body name at most a job title, an employer and counts. */
+export interface Notification {
+  id: string;
+  userId: string;
+  eventKey: string;
+  category: string;
+  severity: 'info' | 'success' | 'warning' | 'critical';
+  subject: string;
+  body: string;
+  createdAt: string;
+  readAt?: string;
+}
+
+/** One attempt to deliver one event on one channel. No content and no address are kept. */
+export interface NotificationDelivery {
+  id: string;
+  userId: string;
+  eventKey: string;
+  channel: 'email' | 'inapp' | 'sms' | 'push' | 'whatsapp';
+  /** delivered (in-app), sent (provider accepted), logged (sandbox: no provider), skipped (opted out), failed */
+  status: 'delivered' | 'sent' | 'logged' | 'skipped' | 'failed';
+  provider: string;
+  at: string;
+}
 
 export interface Application {
   id: string;
@@ -146,6 +288,27 @@ export interface Application {
   createdAt: string;
   confirmedAt?: string;
   submittedAt?: string;
+  /** Why the application is held for the person (status needs_you). */
+  holdReasons?: string[];
+  /** employer|title|location, normalised: the duplicate check (APP-6). */
+  dedupeKey?: string;
+  /** Sent by the agent under standing authorisation. */
+  automatic?: boolean;
+  /** When the queue was given the go to submit it (counts towards the daily limit). */
+  attemptedAt?: string;
+  /** What came of it, recorded by the person: measures replies per route (OpennJob does not read e-mail). */
+  outcome?: ApplicationOutcome;
+  outcomeAt?: string;
+  /** The person skipped it in the daily review, so it never went out automatically. */
+  skippedAt?: string;
+  /** The tailored CV (TAI-2). Encrypted at rest. */
+  tailoredCv?: string;
+  /** 'llm': rewritten for the advert and traced to the CV at fact level; 'reorder': the CV's own lines, most relevant first. */
+  tailoredCvSource?: 'llm' | 'reorder';
+  /** Sentences of the tailored documents that could not be traced to the source (TAI-3). */
+  traceFailures?: string[];
+  sentDocuments?: SentDocuments;
+  receipt?: ApplicationReceipt;
 }
 
 /**
@@ -163,6 +326,8 @@ export interface User {
   acceptedPrivacyVersion: string;
   /** When the two versions above were accepted. */
   consentAt: string;
+  /** When the address was verified (ACC-2). Absent: not verified. */
+  emailVerifiedAt?: string;
 }
 
 /** Events that belong to no account (an employer's posting, an account deletion) carry this user id. */

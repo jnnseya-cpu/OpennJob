@@ -1,4 +1,5 @@
 import type { Passport, Profile } from './types';
+import { countryNamedIn, workRightsFor } from './work-rights';
 
 /**
  * Form-field classification. Shared by the API and the browser extension (this file has
@@ -57,6 +58,16 @@ export type FieldKey =
   | 'dbsIssueDate'
   | 'dbsUpdateService'
   | 'rightToWork'
+  // "Will you need visa sponsorship?" Answered only from a valid right-to-work record (OD-5).
+  | 'visaSponsorship'
+  // Ordinary screening questions, answered from the person's stored screening answers (SCR-1).
+  | 'noticePeriod'
+  | 'salaryExpectation'
+  | 'dayRate'
+  | 'yearsExperience'
+  | 'relocation'
+  | 'travel'
+  | 'drivingLicence'
   | `referee${1 | 2 | 3}.${'name' | 'email' | 'phone' | 'organisation' | 'relationship'}`;
 
 export interface FieldClassification {
@@ -66,6 +77,11 @@ export interface FieldClassification {
   sensitive: boolean;
   category: SensitiveCategory | null;
   key: FieldKey | null;
+  /**
+   * Right-to-work fields only: the country the question names (ISO code, or 'EU'), when it names
+   * one. Absent means the question is about the job's own country ("this country").
+   */
+  country?: string;
 }
 
 const IGNORED_TYPES = new Set(['hidden', 'file', 'submit', 'button', 'reset', 'image', 'range', 'color']);
@@ -113,7 +129,7 @@ export const SENSITIVE_PATTERNS: ReadonlyArray<{ category: SensitiveCategory; pa
   {
     category: 'right-to-work',
     pattern:
-      /right to work|\bvisa\b|immigration|work permit|work authori[sz]ation|authori[sz]ed to work|sponsorship|settled status|leave to remain|national insurance|\bni number\b|nationality|citizenship|share code|passport|permis de travail|droit de travailler|droit au travail|autorisation de travail|autoris[ée]e? [àa] travailler|titre de s[ée]jour|nationalit[ée]|parrainage/,
+      /right to work|\bvisa\b|immigration|work permit|work authori[sz]ation|authori[sz]ed to work|(eligible|entitled|permitted|allowed) to work|legally (able|allowed|entitled|permitted) to work|sponsorship|settled status|leave to remain|national insurance|\bni number\b|nationality|citizenship|share code|passport|permis de travail|droit de travailler|droit au travail|autorisation de travail|autoris[ée]e? [àa] travailler|titre de s[ée]jour|nationalit[ée]|parrainage/,
   },
   { category: 'conflict-of-interest', pattern: /conflicts? of interests?|conflits? d.int[ée]r[êe]ts?/ },
   { category: 'safeguarding', pattern: /safeguard|barred list|barred from/ },
@@ -132,7 +148,7 @@ export const SENSITIVE_PATTERNS: ReadonlyArray<{ category: SensitiveCategory; pa
     category: 'credential',
     pattern: /professional membership|membership (number|no|grade)\b|\b(mciob|ciob|mrics|rics|apm|ice|riba) (membership|member|number|no)\b|\bcscs\b|num[ée]ro d.adh[ée]rent|carte professionnelle/,
   },
-  { category: 'declaration', pattern: /d[ée]clar|i confirm|i certify|i consent|i agree|sur l.honneur|j.atteste|je certifie|je confirme|j.accepte/ },
+  { category: 'declaration', pattern: /d[ée]clar|i confirm|i certify|i consent|i agree|sur l.honneur|j.atteste|je certifie|je confirme|j.accepte|i (have read and )?(accept|agree to)\b|data privacy statement|privacy (notice|policy|statement)[^?]*\b(accept|agree|consent|read)|terms (and|&) conditions/ },
 ];
 
 /** "Job reference", "vacancy ref" etc. are not about referees. */
@@ -198,6 +214,14 @@ function plainKey(own: string, d: FieldDescriptor): FieldKey | null {
   if (/address (line )?2|addr(ess)? ?2|compl[ée]ment d.adresse|adresse (ligne )?2/.test(own)) return 'addressLine2';
   if (/\btown\b|\bcity\b|\bville\b|\bcommune\b/.test(own)) return 'city';
   if (/address (line )?1|addr(ess)? ?1|street|house (number|name)|(^|\| )address( \||$)|home address|(^|\| )adresse( \||$)|adresse (postale|ligne 1|1)|\brue\b/.test(own)) return 'addressLine1';
+  // Ordinary screening questions (SCR-1). Only reached when nothing sensitive matched first.
+  if (/notice period|period of notice|pr[ée]avis/.test(own)) return 'noticePeriod';
+  if (/(expected|desired|target) (salary|pay)|salary expectations?|salary required|pr[ée]tentions? salariales?/.test(own)) return 'salaryExpectation';
+  if (/day rate|daily rate|taux journalier|tjm/.test(own)) return 'dayRate';
+  if (/years? (of )?(relevant )?experience|how many years|ann[ée]es d.exp[ée]rience/.test(own)) return 'yearsExperience';
+  if (/relocat|willing to move|d[ée]m[ée]nag|mobilit[ée] g[ée]ographique/.test(own)) return 'relocation';
+  if (/willing to travel|able to travel|travel (required|as required)|d[ée]placements?/.test(own)) return 'travel';
+  if (/driving licen[cs]e|driver.?s licen[cs]e|full (uk )?licen[cs]e|permis de conduire/.test(own)) return 'drivingLicence';
   // Languages spoken: an ordinary field, filled from the passport's "Languages" line or the selected languages.
   if (/\blanguages?( you)? (spoken|speak)|(^|\| )languages( \||$)|langues? parl[ée]es?|(^|\| )langues( \||$)/.test(own)) return 'languages';
   return null;
@@ -233,14 +257,23 @@ export function classifyField(d: FieldDescriptor): FieldClassification {
         else if (/membership|\b(mciob|ciob|mrics|rics|apm|ice|riba)\b|adh[ée]rent/.test(own) && !/grade|body|institution|organisme/.test(own)) key = 'professionalMembershipNumber';
       }
       break;
-    case 'right-to-work':
-      // The stored confirmation is about the UK only. It is offered for "right to work" /
-      // "right to work in the UK", and NOT when the question names somewhere else
-      // ("right to work in Ireland") or is asked in French (permis de travail, droit de
-      // travailler: those forms are for another country). Visa and sponsorship questions
-      // are never answered either. The user answers all of those personally.
-      if (/right to work/.test(all) && !/right to work in (?!(the )?(uk|u k|united kingdom|great britain|britain|this country)\b)[a-z]/.test(all)) key = 'rightToWork';
+    case 'right-to-work': {
+      // Only two plain questions get a key: "Do you have the right to work in X?" and "Will you need
+      // visa sponsorship?". Anything worded the other way round ("without sponsorship", "not"),
+      // anything asking for detail (nationality, passport, share code, NI number, visa type or
+      // expiry, evidence) and anything in French is left for the person. See workRightsAnswer().
+      const q = own || all;
+      const turned = /\bwithout\b|\bnot\b|n.t\b|\bno longer\b|\bunless\b|\bexcept\b/.test(q);
+      const detail = /nationality|citizen|passport|share code|national insurance|\bni number\b|status|expir|\btype\b|which|what kind|evidence|document|proof|upload|number|date|explain|details?\b|true|accurate|correct|i declare|i certify|terms|consent/.test(q);
+      const french = /permis|droit|autoris|titre de s|parrainage|nationalit/.test(q);
+      if (!turned && !detail && !french) {
+        if (/sponsor/.test(q) && /\b(require|requires|required|need|needs|needed)\b/.test(q) && !/right to work/.test(q)) key = 'visaSponsorship';
+        else if (!/sponsor|\bvisa\b|permit|immigration/.test(q) && /right to work|(eligible|entitled|authori[sz]ed|permitted|allowed|able) to work|legally (able|allowed|entitled|permitted) to work|work authori[sz]ation/.test(q)) key = 'rightToWork';
+      }
+      const named = countryNamedIn(all);
+      if (key) return { ignore: false, sensitive: true, category, key, ...(named ? { country: named } : {}) };
       break;
+    }
     default:
       // Convictions, security clearance and vetting, conflicts of interest, fitness to
       // practise, safeguarding, health, equality monitoring and free-form declarations
@@ -253,8 +286,14 @@ export function classifyField(d: FieldDescriptor): FieldClassification {
 export type FillValue = string | boolean;
 export type FillValues = Partial<Record<FieldKey, FillValue>>;
 
+/** Where the form is: the job's country and today's date (YYYY-MM-DD), for the right-to-work record. */
+export interface FillOptions {
+  jobCountry?: string;
+  today?: string;
+}
+
 /** Builds the value for every field key from the stored profile, passport and drafted statement. */
-export function buildFillValues(profile: Profile, passport?: Passport, statement?: string): FillValues {
+export function buildFillValues(profile: Profile, passport?: Passport, statement?: string, options: FillOptions = {}): FillValues {
   const v: FillValues = {
     firstName: profile.firstName,
     lastName: profile.lastName,
@@ -284,7 +323,14 @@ export function buildFillValues(profile: Profile, passport?: Passport, statement
     if (passport.dbs?.issueDate) v.dbsIssueDate = passport.dbs.issueDate;
     if (typeof passport.dbs?.onUpdateService === 'boolean') v.dbsUpdateService = passport.dbs.onUpdateService;
     // Only ever offered as "yes" when the user has stored that confirmation. Never offered as "no".
+    // Filled only after the person confirms the field on the form (UK only, see workRightsAnswer).
     if (passport.rightToWorkConfirmed === true) v.rightToWork = true;
+    // OD-5: a valid right-to-work record for the job's country answers both questions, yes or no.
+    const record = options.today ? workRightsFor(passport, options.jobCountry, options.today) : undefined;
+    if (record) {
+      v.rightToWork = record.rightToWork;
+      v.visaSponsorship = record.requiresSponsorship;
+    }
     // credentials.sc (security clearance) and credentials.rtw (countries you can work in) are
     // deliberately NOT turned into fill values: those questions are the user's to answer.
     passport.referees.slice(0, 3).forEach((r, idx) => {
@@ -297,4 +343,48 @@ export function buildFillValues(profile: Profile, passport?: Passport, statement
     });
   }
   return v;
+}
+
+/**
+ * Where the right-to-work answers in a FillValues came from: the job's country and whether they
+ * come from the person's confirmed record (OD-5) rather than the old UK confirmation. Sent with
+ * the values to the extension. undefined when the job's country is not known.
+ */
+export interface WorkRightsContext {
+  country: string;
+  fromRecord: boolean;
+}
+
+export function workRightsContext(passport: Passport | undefined, jobCountry: string | undefined, today: string): WorkRightsContext | undefined {
+  const code = jobCountry?.trim().toUpperCase();
+  if (!code) return undefined;
+  return { country: code, fromRecord: workRightsFor(passport, code, today) !== undefined };
+}
+
+/**
+ * The value for one right-to-work field, and whether it comes from the person's record (OD-5). A
+ * field with fromRecord: true may be filled without the person confirming it on the form, and it
+ * does not stop auto mode from submitting (policy.ts). Every other sensitive field still does.
+ *  - The question must be about the job's country: it names that country or no country at all.
+ *  - A question about the EU or EEA as a whole, or another country, gets nothing.
+ *  - Without a record, only the old UK confirmation ("yes" to right to work) is offered, and only
+ *    after the person confirms it on the form.
+ */
+export function workRightsAnswer(
+  field: Pick<FieldClassification, 'category' | 'key' | 'country'>,
+  values: FillValues,
+  context: WorkRightsContext | undefined,
+): { value: FillValue | undefined; fromRecord: boolean } {
+  const none = { value: undefined, fromRecord: false };
+  if (field.category !== 'right-to-work' || (field.key !== 'rightToWork' && field.key !== 'visaSponsorship')) return none;
+  if (field.country === 'EU') return none;
+  if (context?.fromRecord) {
+    if (field.country && field.country !== context.country) return none;
+    const value = values[field.key];
+    return typeof value === 'boolean' ? { value, fromRecord: true } : none;
+  }
+  // The old confirmation: UK only, "yes" to right to work only, confirmed on the form.
+  const uk = (field.country ?? context?.country ?? 'GB') === 'GB' && (!context || context.country === 'GB');
+  if (field.key === 'rightToWork' && uk && values.rightToWork === true) return { value: true, fromRecord: false };
+  return none;
 }

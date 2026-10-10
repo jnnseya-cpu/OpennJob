@@ -1,10 +1,10 @@
 :root {
-  --ink: #1c2430;
+  --ink: #000000;
   --muted: #5b6675;
   --line: #d9dee5;
   --bg: #ffffff;
   --soft: #f4f6f8;
-  --accent: #14532d;
+  --accent: #1a3c8a; /* OpennJob brand blue */
   --accent-ink: #ffffff;
   --warn: #b45309;
   --warn-bg: #fff7ed;

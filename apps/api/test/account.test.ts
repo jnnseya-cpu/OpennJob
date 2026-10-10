@@ -32,9 +32,9 @@ for (const backend of BACKENDS) {
       const res = await t.api.get('/account/export').expect(200);
       expect(res.headers['content-type']).toMatch(/application\/json/);
       const body = res.body;
-      expect(Object.keys(body).sort()).toEqual(['applications', 'events', 'exportedAt', 'passport', 'profile', 'usage', 'user']);
+      expect(Object.keys(body).sort()).toEqual(['applications', 'events', 'exportedAt', 'notificationDeliveries', 'notificationPreferences', 'notifications', 'passport', 'profile', 'usage', 'user']);
       expect(body.exportedAt).toBe(NOW);
-      expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL, createdAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } });
+      expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL, createdAt: NOW, emailVerified: true, emailVerifiedAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } });
       expect(body.profile).toEqual({ ...PROFILE, preferences: { languages: ['English'], countries: ['GB'], cities: [] } });
       expect(body.profile.cvText).toBe(CV_TEXT);
       expect(body.passport).toEqual(PASSPORT);
@@ -42,8 +42,8 @@ for (const backend of BACKENDS) {
       expect([...body.applications].sort((x: Application, y: Application) => x.id.localeCompare(y.id))).toEqual([...applications].sort((x, y) => x.id.localeCompare(y.id)));
       expect(body.applications.find((a: Application) => a.status === 'confirmed')).toMatchObject({ confirmedFields: ['nmcPin'], statement: expect.stringContaining('registered nurse') });
       expect(body.events.map((e: { type: string }) => e.type)).toEqual(['profile.updated', 'passport.updated', 'jobs.refreshed', 'application.drafted', 'application.confirmed', 'application.drafted']);
-      expect(body.usage).toHaveLength(2);
-      expect(body.usage.every((u: { userId: string; purpose: string }) => u.userId === USER_ID && u.purpose === 'supporting-statement')).toBe(true);
+      expect(body.usage).toHaveLength(4); // one call drafts the statement, one rewrites the CV for the advert, for each of the two applications
+      expect(body.usage.every((u: { userId: string; purpose: string }) => u.userId === USER_ID && ['supporting-statement', 'cv-tailoring'].includes(u.purpose))).toBe(true);
       expect(JSON.stringify(body)).not.toMatch(/passwordHash|password_hash|\$2b\$/);
     });
 
@@ -104,11 +104,11 @@ for (const backend of BACKENDS) {
       const count = async (table: string, column: string): Promise<number> => Number((await pool.query(`SELECT count(*) AS n FROM ${table} WHERE ${column} = $1`, [USER_ID])).rows[0]?.n);
       const tables: [string, string][] = [['users', 'id'], ['profiles', 'user_id'], ['passports', 'user_id'], ['applications', 'user_id'], ['events', 'user_id'], ['usage_records', 'user_id']];
       const before = Object.fromEntries(await Promise.all(tables.map(async ([table, column]) => [table, await count(table, column)])));
-      expect(before).toEqual({ users: 1, profiles: 1, passports: 1, applications: 2, events: 6, usage_records: 2 });
+      expect(before).toEqual({ users: 1, profiles: 1, passports: 1, applications: 2, events: 6, usage_records: 4 }); // a statement and a CV rewrite per application
       await t.api.delete('/account').send({ password: USER_PASSWORD }).expect(200);
       for (const [table, column] of tables) expect(await count(table, column), table).toBe(0);
       // Nothing anywhere in the database still mentions the id (jobs and the system event included).
-      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
+      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs', 'notifications', 'notification_deliveries', 'notification_preferences', 'auth_tokens', 'screening_answers', 'standing_authorisations'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
       expect(everything).not.toContain(USER_ID);
       expect(everything).not.toContain(USER_EMAIL);
     });

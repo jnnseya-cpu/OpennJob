@@ -136,6 +136,19 @@ export function findUnsupportedClaims(statement: string, match: MatchResult): st
     .map((h) => h.criterion.label);
 }
 
+/**
+ * Why the AI was not used, in plain words. The provider's own error text is never copied into the
+ * application: it can hold request ids and account details.
+ */
+export function llmFailureWarning(err: unknown): string {
+  const text = err instanceof Error ? err.message : '';
+  const status = typeof (err as { status?: unknown } | null)?.status === 'number' ? (err as { status: number }).status : undefined;
+  if (/credit balance|insufficient[_ ]quota|billing|quota/i.test(text)) return 'The AI account has no credit left (top it up with the AI provider), so this was drafted without AI.';
+  if (status === 401 || status === 403 || /api key|authenticat/i.test(text)) return 'The AI key was refused (check it on the server), so this was drafted without AI.';
+  if (status === 429 || /rate limit/i.test(text)) return 'The AI was busy (rate limited), so this was drafted without AI. It is rewritten at the next agent run.';
+  return `The AI could not be reached${status ? ` (error ${status})` : ''}, so this was drafted without AI.`;
+}
+
 export async function draftStatement(input: StatementInput, llm?: LlmPort): Promise<StatementDraft> {
   if (!llm) return draftStatementFallback(input);
   const { system, prompt } = buildStatementPrompt(input);
@@ -144,7 +157,7 @@ export async function draftStatement(input: StatementInput, llm?: LlmPort): Prom
     reply = (await llm.complete({ system, prompt, maxTokens: 900 })).text;
   } catch (err) {
     const fb = draftStatementFallback(input);
-    fb.warnings.unshift(`The LLM call failed (${err instanceof Error ? err.message : 'unknown error'}); used the no-LLM draft.`);
+    fb.warnings.unshift(llmFailureWarning(err));
     return fb;
   }
   const { statement } = splitLlmStatement(reply);

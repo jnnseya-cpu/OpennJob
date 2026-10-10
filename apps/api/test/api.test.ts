@@ -1,10 +1,13 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createGreenhouseSource, createLeverSource, createSampleSource } from '@opennjob/core';
-import type { FetchLike } from '@opennjob/core';
+import { createGreenhouseSource, createLeverSource, createSampleSource, CV_TAILOR_SYSTEM_PROMPT } from '@opennjob/core';
+import type { Application, FetchLike } from '@opennjob/core';
 import { CV_TEXT, NOW, PASSPORT, PROFILE, TOKEN, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
+
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
 
 let t: TestApp;
 afterEach(async () => {
@@ -125,12 +128,14 @@ describe('POST /jobs/refresh', () => {
     });
     const res = await t.api.post('/jobs/refresh').expect(200);
     expect(res.body).toEqual({
+      running: false,
       sources: ['sample (fictional demo jobs)', 'greenhouse:examplecare', 'lever:examplesupport', 'lever:broken'],
       fetched: 7,
       duplicatesRemoved: 1,
       stored: 6,
       new: 6,
       criteriaFromLlm: 0,
+      searches: 0,
       errors: [{ source: 'lever:broken', message: 'lever:broken: HTTP 500' }],
     });
     const again = await t.api.post('/jobs/refresh').expect(200);
@@ -190,7 +195,10 @@ describe('GET /jobs/matches', () => {
       expect(rank[i - 1][0] > rank[i][0] || (rank[i - 1][0] === rank[i][0] && rank[i - 1][1] >= rank[i][1])).toBe(true);
     }
     expect(res.body[0].job.id).toBe(NURSE_JOB);
-    expect(new Set(res.body.map((m: { score: number }) => m.score)).size).toBe(3); // three distinct scores, so the order is meaningful
+    // The nurse's CV names neither "healthcare assistant" nor "support worker": those two posts are
+    // capped as another field (OTHER_FIELD_MAX_SCORE), below the nurse post, so the order is meaningful.
+    const others = res.body.filter((m: { job: { id: string } }) => m.job.id !== NURSE_JOB).map((m: { score: number }) => m.score);
+    expect(others.every((s: number) => s <= 30 && s < res.body[0].score)).toBe(true);
     const nurse = res.body[0];
     expect(nurse.eligible).toBe(true);
     expect(nurse.job).toMatchObject({ title: 'Staff Nurse - Acute Medical Ward', requiresRegistration: true, applyUrl: 'https://example.org/jobs/staff-nurse-medical' });
@@ -199,7 +207,9 @@ describe('GET /jobs/matches', () => {
       const weight = (h: { essential: boolean }) => (h.essential ? 2 : 1);
       const total = m.hits.reduce((a: number, h: { essential: boolean }) => a + weight(h), 0);
       const matched = m.hits.filter((h: { matched: boolean }) => h.matched).reduce((a: number, h: { essential: boolean }) => a + weight(h), 0);
-      expect(m.score).toBe(Math.round((100 * matched) / total));
+      const raw = Math.round((100 * matched) / total);
+      // A post the CV does not show (otherField) is capped at 30.
+      expect(m.score).toBe(m.otherField ? Math.min(raw, 30) : raw);
       for (const h of m.hits) {
         if (h.matched) expect(CV_TEXT).toContain(h.evidence);
         else expect(h.evidence).toBeUndefined();
@@ -208,6 +218,16 @@ describe('GET /jobs/matches', () => {
     const med = nurse.hits.find((h: { label: string }) => h.label === 'Medication administration');
     expect(med).toEqual({ label: 'Medication administration', essential: true, matched: true, evidence: 'Completed medication rounds for 28 patients and acted as second checker for controlled drugs.' });
     expect(nurse.hits.find((h: { label: string }) => h.label === 'Venepuncture and cannulation')).toMatchObject({ essential: false, matched: false });
+  });
+
+  it('does not list a job that has already been submitted', async () => {
+    await seeded();
+    expect((await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id)).toContain(HCA_JOB);
+    const app = (await t.api.post('/applications').send({ jobId: HCA_JOB, mode: 'review' }).expect(201)).body as Application;
+    await t.api.post(`/applications/${app.id}/submitted`).send(RECEIPT).expect(200);
+    const after = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
+    expect(after).not.toContain(HCA_JOB); // applied → gone from search
+    expect(after).toContain(NURSE_JOB); // others unaffected
   });
 
   it('filters with ?min= and validates it', async () => {
@@ -261,13 +281,14 @@ describe('applications', () => {
       ]),
     );
     // The statement prompt went to the LLM with the essential criteria and the CV.
-    expect(llm.calls).toHaveLength(1);
+    expect(llm.calls.filter((c) => c.system !== CV_TAILOR_SYSTEM_PROMPT)).toHaveLength(1); // one call drafts the statement, one rewrites the CV for the advert
+    expect(llm.calls.filter((c) => c.system === CV_TAILOR_SYSTEM_PROMPT)).toHaveLength(1);
     expect(llm.calls[0]?.prompt).toContain('Medication administration');
     expect(llm.calls[0]?.prompt).toContain(CV_TEXT);
     const usage = (await t.api.get('/usage').expect(200)).body;
-    expect(usage.totals.calls).toBe(1);
+    expect(usage.totals.calls).toBe(2);
     expect(usage.totals.acu).toBeGreaterThan(0);
-    expect(usage.records[0]).toMatchObject({ userId: 'dev-user', purpose: 'supporting-statement', at: NOW });
+    expect(usage.records.map((r: { purpose: string }) => r.purpose).sort()).toEqual(['cv-tailoring', 'supporting-statement']);
   });
 
   it('drafts from CV sentences only when no LLM is configured, and lists gaps separately', async () => {
@@ -307,21 +328,54 @@ describe('applications', () => {
     await t.api.post(`/applications/${id}/confirm`).send({}).expect(400);
     await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: [] }).expect(400);
     await t.api.post('/applications/unknown/confirm').send({ confirmedFields: ['nmcPin'] }).expect(404);
-    await t.api.post('/applications/unknown/submitted').expect(404);
+    await t.api.post('/applications/unknown/submitted').send(RECEIPT).expect(404);
+    // APP-7: "submitted" needs the confirmation page's address and the site's own confirmation text.
+    await t.api.post(`/applications/${id}/submitted`).send({}).expect(400);
+    await t.api.post(`/applications/${id}/submitted`).send({ pageUrl: RECEIPT.pageUrl }).expect(400);
+    await t.api.post(`/applications/${id}/submitted`).send({ ...RECEIPT, confirmationText: '  ' }).expect(400);
+    await t.api.post(`/applications/${id}/submitted`).send({ ...RECEIPT, pageUrl: 'javascript:alert(1)' }).expect(400);
 
     const first = await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['nmcPin', 'rightToWork'] }).expect(200);
     expect(first.body).toMatchObject({ status: 'confirmed', confirmedFields: ['nmcPin', 'rightToWork'], confirmedAt: NOW });
     const second = await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['rightToWork', 'referee1.email'] }).expect(200);
     expect(second.body.confirmedFields).toEqual(['nmcPin', 'rightToWork', 'referee1.email']);
 
-    const done = await t.api.post(`/applications/${id}/submitted`).expect(200);
-    expect(done.body).toMatchObject({ status: 'submitted', submittedAt: NOW });
-    await t.api.post(`/applications/${id}/submitted`).expect(409);
+    const done = await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(200);
+    expect(done.body).toMatchObject({ status: 'submitted', submittedAt: NOW, receipt: { at: NOW, ...RECEIPT, automatic: false } });
+    expect(done.body.receipt.documentsSha256).toEqual(done.body.sentDocuments.sha256);
+    await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(409);
     await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['x'] }).expect(409);
 
     const one = await t.api.get(`/applications/${id}`).expect(200);
     expect(one.body.status).toBe('submitted');
     await t.api.get('/applications/unknown').expect(404);
+  });
+
+  it("PUT /applications/:id/statement saves the user's own edit; validated, and refused once submitted", async () => {
+    await seeded();
+    const id = (await t.api.post('/applications').send({ jobId: NURSE_JOB, mode: 'hybrid' }).expect(201)).body.id as string;
+    const edited = 'I give medication rounds for eight patients a shift and escalate with SBAR. (fictional edit)';
+
+    await t.api.put(`/applications/${id}/statement`).send({}).expect(400);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: '   ' }).expect(400);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: edited, status: 'submitted' }).expect(400);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: 'x'.repeat(20_001) }).expect(400);
+    await t.api.put('/applications/unknown/statement').send({ statement: edited }).expect(404);
+
+    const saved = await t.api.put(`/applications/${id}/statement`).send({ statement: `  ${edited}  ` }).expect(200);
+    // TAI-3: the edit is traced like a draft. The CV says 28 patients, the edit says eight, so it is held for the person.
+    expect(saved.body).toMatchObject({ id, statement: edited, status: 'needs_you', holdReasons: ['trace-check'] });
+    expect(saved.body.traceFailures).toEqual(['Statement: "I give medication rounds for eight patients a shift and escalate with SBAR." mentions eight, which your CV does not contain.']);
+    expect((await t.api.get(`/applications/${id}`).expect(200)).body.statement).toBe(edited);
+
+    const events = await t.deps.repository.listEvents('dev-user');
+    const event = events.find((e) => e.type === 'application.statement.edited');
+    expect(event?.payload).toEqual({ applicationId: id, statementCharacters: edited.length });
+    expect(JSON.stringify(events)).not.toContain('SBAR');
+
+    await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(200);
+    await t.api.put(`/applications/${id}/statement`).send({ statement: 'changed after sending' }).expect(409);
+    expect((await t.api.get(`/applications/${id}`).expect(200)).body.statement).toBe(edited);
   });
 
   it('GET /applications lists every application', async () => {
@@ -337,7 +391,7 @@ describe('applications', () => {
     await seeded({ llm: scriptedLlm() });
     const id = (await t.api.post('/applications').send({ jobId: NURSE_JOB }).expect(201)).body.id as string;
     await t.api.post(`/applications/${id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(200);
-    await t.api.post(`/applications/${id}/submitted`).expect(200);
+    await t.api.post(`/applications/${id}/submitted`).send(RECEIPT).expect(200);
     const events = await t.deps.repository.listEvents('dev-user');
     expect(events.map((e) => e.type)).toEqual(['profile.updated', 'passport.updated', 'jobs.refreshed', 'application.drafted', 'application.confirmed', 'application.submitted']);
     expect(events[3]?.payload).toMatchObject({ applicationId: id, jobId: NURSE_JOB, mode: 'hybrid', statementSource: 'llm' });

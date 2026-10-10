@@ -1,10 +1,19 @@
-import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EmailTakenError, SYSTEM_USER_ID } from '@opennjob/core';
 import type { User } from '@opennjob/core';
-import { hashPassword, passwordProblems, signAccessToken, verifyPassword } from './auth';
+import { createHash, randomBytes } from 'node:crypto';
+import { hashPassword, passwordProblems, passwordVersion, signAccessToken, verifyPassword } from './auth';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
-import type { DeleteAccountInput, LoginInput, RegisterInput } from './schemas';
+import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput, RefreshInput } from './schemas';
+
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+/** "Keep me signed in" lasts 60 days from the last use. */
+const REFRESH_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+/** A refresh token used again within this long is a second tab, not a copied token. */
+const REUSE_GRACE_MS = 60_000;
+const RESET_TTL_MS = 60 * 60 * 1000;
+const tokenHash = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
 
 /** What the API says about an account. Never the password hash. */
 function publicUser(user: User) {
@@ -12,6 +21,8 @@ function publicUser(user: User) {
     id: user.id,
     email: user.email,
     createdAt: user.createdAt,
+    emailVerified: Boolean(user.emailVerifiedAt),
+    ...(user.emailVerifiedAt ? { emailVerifiedAt: user.emailVerifiedAt } : {}),
     consent: { acceptedTermsVersion: user.acceptedTermsVersion, acceptedPrivacyVersion: user.acceptedPrivacyVersion, acceptedAt: user.consentAt },
   };
 }
@@ -27,16 +38,49 @@ export class AccountService {
     return this.deps.clock().toISOString();
   }
 
-  private token(userId: string) {
-    return signAccessToken(userId, this.deps.config.jwtSecret, this.deps.config.jwtTtlSeconds, this.deps.clock());
+  private token(user: User) {
+    return signAccessToken(user.id, this.deps.config.jwtSecret, this.deps.config.jwtTtlSeconds, this.deps.clock(), passwordVersion(user.passwordHash));
+  }
+
+  /** The address a one-time link points at: the web app when its address is known, otherwise the token alone. */
+  private link(path: string, token: string): string | undefined {
+    const base = this.deps.config.brand?.appUrl;
+    return base ? `${base.replace(/\/+$/, '')}/${path}/?token=${token}` : undefined;
+  }
+
+  /** A fresh one-time token: only its SHA-256 is stored. The token itself goes into one e-mail and nowhere else. */
+  private async newToken(userId: string, kind: 'verify-email' | 'reset-password' | 'refresh', ttlMs: number): Promise<string> {
+    const token = randomBytes(32).toString('base64url');
+    const at = this.deps.clock();
+    await this.deps.repository.saveAuthToken({ id: this.deps.newId(), userId, kind, tokenHash: tokenHash(token), expiresAt: new Date(at.getTime() + ttlMs).toISOString(), createdAt: at.toISOString() });
+    return token;
+  }
+
+  private async sendVerification(user: User): Promise<void> {
+    const token = await this.newToken(user.id, 'verify-email', VERIFY_TTL_MS);
+    const link = this.link('verify-email', token);
+    await this.deps.notifier?.sendDirect(user.id, 'account.email_verification_required', {
+      text: link ? 'Confirm your address:' : `Your confirmation code: ${token}\nEnter it on the Verify e-mail page.`,
+      html: link ? '<p>Confirm your address:</p>' : `<p>Your confirmation code:</p><p style="font-family:monospace;font-size:15px">${token}</p><p>Enter it on the Verify e-mail page.</p>`,
+      ...(link ? { linkUrl: link } : {}),
+    });
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'auth.verification_sent', userId: user.id, occurredAt: this.now(), payload: {} });
   }
 
   versions() {
-    return { termsVersion: this.deps.config.termsVersion, privacyVersion: this.deps.config.privacyVersion };
+    return {
+      termsVersion: this.deps.config.termsVersion,
+      privacyVersion: this.deps.config.privacyVersion,
+      registration: this.deps.config.registrationAllowlist.length > 0 ? ('invite' as const) : ('open' as const),
+    };
   }
 
   async register(input: RegisterInput) {
-    const { termsVersion, privacyVersion } = this.deps.config;
+    const { termsVersion, privacyVersion, registrationAllowlist } = this.deps.config;
+    // Private pilot: only invited addresses may create an account. The email schema has already lower-cased it.
+    if (registrationAllowlist.length > 0 && !registrationAllowlist.includes(input.email)) {
+      throw new ForbiddenException('Registration is by invitation only during the pilot');
+    }
     // Consent is to a named version. Accepting some other version is not accepting this one.
     if (input.acceptedTermsVersion !== termsVersion || input.acceptedPrivacyVersion !== privacyVersion) {
       throw new BadRequestException({
@@ -67,7 +111,8 @@ export class AccountService {
       throw err;
     }
     await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.registered', userId: user.id, occurredAt: at, payload: { termsVersion: user.acceptedTermsVersion, privacyVersion: user.acceptedPrivacyVersion } });
-    return { user: publicUser(user), ...this.token(user.id) };
+    await this.sendVerification(user);
+    return { user: publicUser(user), ...this.token(user) };
   }
 
   async login(input: LoginInput) {
@@ -76,7 +121,96 @@ export class AccountService {
     const ok = await verifyPassword(input.password, user?.passwordHash ?? (await this.dummyHash));
     // One message for "no such account" and "wrong password".
     if (!user || !ok) throw new UnauthorizedException('Email address or password is incorrect');
-    return { user: publicUser(user), ...this.token(user.id) };
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.signed_in', userId: user.id, occurredAt: this.now(), payload: { remember: input.remember === true } });
+    return { user: publicUser(user), ...this.token(user), ...(input.remember ? { refreshToken: await this.newToken(user.id, 'refresh', REFRESH_TTL_MS) } : {}) };
+  }
+
+  /**
+   * "Keep me signed in": a refresh token gives a new access token and a new refresh token. The old
+   * one is used up (rotation), so a copied token works once at most; a used, revoked or expired
+   * one is refused. A password reset or signing out revokes them all.
+   */
+  async refresh(input: RefreshInput) {
+    const hash = tokenHash(input.refreshToken);
+    const userId = await this.deps.repository.consumeAuthToken('refresh', hash, this.now());
+    if (!userId) await this.onReuse(hash);
+    const user = userId ? await this.deps.repository.getUserById(userId) : undefined;
+    if (!user) throw new UnauthorizedException('Your session has ended. Sign in again.');
+    return { user: publicUser(user), ...this.token(user), refreshToken: await this.newToken(user.id, 'refresh', REFRESH_TTL_MS) };
+  }
+
+  /**
+   * A refresh token used again after it was replaced may have been copied: every kept sign-in of
+   * that account ends. Two tabs refreshing at the same moment are not that, so a token used in the
+   * last REUSE_GRACE_MS does not count.
+   */
+  private async onReuse(hash: string): Promise<void> {
+    const used = await this.deps.repository.usedAuthToken('refresh', hash);
+    if (!used || this.deps.clock().getTime() - Date.parse(used.usedAt) < REUSE_GRACE_MS) return;
+    const revoked = await this.deps.repository.revokeAuthTokens(used.userId, 'refresh', this.now());
+    if (revoked > 0) await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'auth.refresh_reused', userId: used.userId, occurredAt: this.now(), payload: { revoked } });
+  }
+
+  /** Signing out: the refresh token, and with it every other one for this account, stops working. */
+  async logout(input: RefreshInput) {
+    const userId = await this.deps.repository.consumeAuthToken('refresh', tokenHash(input.refreshToken), this.now());
+    if (userId) await this.deps.repository.revokeAuthTokens(userId, 'refresh', this.now());
+    return { signedOut: true };
+  }
+
+  /** ACC-2: the link from the e-mail confirms the address. A used or expired link does nothing. */
+  async verifyEmail(input: VerifyEmailInput) {
+    const userId = await this.deps.repository.consumeAuthToken('verify-email', tokenHash(input.token), this.now());
+    if (!userId) throw new BadRequestException('This link has expired or has already been used. Ask for a new one from Account.');
+    await this.deps.repository.markEmailVerified(userId, this.now());
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.email_verified', userId, occurredAt: this.now(), payload: {} });
+    return { verified: true };
+  }
+
+  async resendVerification(userId: string) {
+    const user = await this.mustGetUser(userId);
+    if (user.emailVerifiedAt) return { verified: true, sent: false };
+    const minute = Math.floor(this.deps.clock().getTime() / 60_000);
+    if ((await this.deps.repository.hitRateLimit(`verify:${userId}`, new Date(minute * 60_000).toISOString())) > 1) throw new ConflictException('A link was sent less than a minute ago');
+    await this.sendVerification(user);
+    return { verified: false, sent: true };
+  }
+
+  /** ACC-3: always the same reply, so the answer never says whether an address has an account. */
+  async forgotPassword(input: ForgotPasswordInput) {
+    const user = await this.deps.repository.getUserByEmail(input.email);
+    if (user) {
+      const token = await this.newToken(user.id, 'reset-password', RESET_TTL_MS);
+      const link = this.link('reset-password', token);
+      await this.deps.notifier?.sendDirect(user.id, 'security.password_reset_link', {
+        text: link ? 'Choose a new password:' : `Your reset code: ${token}\nEnter it on the Reset password page.`,
+        html: link ? '<p>Choose a new password:</p>' : `<p>Your reset code:</p><p style="font-family:monospace;font-size:15px">${token}</p>`,
+        ...(link ? { linkUrl: link } : {}),
+      });
+      await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'auth.password_reset_requested', userId: user.id, occurredAt: this.now(), payload: {} });
+    }
+    return { sent: true };
+  }
+
+  async resetPassword(input: ResetPasswordInput) {
+    const refuse = (problems: string[]) =>
+      new BadRequestException({ statusCode: 400, error: 'Bad Request', message: 'Validation failed', issues: problems.map((message) => ({ path: 'password', message })) });
+    // The rules that need no account are checked first, so a weak password does not use up the link.
+    const early = passwordProblems(input.password);
+    if (early.length > 0) throw refuse(early);
+    const userId = await this.deps.repository.consumeAuthToken('reset-password', tokenHash(input.token), this.now());
+    if (!userId) throw new BadRequestException('This link has expired or has already been used. Ask for a new one.');
+    const user = await this.mustGetUser(userId);
+    const problems = passwordProblems(input.password, user.email);
+    if (problems.length > 0) throw refuse(problems);
+    const hash = await hashPassword(input.password, this.deps.config.bcryptRounds);
+    await this.deps.repository.updatePasswordHash(userId, hash);
+    // Every "keep me signed in" device has to sign in again with the new password.
+    await this.deps.repository.revokeAuthTokens(userId, 'refresh', this.now());
+    // Following the link proves the address too.
+    if (!user.emailVerifiedAt) await this.deps.repository.markEmailVerified(userId, this.now());
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.password_changed', userId, occurredAt: this.now(), payload: {} });
+    return { reset: true };
   }
 
   private async mustGetUser(userId: string): Promise<User> {
@@ -93,7 +227,7 @@ export class AccountService {
   async exportAccount(userId: string) {
     const user = await this.mustGetUser(userId);
     const { repository, usageMeter } = this.deps;
-    return {
+    const data = {
       exportedAt: this.now(),
       user: publicUser(user),
       profile: (await repository.getProfile(userId)) ?? null,
@@ -101,7 +235,12 @@ export class AccountService {
       applications: await repository.listApplications(userId),
       events: await repository.listEvents(userId),
       usage: await usageMeter.list(userId),
+      notifications: await repository.listNotifications(userId, 100_000),
+      notificationDeliveries: await repository.listDeliveries(userId, 100_000),
+      notificationPreferences: (await repository.getNotificationPreferences(userId)) ?? null,
     };
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.exported', userId, occurredAt: this.now(), payload: {} });
+    return data;
   }
 
   /**
@@ -115,6 +254,8 @@ export class AccountService {
     await this.deps.repository.deleteUser(userId);
     // Logged against no account: the id of a deleted account is not kept.
     await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.deleted', userId: SYSTEM_USER_ID, occurredAt: this.now(), payload: {} });
+    // Mandatory notice to the address the account had. Nothing about it is stored.
+    await this.deps.notifier?.accountDeleted(user.email);
     return { deleted: true };
   }
 }

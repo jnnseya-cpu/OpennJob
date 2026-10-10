@@ -329,6 +329,44 @@ test.describe('agency quick-apply form (no declarations)', () => {
   });
 });
 
+test.describe('OD-6: declarations answered from the person\'s own answers (owner decision, 8 October 2026)', () => {
+  const ALL = { everConvicted: false, conflictOfInterest: false, certifyAndConsent: true, equalityPreferNotToSay: true };
+
+  test('auto: every declaration answered from the record, so the form is submitted', async ({ page }) => {
+    await openFixture(page, 'declarations-application.html');
+    const report = await runAgent(page, 'auto', [], { declarations: ALL });
+    const form = await formSnapshot(page);
+    expect(form['d-conv-no']).toBe(true);
+    expect(form['d-coi-no']).toBe(true);
+    expect(form['d-gender']).toBe('Prefer not to say');
+    expect(form['d-eth-x']).toBe(true);
+    expect(form['d-certify']).toBe(true);
+    expect(form['d-privacy']).toBe(true);
+    expect(report.decision).toBe('submit');
+    expect(report.submitted).toBe(true);
+    expect((await fixtureLog(page)).submitCount).toBe(1);
+  });
+
+  test('auto: one declaration not answered in the record still stops the submit, and nothing is assumed', async ({ page }) => {
+    await openFixture(page, 'declarations-application.html');
+    const report = await runAgent(page, 'auto', [], { declarations: { ...ALL, everConvicted: undefined } as unknown as Record<string, boolean> });
+    const form = await formSnapshot(page);
+    expect(form['d-conv-no']).toBe(false);
+    expect(form['d-conv-yes']).toBe(false);
+    expect(report.submitted).toBe(false);
+    expect((await fixtureLog(page)).submitCount).toBe(0);
+  });
+
+  test('no recorded answers: nothing sensitive is filled and nothing is submitted, as before', async ({ page }) => {
+    await openFixture(page, 'declarations-application.html');
+    const report = await runAgent(page, 'auto', []);
+    const form = await formSnapshot(page);
+    expect(form['d-certify']).toBe(false);
+    expect(form['d-gender']).toBe('');
+    expect(report.submitted).toBe(false);
+  });
+});
+
 test.describe('pages the agent must stop on', () => {
   for (const mode of MODES) {
     test(`${mode}: stops on the CAPTCHA fixture, fills nothing, does not submit, and tells the user`, async ({ page }) => {
@@ -354,6 +392,20 @@ test.describe('pages the agent must stop on', () => {
     });
   }
 
+  test('an invisible reCAPTCHA alone (badge, no puzzle) does not stop the fill, and is not touched (owner decision, 8 October 2026)', async ({ page }) => {
+    await openFixture(page, 'invisible-recaptcha-application.html');
+    const report = await runAgent(page, 'hybrid', []);
+    expect(report.blockers).toEqual([]);
+    expect(report.status).not.toBe('blocked');
+    expect(report.submitted).toBe(false); // hybrid never submits
+    const filled = await formSnapshot(page);
+    expect(filled['i-name']).not.toBe('');
+    expect(filled['i-email']).not.toBe('');
+    // The reCAPTCHA parts are left exactly as they were.
+    expect(filled['g-recaptcha-response']).toBe('');
+    await expect(page.locator('.g-recaptcha')).not.toHaveAttribute('data-opennjob-state', /.*/);
+  });
+
   test('stops on a login wall and never fills the email or password', async ({ page }) => {
     await openFixture(page, LOGIN);
     for (const mode of MODES) {
@@ -364,5 +416,25 @@ test.describe('pages the agent must stop on', () => {
     }
     expect(await formSnapshot(page)).toEqual({ 'login-email': '', 'login-password': '' });
     expect((await fixtureLog(page)).submitClicks).toBe(0);
+  });
+});
+
+test.describe('older portals: labels written beside the box, not linked to it', () => {
+  test('reads the label from the table cell or the text before the box, fills ordinary fields, leaves the declaration', async ({ page }) => {
+    await openFixture(page, 'sf-classic.html');
+    const report = await runAgent(page, 'hybrid');
+    const byId = Object.fromEntries(report.fields.map((f) => [f.id, f]));
+    expect(byId['c-first']).toMatchObject({ label: 'First Name *', key: 'firstName', state: 'filled' });
+    expect(byId['c-last']).toMatchObject({ key: 'lastName', state: 'filled' });
+    expect(byId['c-email']).toMatchObject({ key: 'email', state: 'filled' });
+    expect(byId['c-phone']?.key).toBe('phone');
+    expect(byId['c-post']?.key).toBe('postcode');
+    // A conviction question stays the person's, however its label is written.
+    expect(byId['c-conv']).toMatchObject({ sensitive: true, category: 'convictions' });
+    expect(byId['c-conv']?.state).not.toBe('filled');
+    expect(byId['c-statement']?.label).toBe('Cover letter');
+    const values = await formSnapshot(page);
+    expect(values['c-first']).toBe(PROFILE.firstName);
+    expect(values['c-conv']).toBe('');
   });
 });

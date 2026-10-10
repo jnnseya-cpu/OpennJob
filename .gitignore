@@ -18,3 +18,26 @@ playwright/.cache/
 .idea/
 .vscode/
 *.log
+
+# Next.js (apps/web)
+.next/
+out/
+
+# career-agent (Python): personal data, local state, generated packs
+career-agent/data/local/
+career-agent/dashboard/data.json
+career-agent/.venv/
+**/__pycache__/
+*.sqlite3
+
+# Written by deploy/install-hostinger.sh on the server
+/oj
+/compose.local.yml
+/.env.production
+/.auto-update.lock
+/.auto-update.rejected
+
+# Research notes and reports written during sessions (not part of the product)
+/research_notes/
+/reports/
+career-sites.log

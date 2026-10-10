@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import type { PoolConfig } from 'pg';
 import { EmailTakenError, SYSTEM_USER_ID, dedupeKey } from '@opennjob/core';
-import type { Application, DomainEvent, Job, Passport, Profile, Repository, UsageMeter, UsageRecord, UsageTotals, User } from '@opennjob/core';
+import type { Application, AuthToken, DomainEvent, Job, Notification, NotificationDelivery, NotificationPreferences, Passport, Profile, Repository, ScreeningAnswers, StandingAuthorisation, UsageMeter, UsageRecord, UsageTotals, User } from '@opennjob/core';
 import type { FieldCipher } from './crypto';
 import { PlaintextCipher } from './crypto';
 
@@ -36,6 +36,7 @@ const userOf = (r: Row): User => ({
   acceptedTermsVersion: r.accepted_terms_version as string,
   acceptedPrivacyVersion: r.accepted_privacy_version as string,
   consentAt: iso(r.consent_at),
+  ...(r.email_verified_at ? { emailVerifiedAt: iso(r.email_verified_at) } : {}),
 });
 
 const jobOf = (r: Row): Job =>
@@ -63,12 +64,13 @@ const jobOf = (r: Row): Job =>
     region: r.region as Job['region'] | null,
     language: r.language as Job['language'] | null,
     origin: r.origin as Job['origin'] | null,
+    contractType: r.contract_type as Job['contractType'] | null,
   });
 
 const JOB_COLUMNS = [
   'id', 'source', 'external_id', 'title', 'employer', 'location', 'url', 'apply_url', 'description', 'salary_min', 'salary_max',
   'employment_type', 'posted_at', 'criteria', 'criteria_source', 'requires_registration', 'required_credential', 'pack', 'country',
-  'city', 'region', 'language', 'origin', 'dedupe_key',
+  'city', 'region', 'language', 'origin', 'dedupe_key', 'contract_type',
 ] as const;
 
 /**
@@ -89,9 +91,9 @@ export class PostgresRepository implements Repository {
   async createUser(user: User): Promise<void> {
     try {
       await this.db.query(
-        `INSERT INTO users (id, email, password_hash, created_at, accepted_terms_version, accepted_privacy_version, consent_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [user.id, user.email, user.passwordHash, user.createdAt, user.acceptedTermsVersion, user.acceptedPrivacyVersion, user.consentAt],
+        `INSERT INTO users (id, email, password_hash, created_at, accepted_terms_version, accepted_privacy_version, consent_at, email_verified_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [user.id, user.email, user.passwordHash, user.createdAt, user.acceptedTermsVersion, user.acceptedPrivacyVersion, user.consentAt, user.emailVerifiedAt ?? null],
       );
     } catch (err) {
       const e = err as { code?: string; constraint?: string };
@@ -181,7 +183,7 @@ export class PostgresRepository implements Repository {
         j.id, j.source, j.externalId, j.title, j.employer, j.location, j.url, j.applyUrl ?? null, j.description, j.salaryMin ?? null,
         j.salaryMax ?? null, j.employmentType ?? null, j.postedAt ?? null, json(j.criteria), j.criteriaSource, j.requiresRegistration,
         j.requiredCredential ?? null, j.pack ?? null, j.country ?? null, j.city ?? null, j.region ?? null, j.language ?? null,
-        j.origin ?? null, dedupeKey(j),
+        j.origin ?? null, dedupeKey(j), j.contractType ?? null,
       ]);
       if (rows[0]?.inserted === true) added += 1;
     }
@@ -221,6 +223,10 @@ export class PostgresRepository implements Repository {
       createdAt: iso(r.created_at),
       confirmedAt: r.confirmed_at === null ? null : iso(r.confirmed_at),
       submittedAt: r.submitted_at === null ? null : iso(r.submitted_at),
+      holdReasons: (r.hold_reasons as string[] | null)?.length ? (r.hold_reasons as string[]) : null,
+      dedupeKey: r.dedupe_key as string | null,
+      automatic: r.automatic === true ? true : null,
+      ...(r.private_data ? (JSON.parse(this.cipher.decrypt(r.private_data as string, `application.private:${userId}:${id}`)) as Partial<Application>) : {}),
     });
   }
 
@@ -229,15 +235,31 @@ export class PostgresRepository implements Repository {
       a.id, a.userId, a.jobId, a.jobTitle, a.employer, a.applyUrl, a.mode, a.status,
       this.cipher.encrypt(a.statement, `application.statement:${a.userId}:${a.id}`),
       a.statementSource, json(a.gaps), json(a.warnings), a.score, json(a.confirmedFields), a.createdAt, a.confirmedAt ?? null, a.submittedAt ?? null,
+      json(a.holdReasons ?? []), a.dedupeKey ?? null, a.automatic === true, this.privateDataOf(a),
     ];
+  }
+
+  /** The tailored CV, trace failures, sent documents, receipt, attempt time, outcome and skip: one encrypted value. */
+  private privateDataOf(a: Application): string | null {
+    const p: Partial<Application> = {};
+    if (a.tailoredCv !== undefined) p.tailoredCv = a.tailoredCv;
+    if (a.tailoredCvSource !== undefined) p.tailoredCvSource = a.tailoredCvSource;
+    if (a.traceFailures !== undefined) p.traceFailures = a.traceFailures;
+    if (a.sentDocuments !== undefined) p.sentDocuments = a.sentDocuments;
+    if (a.receipt !== undefined) p.receipt = a.receipt;
+    if (a.attemptedAt !== undefined) p.attemptedAt = a.attemptedAt;
+    if (a.outcome !== undefined) p.outcome = a.outcome;
+    if (a.outcomeAt !== undefined) p.outcomeAt = a.outcomeAt;
+    if (a.skippedAt !== undefined) p.skippedAt = a.skippedAt;
+    return Object.keys(p).length ? this.cipher.encrypt(JSON.stringify(p), `application.private:${a.userId}:${a.id}`) : null;
   }
 
   async createApplication(a: Application): Promise<void> {
     try {
       await this.db.query(
         `INSERT INTO applications (id, user_id, job_id, job_title, employer, apply_url, mode, status, statement, statement_source, gaps,
-           warnings, score, confirmed_fields, created_at, confirmed_at, submitted_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+           warnings, score, confirmed_fields, created_at, confirmed_at, submitted_at, hold_reasons, dedupe_key, automatic, private_data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
         this.applicationValues(a),
       );
     } catch (err) {
@@ -256,7 +278,7 @@ export class PostgresRepository implements Repository {
     const res = await this.db.query(
       `UPDATE applications SET job_id = $3, job_title = $4, employer = $5, apply_url = $6, mode = $7, status = $8, statement = $9,
          statement_source = $10, gaps = $11, warnings = $12, score = $13, confirmed_fields = $14, created_at = $15, confirmed_at = $16,
-         submitted_at = $17
+         submitted_at = $17, hold_reasons = $18, dedupe_key = $19, automatic = $20, private_data = $21
        WHERE id = $1 AND user_id = $2`,
       this.applicationValues(a),
     );
@@ -288,6 +310,180 @@ export class PostgresRepository implements Repository {
       occurredAt: iso(r.occurred_at),
       payload: r.payload as Record<string, unknown>,
     }));
+  }
+
+  // ----- accounts: verification, reset, listing -------------------------------------
+
+  async markEmailVerified(userId: string, at: string): Promise<void> {
+    await this.db.query('UPDATE users SET email_verified_at = COALESCE(email_verified_at, $2) WHERE id = $1', [userId, at]);
+  }
+
+  async updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
+    await this.db.query('UPDATE users SET password_hash = $2 WHERE id = $1', [userId, passwordHash]);
+  }
+
+  async listUserIds(): Promise<string[]> {
+    const { rows } = await this.db.query('SELECT id FROM users ORDER BY created_at, id');
+    return rows.map((r) => r.id as string);
+  }
+
+  async saveAuthToken(t: AuthToken): Promise<void> {
+    await this.db.query('INSERT INTO auth_tokens (id, user_id, kind, token_hash, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6)', [
+      t.id, t.userId, t.kind, t.tokenHash, t.expiresAt, t.createdAt,
+    ]);
+  }
+
+  async consumeAuthToken(kind: AuthToken['kind'], tokenHash: string, at: string): Promise<string | undefined> {
+    const { rows } = await this.db.query(
+      'UPDATE auth_tokens SET used_at = $3 WHERE kind = $1 AND token_hash = $2 AND used_at IS NULL AND expires_at > $3 RETURNING user_id',
+      [kind, tokenHash, at],
+    );
+    return rows[0] ? (rows[0].user_id as string) : undefined;
+  }
+
+  async revokeAuthTokens(userId: string, kind: AuthToken['kind'], at: string): Promise<number> {
+    const res = await this.db.query('UPDATE auth_tokens SET used_at = $3 WHERE user_id = $1 AND kind = $2 AND used_at IS NULL', [userId, kind, at]);
+    return res.rowCount ?? 0;
+  }
+
+  async usedAuthToken(kind: AuthToken['kind'], tokenHash: string): Promise<{ userId: string; usedAt: string } | undefined> {
+    const { rows } = await this.db.query('SELECT user_id, used_at FROM auth_tokens WHERE kind = $1 AND token_hash = $2 AND used_at IS NOT NULL LIMIT 1', [kind, tokenHash]);
+    const row = rows[0];
+    return row ? { userId: row.user_id as string, usedAt: new Date(row.used_at as string).toISOString() } : undefined;
+  }
+
+  // ----- applying -------------------------------------------------------------------
+
+  async deleteApplication(userId: string, id: string): Promise<boolean> {
+    const res = await this.db.query('DELETE FROM applications WHERE id = $1 AND user_id = $2', [id, userId]);
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async getScreeningAnswers(userId: string): Promise<ScreeningAnswers | undefined> {
+    const { rows } = await this.db.query('SELECT data FROM screening_answers WHERE user_id = $1', [userId]);
+    return rows[0] ? (JSON.parse(this.cipher.decrypt(rows[0].data as string, `screening:${userId}`)) as ScreeningAnswers) : undefined;
+  }
+
+  async saveScreeningAnswers(userId: string, answers: ScreeningAnswers): Promise<void> {
+    await this.db.query(
+      'INSERT INTO screening_answers (user_id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET data = excluded.data, updated_at = now()',
+      [userId, this.cipher.encrypt(JSON.stringify(answers), `screening:${userId}`)],
+    );
+  }
+
+  async getAuthorisation(userId: string): Promise<StandingAuthorisation | undefined> {
+    const { rows } = await this.db.query('SELECT data FROM standing_authorisations WHERE user_id = $1', [userId]);
+    return rows[0] ? (rows[0].data as StandingAuthorisation) : undefined;
+  }
+
+  async saveAuthorisation(userId: string, a: StandingAuthorisation): Promise<void> {
+    await this.db.query(
+      'INSERT INTO standing_authorisations (user_id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET data = excluded.data, updated_at = now()',
+      [userId, json(a)],
+    );
+  }
+
+  // ----- platform -------------------------------------------------------------------
+
+  async getPlatformSetting<T>(key: string): Promise<T | undefined> {
+    const { rows } = await this.db.query('SELECT value FROM platform_settings WHERE key = $1', [key]);
+    return rows[0] ? (rows[0].value as T) : undefined;
+  }
+
+  async setPlatformSetting(key: string, value: unknown): Promise<void> {
+    await this.db.query(
+      'INSERT INTO platform_settings (key, value, updated_at) VALUES ($1, $2, now()) ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now()',
+      [key, json(value)],
+    );
+  }
+
+  async claimOnce(key: string, at: string): Promise<boolean> {
+    const res = await this.db.query('INSERT INTO platform_claims (key, claimed_at) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [key, at]);
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async purgeBefore(cutoff: string): Promise<Record<string, number>> {
+    const count = async (sql: string) => (await this.db.query(sql, [cutoff])).rowCount ?? 0;
+    return {
+      applications: await count('DELETE FROM applications WHERE created_at < $1'),
+      events: await count('DELETE FROM events WHERE occurred_at < $1'),
+      notifications: await count('DELETE FROM notifications WHERE created_at < $1'),
+      deliveries: await count('DELETE FROM notification_deliveries WHERE at < $1'),
+      tokens: await count('DELETE FROM auth_tokens WHERE expires_at < $1'),
+    };
+  }
+
+  async hitRateLimit(key: string, windowStart: string): Promise<number> {
+    const { rows } = await this.db.query(
+      `INSERT INTO rate_limit_windows (key, window_start, hits) VALUES ($1, $2, 1)
+       ON CONFLICT (key, window_start) DO UPDATE SET hits = rate_limit_windows.hits + 1 RETURNING hits`,
+      [key, windowStart],
+    );
+    return rows[0]?.hits as number;
+  }
+
+  // ----- notifications --------------------------------------------------------------
+
+  async saveNotification(n: Notification): Promise<void> {
+    await this.db.query(
+      'INSERT INTO notifications (id, user_id, event_key, category, severity, subject, body, created_at, read_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [n.id, n.userId, n.eventKey, n.category, n.severity, n.subject, n.body, n.createdAt, n.readAt ?? null],
+    );
+  }
+
+  async listNotifications(userId: string, limit = 200): Promise<Notification[]> {
+    const { rows } = await this.db.query('SELECT * FROM notifications WHERE user_id = $1 ORDER BY seq DESC LIMIT $2', [userId, limit]);
+    return rows.map((r) =>
+      present<Notification>({
+        id: r.id as string,
+        userId: r.user_id as string,
+        eventKey: r.event_key as string,
+        category: r.category as string,
+        severity: r.severity as Notification['severity'],
+        subject: r.subject as string,
+        body: r.body as string,
+        createdAt: iso(r.created_at),
+        readAt: r.read_at ? iso(r.read_at) : null,
+      }),
+    );
+  }
+
+  async markNotificationsRead(userId: string, ids: string[] | undefined, at: string): Promise<number> {
+    const res = ids
+      ? await this.db.query('UPDATE notifications SET read_at = $3 WHERE user_id = $1 AND read_at IS NULL AND id = ANY($2)', [userId, ids, at])
+      : await this.db.query('UPDATE notifications SET read_at = $2 WHERE user_id = $1 AND read_at IS NULL', [userId, at]);
+    return res.rowCount ?? 0;
+  }
+
+  async appendDelivery(d: NotificationDelivery): Promise<void> {
+    await this.db.query('INSERT INTO notification_deliveries (id, user_id, event_key, channel, status, provider, at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [
+      d.id, d.userId, d.eventKey, d.channel, d.status, d.provider, d.at,
+    ]);
+  }
+
+  async listDeliveries(userId: string, limit = 200): Promise<NotificationDelivery[]> {
+    const { rows } = await this.db.query('SELECT * FROM notification_deliveries WHERE user_id = $1 ORDER BY seq DESC LIMIT $2', [userId, limit]);
+    return rows.map((r) => ({
+      id: r.id as string,
+      userId: r.user_id as string,
+      eventKey: r.event_key as string,
+      channel: r.channel as NotificationDelivery['channel'],
+      status: r.status as NotificationDelivery['status'],
+      provider: r.provider as string,
+      at: iso(r.at),
+    }));
+  }
+
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
+    const { rows } = await this.db.query('SELECT data FROM notification_preferences WHERE user_id = $1', [userId]);
+    return rows[0] ? (rows[0].data as NotificationPreferences) : undefined;
+  }
+
+  async saveNotificationPreferences(userId: string, preferences: NotificationPreferences): Promise<void> {
+    await this.db.query(
+      'INSERT INTO notification_preferences (user_id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET data = excluded.data, updated_at = now()',
+      [userId, json(preferences)],
+    );
   }
 }
 
@@ -321,5 +517,12 @@ export class PostgresUsageMeter implements UsageMeter {
 
   async deleteForUser(userId: string): Promise<void> {
     await this.db.query('DELETE FROM usage_records WHERE user_id = $1', [userId]);
+  }
+
+  async acuSince(userId: string | null, since: string): Promise<number> {
+    const { rows } = userId === null
+      ? await this.db.query('SELECT COALESCE(SUM(acu), 0)::float AS s FROM usage_records WHERE at >= $1', [since])
+      : await this.db.query('SELECT COALESCE(SUM(acu), 0)::float AS s FROM usage_records WHERE user_id = $1 AND at >= $2', [userId, since]);
+    return Math.round(Number(rows[0]?.s ?? 0) * 1000) / 1000;
   }
 }
