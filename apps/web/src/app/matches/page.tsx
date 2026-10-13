@@ -29,6 +29,7 @@ export default function MatchesPage() {
   const [plan, setPlan] = useState<SearchPlanView>();
   const [found, setFound] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const [contractType, setContractType] = useState<'all' | 'permanent' | 'contract'>('all');
   // Read when a load runs, so a search that ends later reloads with the box as it is now.
   const showAllNow = useRef(false);
   showAllNow.current = showAll;
@@ -111,7 +112,8 @@ export default function MatchesPage() {
   }
 
   const latestApp = (jobId: string) => apps.find((a) => a.jobId === jobId);
-  const shown = (matches ?? []).filter((m) => region === 'all' || m.job.region === region);
+  const shown = (matches ?? []).filter((m) => (region === 'all' || m.job.region === region) && (contractType === 'all' || m.job.contractType === contractType));
+  const hasContractTypes = (matches ?? []).some((m) => m.job.contractType);
   const anySample = matches?.some((m) => m.job.source === 'sample');
 
   return (
@@ -183,6 +185,15 @@ export default function MatchesPage() {
           {(['all', ...regions] as (Region | 'all')[]).map((r) => (
             <button key={r} type="button" className={`chip ${region === r ? '' : 'plain'}`} aria-pressed={region === r} onClick={() => setRegion(r)}>
               {r === 'all' ? 'All regions' : regionLabel(r)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {hasContractTypes ? (
+        <div className="row" role="group" aria-label="Contract type" data-testid="contract-filter">
+          {(['all', 'permanent', 'contract'] as const).map((c) => (
+            <button key={c} type="button" className={`chip ${contractType === c ? '' : 'plain'}`} aria-pressed={contractType === c} onClick={() => setContractType(c)}>
+              {c === 'all' ? 'All types' : c === 'permanent' ? 'Permanent' : 'Contract'}
             </button>
           ))}
         </div>
