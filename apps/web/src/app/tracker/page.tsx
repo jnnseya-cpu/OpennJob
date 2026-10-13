@@ -130,7 +130,12 @@ export default function TrackerPage() {
   const autoRouteOf = (a: Application) => agent?.routes?.[a.id] ?? 'none';
   const outgoing = ready.filter((a) => autoRouteOf(a) !== 'none');
   const noRoute = ready.filter((a) => autoRouteOf(a) === 'none');
-  const ROUTE_LABEL = { email: 'by e-mail to the recruiter', form: 'on the form, through the extension', none: '' } as const;
+  // The e-mail route genuinely sends on its own. The form route needs the browser extension, so for
+  // a person not running it, those belong with the ones they apply to by hand.
+  const emailOut = outgoing.filter((a) => autoRouteOf(a) === 'email');
+  const toApply = [...outgoing.filter((a) => autoRouteOf(a) === 'form'), ...noRoute];
+  // Rows shown in the action groups above are not repeated in the list below.
+  const handledIds = new Set([...emailOut, ...toApply].map((a) => a.id));
 
   useEffect(() => {
     api<Application[]>('/applications')
@@ -196,10 +201,10 @@ export default function TrackerPage() {
           </section>
         </>
       ) : null}
-      {outgoing.length ? (
-        <section className="card" aria-label="Going out automatically" data-testid="outgoing">
-          <span className="label">Going out automatically · {outgoing.length}</span>
-          <p className="small muted">These go out without you unless you skip them. Skipped ones are closed.</p>
+      {emailOut.length ? (
+        <section className="card" aria-label="Sending automatically by e-mail" data-testid="outgoing">
+          <span className="label">Sending automatically by e-mail · {emailOut.length}</span>
+          <p className="small muted">The advert gives a recruiter’s address, so OpennJob e-mails these for you at the next agent run — nothing for you to do. Skip any you do not want.</p>
           {agent && !agent.authorisation.enabled ? (
             <p className="small note" data-testid="authorisation-off">
               Standing authorisation is off, so nothing goes out yet. <Link href="/account/">Turn it on in Account</Link>
@@ -208,10 +213,10 @@ export default function TrackerPage() {
             <p className="small note">{agent.message}</p>
           ) : null}
           <ul className="plain review-list">
-            {outgoing.map((a) => (
+            {emailOut.map((a) => (
               <li key={a.id} className="row">
                 <span className="grow">
-                  <b>{a.jobTitle}</b> · {a.employer} · {a.score}% · <span className="muted">{ROUTE_LABEL[autoRouteOf(a)]}</span>
+                  <b>{a.jobTitle}</b> · {a.employer} · {a.score}%
                 </span>
                 <Link className="small" href={`/review/?job=${encodeURIComponent(a.jobId)}`}>
                   Check
@@ -224,25 +229,29 @@ export default function TrackerPage() {
           </ul>
         </section>
       ) : null}
-      {noRoute.length ? (
-        <section className="card" aria-label="Ready, but you apply" data-testid="no-route">
-          <span className="label">Ready, but you apply · {noRoute.length}</span>
+      {toApply.length ? (
+        <section className="card" aria-label="To apply yourself" data-testid="no-route">
+          <span className="label">To apply yourself · {toApply.length}</span>
           <p className="small muted">
-            These adverts give no recruiter e-mail address and their application site is not switched on for OpennJob, so it cannot send them. Open the advert and apply there; your tailored CV and cover letter are under “Documents”. Once you have applied, press “Mark submitted” here so the Tracker and the report count it.
+            OpennJob cannot send these for you — the advert names no recruiter e-mail, and the employer’s form needs the browser extension. Open the advert and apply there; your tailored CV and cover letter are under “Documents”. Then press “Mark submitted” so the Tracker and the report count it.
           </p>
           <ul className="plain review-list">
-            {noRoute.map((a) => (
+            {toApply.map((a) => (
               <li key={a.id} className="row" data-testid="no-route-item">
                 <span className="grow">
                   <b>{a.jobTitle}</b> · {a.employer} · {a.score}%
-                  <br />
-                  <span className="small muted" data-testid="no-route-reason">{noRouteText(agent?.routeReasons?.[a.id])}</span>
-                  <span className="row">
-                    <input type="url" className="grow" aria-label={`Employer's application page for ${a.jobTitle}`} placeholder="https://… the employer's own application page" value={links[a.id] ?? ''} onChange={(e) => setLinks((l) => ({ ...l, [a.id]: e.target.value }))} />
-                    <button type="button" className="btn" disabled={busyId === a.id || !(links[a.id] ?? '').trim()} onClick={() => saveLink(a.id)}>
-                      Use this link
-                    </button>
-                  </span>
+                  {autoRouteOf(a) === 'none' ? (
+                    <>
+                      <br />
+                      <span className="small muted" data-testid="no-route-reason">{noRouteText(agent?.routeReasons?.[a.id])}</span>
+                      <span className="row">
+                        <input type="url" className="grow" aria-label={`Employer's application page for ${a.jobTitle}`} placeholder="https://… the employer's own application page" value={links[a.id] ?? ''} onChange={(e) => setLinks((l) => ({ ...l, [a.id]: e.target.value }))} />
+                        <button type="button" className="btn" disabled={busyId === a.id || !(links[a.id] ?? '').trim()} onClick={() => saveLink(a.id)}>
+                          Use this link
+                        </button>
+                      </span>
+                    </>
+                  ) : null}
                 </span>
                 <a className="small" href={a.applyUrl} target="_blank" rel="noopener noreferrer">
                   Open advert
@@ -329,7 +338,7 @@ export default function TrackerPage() {
       ) : null}
       {apps && !apps.length ? <div className="empty">No applications yet. Open a match, or tap Run agent on the Matches tab.</div> : null}
       <div className="stack list">
-        {apps?.filter((a) => showClosed || a.status !== 'closed').map((a) => (
+        {apps?.filter((a) => (showClosed || a.status !== 'closed') && !handledIds.has(a.id)).map((a) => (
           <div key={a.id} className="card" data-testid="application">
             <div className="row">
               <div className="grow">
