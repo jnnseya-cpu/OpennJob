@@ -104,6 +104,20 @@ describe('spec T-05: a tailored document with an invented fact is rejected', () 
     expect(factsIn('Delivered schemes.')).toEqual({ figures: [], names: [] });
     expect(factsIn('NEBOSH holder.')).toEqual({ figures: [], names: ['NEBOSH'] });
   });
+
+  it('a possessive of a name in the CV traces (the apostrophe-s is not a new fact)', () => {
+    // CV has "Hollin Homes"; a statement may refer to "Hollin's scheme".
+    expect(factsIn("I delivered Hollin's 40-home scheme.").names).toEqual(['Hollin']);
+    expect(traceCheck({ statement: "I delivered Hollin's residential schemes." }, { cvText: CV, job: JOB })).toEqual([]);
+  });
+
+  it('a calendar month or weekday is not a checkable fact (CVs abbreviate dates)', () => {
+    // The year is still checked; the month word on its own proves nothing about the person.
+    expect(factsIn('I worked there from March 2019 until 2023.').names).toEqual([]);
+    expect(traceCheck({ statement: 'I ran the scheme from March 2019 to 2023.' }, { cvText: CV, job: JOB })).toEqual([]);
+    // A year the CV does not contain still fails.
+    expect(traceCheck({ statement: 'I ran the scheme from March 2024.' }, { cvText: CV, job: JOB })[0]?.unsupported).toEqual(['2024']);
+  });
 });
 
 describe('spec T-03: an empty language list is never evidence of a language', () => {

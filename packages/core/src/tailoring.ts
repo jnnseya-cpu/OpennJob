@@ -144,6 +144,16 @@ const PLAIN_WORDS = new Set(
 
 const NUMBER_WORDS = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'fifteen', 'twenty', 'thirty', 'forty', 'fifty', 'hundred', 'hundreds', 'thousand', 'thousands', 'dozen', 'dozens', 'million'];
 
+/**
+ * Calendar month and weekday names. A statement that says "from March 2019" states no checkable
+ * fact in "March": the year (2019) is still traced as a figure, and CVs routinely abbreviate the
+ * month ("Mar 2019", "03/2019"), so flagging the word only ever produces a false hold.
+ */
+const CALENDAR_WORDS = new Set([
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]);
+
 function normalise(s: string): string {
   return s.replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -172,10 +182,12 @@ export function factsIn(sentence: string): { figures: string[]; names: string[] 
   for (const w of NUMBER_WORDS) if (contains(sentence, w)) figures.add(w);
   const words = [...sentence.matchAll(/[\p{Lu}][\p{L}\p{N}'’&-]*/gu)];
   for (const m of words) {
-    const word = m[0].replace(/['’-]+$/, '');
+    // A trailing possessive ("Grid's", "Homes'") claims nothing the base name does not, and the
+    // base is what the CV holds; strip it before checking. Other trailing marks go too.
+    const word = m[0].replace(/['’]s$/iu, '').replace(/['’-]+$/u, '');
     const atStart = sentence.slice(0, m.index).replace(/[\s"'“‘(\-–—•*]+/g, '') === '';
     const acronym = /^[\p{Lu}\p{N}&]{2,}$/u.test(word) && /\p{Lu}.*\p{Lu}/u.test(word);
-    if (PLAIN_WORDS.has(word.toLowerCase())) continue;
+    if (PLAIN_WORDS.has(word.toLowerCase()) || CALENDAR_WORDS.has(word.toLowerCase())) continue;
     if (atStart && !acronym) continue;
     names.add(word);
   }
