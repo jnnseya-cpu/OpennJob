@@ -89,6 +89,8 @@ export interface OpennJobConfig {
   scheduler?: boolean;
   /** APP-6: an application to the same employer, title and location within this many days is a duplicate (OPENNJOB_DUPLICATE_DAYS, default 30). */
   duplicateDays?: number;
+  /** A job discovery has not re-seen for this many days is treated as expired and dropped from matches (OPENNJOB_JOB_FRESH_DAYS, default 21). */
+  jobFreshDays?: number;
   /** APP-8: automatic submissions per person per London day (OPENNJOB_DAILY_APPLICATION_LIMIT, default 20). */
   dailyApplicationLimit?: number;
   /** NFR-5: ACU of LLM use per person, and in total, per London day (OPENNJOB_LLM_DAILY_ACU_PER_USER, default 50; _TOTAL, default 500). */
@@ -113,6 +115,7 @@ export function applyThresholdOf(config: OpennJobConfig): number {
 }
 
 export const DEFAULT_DUPLICATE_DAYS = 30;
+export const DEFAULT_JOB_FRESH_DAYS = 21;
 export const DEFAULT_DAILY_APPLICATION_LIMIT = 20;
 export const DEFAULT_LLM_DAILY_ACU_PER_USER = 50;
 export const DEFAULT_LLM_DAILY_ACU_TOTAL = 500;
@@ -121,6 +124,7 @@ export const DEFAULT_LLM_DAILY_ACU_TOTAL = 500;
 export function limitsOf(config: OpennJobConfig) {
   return {
     duplicateDays: config.duplicateDays ?? DEFAULT_DUPLICATE_DAYS,
+    jobFreshDays: config.jobFreshDays ?? DEFAULT_JOB_FRESH_DAYS,
     dailyApplicationLimit: config.dailyApplicationLimit ?? DEFAULT_DAILY_APPLICATION_LIMIT,
     llmDailyAcuPerUser: config.llmDailyAcuPerUser ?? DEFAULT_LLM_DAILY_ACU_PER_USER,
     llmDailyAcuTotal: config.llmDailyAcuTotal ?? DEFAULT_LLM_DAILY_ACU_TOTAL,
@@ -218,6 +222,7 @@ export function loadConfig(env: Env): OpennJobConfig {
     };
   }
   config.duplicateDays = int(env.OPENNJOB_DUPLICATE_DAYS, DEFAULT_DUPLICATE_DAYS, 1, 3650);
+  config.jobFreshDays = int(env.OPENNJOB_JOB_FRESH_DAYS, DEFAULT_JOB_FRESH_DAYS, 1, 3650);
   config.searchMaxQueriesPerUser = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_USER, 6, 1, 60);
   config.searchMaxQueriesPerRefresh = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH, 60, 1, 1000);
   config.dailyApplicationLimit = int(env.OPENNJOB_DAILY_APPLICATION_LIMIT, DEFAULT_DAILY_APPLICATION_LIMIT, 0, 1000);

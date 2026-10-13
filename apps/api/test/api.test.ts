@@ -235,6 +235,18 @@ describe('GET /jobs/matches', () => {
     expect(after).toContain(NURSE_JOB);
   });
 
+  it('drops a job discovery has not re-seen for a while (expired)', async () => {
+    await seeded();
+    expect((await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id)).toContain(HCA_JOB);
+    const job = await t.deps.repository.getJob(HCA_JOB);
+    expect(job).toBeDefined();
+    const old = new Date(Date.parse(NOW) - 40 * 86_400_000).toISOString(); // 40 days > 21-day window
+    await t.deps.repository.upsertJobs([{ ...(job as NonNullable<typeof job>), fetchedAt: old }]);
+    const after = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
+    expect(after).not.toContain(HCA_JOB); // expired → gone from search
+    expect(after).toContain(NURSE_JOB); // a job still seen stays
+  });
+
   it('filters with ?min= and validates it', async () => {
     await seeded();
     const all = (await t.api.get('/jobs/matches?min=0').expect(200)).body as { score: number }[];

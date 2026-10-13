@@ -23,6 +23,7 @@ describe('loadConfig', () => {
       llmCriteria: false,
       llmCriteriaMaxJobs: 25,
       duplicateDays: 30,
+      jobFreshDays: 21,
       dailyApplicationLimit: 20,
       llmDailyAcuPerUser: 50,
       llmDailyAcuTotal: 500,

@@ -65,6 +65,8 @@ const job = (id: string, overrides: Partial<Job> = {}): Job => ({
   criteria: [{ label: 'Registered nurse', essential: true, keywords: ['registered nurse', 'RN'] }],
   criteriaSource: 'provided',
   requiresRegistration: false,
+  // Stored jobs always carry when they were last seen; a fixed value keeps the round-trip exact.
+  fetchedAt: '2026-10-01T00:00:00.000Z',
   ...overrides,
 });
 
@@ -265,7 +267,13 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         const demo = await createSampleSource({ allPacks: true }).fetchJobs();
         expect(demo.length).toBeGreaterThan(20);
         await repo.upsertJobs(demo);
-        for (const j of demo) expect(await repo.getJob(j.id), j.id).toEqual(j);
+        for (const j of demo) {
+          // Storage assigns fetchedAt (when the job was last seen); everything else is unchanged.
+          const read = (await repo.getJob(j.id)) as Job;
+          expect(read.fetchedAt, j.id).toBeTruthy();
+          const { fetchedAt, ...rest } = read;
+          expect(rest, j.id).toEqual(j);
+        }
         expect(await repo.upsertJobs(demo)).toBe(0);
       });
     });

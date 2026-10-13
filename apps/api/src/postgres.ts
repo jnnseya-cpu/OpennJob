@@ -63,6 +63,7 @@ const jobOf = (r: Row): Job =>
     city: r.city as string | null,
     region: r.region as Job['region'] | null,
     language: r.language as Job['language'] | null,
+    fetchedAt: iso(r.fetched_at),
     origin: r.origin as Job['origin'] | null,
     contractType: r.contract_type as Job['contractType'] | null,
   });
@@ -70,7 +71,7 @@ const jobOf = (r: Row): Job =>
 const JOB_COLUMNS = [
   'id', 'source', 'external_id', 'title', 'employer', 'location', 'url', 'apply_url', 'description', 'salary_min', 'salary_max',
   'employment_type', 'posted_at', 'criteria', 'criteria_source', 'requires_registration', 'required_credential', 'pack', 'country',
-  'city', 'region', 'language', 'origin', 'dedupe_key', 'contract_type',
+  'city', 'region', 'language', 'origin', 'fetched_at', 'dedupe_key', 'contract_type',
 ] as const;
 
 /**
@@ -177,13 +178,13 @@ export class PostgresRepository implements Repository {
     let added = 0;
     const updates = JOB_COLUMNS.filter((c) => c !== 'id').map((c) => `${c} = EXCLUDED.${c}`).join(', ');
     const sql = `INSERT INTO jobs (${JOB_COLUMNS.join(', ')}) VALUES (${JOB_COLUMNS.map((_, i) => `$${i + 1}`).join(', ')})
-      ON CONFLICT (id) DO UPDATE SET ${updates}, fetched_at = now() RETURNING (xmax = 0) AS inserted`;
+      ON CONFLICT (id) DO UPDATE SET ${updates} RETURNING (xmax = 0) AS inserted`;
     for (const j of jobs) {
       const { rows } = await this.db.query(sql, [
         j.id, j.source, j.externalId, j.title, j.employer, j.location, j.url, j.applyUrl ?? null, j.description, j.salaryMin ?? null,
         j.salaryMax ?? null, j.employmentType ?? null, j.postedAt ?? null, json(j.criteria), j.criteriaSource, j.requiresRegistration,
         j.requiredCredential ?? null, j.pack ?? null, j.country ?? null, j.city ?? null, j.region ?? null, j.language ?? null,
-        j.origin ?? null, dedupeKey(j), j.contractType ?? null,
+        j.origin ?? null, j.fetchedAt ?? new Date().toISOString(), dedupeKey(j), j.contractType ?? null,
       ]);
       if (rows[0]?.inserted === true) added += 1;
     }

@@ -71,6 +71,20 @@ function compact<T extends object>(value: T): T {
 export const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 const DAY_MS = 86_400_000;
+
+/**
+ * A job is fresh while discovery is still seeing it. One not re-seen for freshDays is treated as
+ * expired (filled or withdrawn) and dropped from matches and from what the agent prepares. A job
+ * with no fetchedAt (older records, or ones never through discovery) counts as fresh.
+ */
+function isFresh(job: Job, nowMs: number, freshDays: number): boolean {
+  // An employer's own posting persists until the employer removes it; discovery never re-sees it,
+  // so freshness does not apply. Only discovered adverts (which vanish when filled) age out.
+  if (job.origin === 'employer' || !job.fetchedAt) return true;
+  const seen = Date.parse(job.fetchedAt);
+  return Number.isNaN(seen) || seen >= nowMs - freshDays * DAY_MS;
+}
+
 /** How many unsent applications, at most, get their whole advert read in one agent run. */
 export const ADVERTS_READ_PER_RUN = 40;
 /** How long "Look for jobs now" waits before it answers that the search carries on in the background. */
@@ -299,7 +313,11 @@ export class OpennJobService {
       jobs = enriched;
     }
 
-    const added = await this.deps.repository.upsertJobs(jobs);
+    // Stamp when each job was last seen, so a job that stops appearing in discovery ages out of
+    // matches (it was probably filled or withdrawn). Postgres sets fetched_at itself; this keeps
+    // the in-memory repository and the value the agent reads consistent with the clock.
+    const seenAt = this.now();
+    const added = await this.deps.repository.upsertJobs(jobs.map((job) => ({ ...job, fetchedAt: seenAt })));
     const summary = {
       sources: [...this.deps.sources.map((s) => s.label), ...(this.deps.searchSources ?? []).map((s) => s.label)],
       searches: searches.length,
@@ -368,9 +386,12 @@ export class OpennJobService {
     // or set aside), or still being prepared — does not come back in search results: it lives in
     // the tracker now. A re-advertised vacancy has a new id, so it appears again on its own.
     const seen = new Set((await this.deps.repository.listApplications(userId)).map((a) => a.jobId));
+    const nowMs = this.deps.clock().getTime();
+    const freshDays = limitsOf(this.deps.config).jobFreshDays;
     return jobs
       // A job someone pasted ("Apply to a job you found") belongs to them alone: never listed here.
-      .filter((job) => job.source !== 'link' && !seen.has(job.id) && inScope(job, preferences) && payFits(job, pay))
+      // An expired job (not re-seen by discovery for freshDays) is dropped: its advert is likely gone.
+      .filter((job) => job.source !== 'link' && !seen.has(job.id) && isFresh(job, nowMs, freshDays) && inScope(job, preferences) && payFits(job, pay))
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
@@ -793,9 +814,12 @@ export class OpennJobService {
     }
 
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
+    const nowMs = this.deps.clock().getTime();
+    const freshDays = limitsOf(this.deps.config).jobFreshDays;
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
-      if (job.source === 'link' || !inScope(job, preferences) || !payFits(job, pay)) {
+      // An expired job (not re-seen by discovery for freshDays) is never newly prepared.
+      if (job.source === 'link' || !isFresh(job, nowMs, freshDays) || !inScope(job, preferences) || !payFits(job, pay)) {
         skipped.outOfScope += 1;
         continue;
       }

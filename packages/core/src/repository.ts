@@ -172,7 +172,9 @@ export class InMemoryRepository implements Repository {
     let added = 0;
     for (const job of jobs) {
       if (!this.jobs.has(job.id)) added += 1;
-      this.jobs.set(job.id, clone(job));
+      // A stored job always carries when it was last seen (the Postgres column is NOT NULL); a
+      // caller that does not supply one gets the current time, like the database default.
+      this.jobs.set(job.id, clone({ ...job, fetchedAt: job.fetchedAt ?? new Date().toISOString() }));
     }
     return added;
   }

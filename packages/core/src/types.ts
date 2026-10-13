@@ -51,6 +51,8 @@ export interface Job {
   region?: Region;
   /** Absent means 'en'. */
   language?: JobLanguage;
+  /** When discovery last saw this job (ISO). A job not re-seen for a while is treated as expired and dropped from matches. Absent counts as fresh. */
+  fetchedAt?: string;
   /** Absent means 'discovered'. Matching treats both origins alike. */
   origin?: JobOrigin;
   /** Permanent or contract, when the source says or the advert makes it clear. Absent = not known. */
