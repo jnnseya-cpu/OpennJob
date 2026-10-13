@@ -85,7 +85,7 @@ function isFresh(job: Job, nowMs: number, freshDays: number): boolean {
 }
 
 /** How many unsent applications, at most, get their whole advert read in one agent run. */
-export const ADVERTS_READ_PER_RUN = 40;
+export const ADVERTS_READ_PER_RUN = 80;
 /** How long "Look for jobs now" waits before it answers that the search carries on in the background. */
 export const REFRESH_WAIT_MS = 25_000;
 /** How many applications written without AI are written again with AI in one agent run. */
@@ -699,8 +699,9 @@ export class OpennJobService {
     // results only): its source is asked for the whole advert, which can name the recruiter's
     // address or the employer's own application page. A few per run.
     let advertsRead = 0;
+    const advertsReadCap = this.deps.config.advertsReadPerRun ?? ADVERTS_READ_PER_RUN;
     for (const a of existing) {
-      if (advertsRead >= ADVERTS_READ_PER_RUN) break;
+      if (advertsRead >= advertsReadCap) break;
       if ((a.status !== 'draft' && a.status !== 'needs_you' && a.status !== 'confirmed') || a.attemptedAt !== undefined || isEmployerLink(a.applyUrl)) continue;
       const job = jobsById.get(a.jobId);
       if (!job || recruiterEmailIn(job.description)) continue;
