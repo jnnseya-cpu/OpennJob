@@ -118,6 +118,19 @@ describe('spec T-05: a tailored document with an invented fact is rejected', () 
     // A year the CV does not contain still fails.
     expect(traceCheck({ statement: 'I ran the scheme from March 2024.' }, { cvText: CV, job: JOB })[0]?.unsupported).toEqual(['2024']);
   });
+
+  it('a unit or acronym glued to a number in the CV still traces (500MW, CDE)', () => {
+    const cv = 'Delivered a 500MW substation using a CDE and EVM controls.';
+    // The CV must trace against itself even though the unit is glued to its number.
+    expect(traceCheck({ tailoredCv: cv }, { cvText: cv })).toEqual([]);
+    // A statement that spaces the unit out still traces to the glued form in the CV.
+    expect(traceCheck({ statement: 'I delivered a 500 MW substation using a CDE and EVM.' }, { cvText: cv, job: JOB })).toEqual([]);
+  });
+
+  it('figures stay strict: an invented number is not matched inside a longer one', () => {
+    // "40" must not be considered present just because the CV contains "140".
+    expect(traceCheck({ statement: 'I managed 40 people.' }, { cvText: 'I managed 140 people.', job: JOB })[0]?.unsupported).toEqual(['40']);
+  });
 });
 
 describe('spec T-03: an empty language list is never evidence of a language', () => {

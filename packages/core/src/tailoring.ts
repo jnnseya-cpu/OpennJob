@@ -111,7 +111,7 @@ export function traceRewrittenCv(text: string, sources: TraceSources): TraceFail
     // A section heading ("KEY SKILLS", "Professional Experience") states no fact.
     if (CV_HEADINGS.test(line.trim().replace(/[:\s]+$/, ''))) continue;
     const { figures, names } = factsIn(line);
-    const unsupported = [...figures.filter((f) => !contains(factCorpus, f)), ...names.filter((n) => !contains(nameCorpus, n))];
+    const unsupported = [...figures.filter((f) => !contains(factCorpus, f, 'figure')), ...names.filter((n) => !contains(nameCorpus, n, 'name'))];
     if (unsupported.length > 0) failures.push({ document: 'tailoredCv', text: line.trim(), unsupported });
   }
   return failures;
@@ -169,9 +169,20 @@ function passportText(p: Passport | undefined): string {
   ].join('\n');
 }
 
-function contains(corpus: string, token: string): boolean {
+/**
+ * Does the corpus contain this token as a whole fact?
+ *
+ * A fact is bounded by its own kind of character, so a unit glued to its number traces both ways.
+ * A FIGURE is a run of digits: it is bounded by digits only, so "40" is not found inside "140"
+ * (an invented number must not match a longer one) but "500" is found inside "500MW". A NAME (a
+ * unit, acronym or word) is a run of letters: it is bounded by letters only, so "MW" is found
+ * inside "500MW" but not inside "MWh". Without this, a CV that writes "500MW" fails its own trace
+ * check — the unit "MW" is glued to a digit and the number "500" to a letter.
+ */
+function contains(corpus: string, token: string, kind: 'figure' | 'name' = 'name'): boolean {
   const body = escapeRegExp(token.toLowerCase()).replace(/\\?\s+/g, '\\s+');
-  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'iu').test(corpus);
+  const bound = kind === 'figure' ? '\\p{N}' : '\\p{L}';
+  return new RegExp(`(?<![${bound}])${body}(?![${bound}])`, 'iu').test(corpus);
 }
 
 /** The facts a sentence asserts that can be checked: figures, dates, money, names, acronyms, counted words. */
@@ -225,7 +236,7 @@ export function traceCheck(documents: { statement?: string; tailoredCv?: string 
         continue;
       }
       const { figures, names } = factsIn(line);
-      failures.push({ document: 'tailoredCv', text: line.trim(), unsupported: [...figures.filter((f) => !contains(factCorpus, f)), ...names.filter((n) => !contains(factCorpus, n))] });
+      failures.push({ document: 'tailoredCv', text: line.trim(), unsupported: [...figures.filter((f) => !contains(factCorpus, f, 'figure')), ...names.filter((n) => !contains(factCorpus, n, 'name'))] });
     }
   }
 
@@ -234,7 +245,7 @@ export function traceCheck(documents: { statement?: string; tailoredCv?: string 
       const k = normalise(sentence);
       if (BOILERPLATE.has(k) || verbatim.includes(k)) continue;
       const { figures, names } = factsIn(sentence);
-      const unsupported = [...figures.filter((f) => !contains(`${factCorpus}\n${jobIdentity}`, f)), ...names.filter((n) => !contains(nameCorpus, n))];
+      const unsupported = [...figures.filter((f) => !contains(`${factCorpus}\n${jobIdentity}`, f, 'figure')), ...names.filter((n) => !contains(nameCorpus, n, 'name'))];
       if (unsupported.length > 0) failures.push({ document: 'statement', text: sentence, unsupported });
     }
   }
