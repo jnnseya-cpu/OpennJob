@@ -341,8 +341,10 @@ describe('POST /agent/run: the 80% rule', () => {
     await t.app.close();
 
     await infra({ config: { applyThreshold: 0 } });
-    res = await t.api.post('/agent/run').send({}).expect(200);
+    // Snapshot matches before the run: once prepared, those jobs drop out of matches (they are in
+    // the tracker), so the comparison must be taken against the pre-run list.
     const all = await matches();
+    res = await t.api.post('/agent/run').send({}).expect(200);
     expect(res.body.prepared).toHaveLength(all.filter((m) => m.eligible).length);
     expect(res.body.skipped).toMatchObject({ belowThreshold: 0, ineligible: all.filter((m) => !m.eligible).length });
   });

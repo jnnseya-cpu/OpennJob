@@ -220,6 +220,9 @@ for (const backend of BACKENDS) {
     it("GET /jobs/matches: scored against the caller's own CV and passport", async () => {
       await b.get('/jobs/matches').expect(404);
       await b.put('/profile').send(B_PROFILE).expect(200);
+      // A's beforeEach application for the nurse job would otherwise hide it from A's own matches
+      // (a job already in the tracker is not re-listed); drop it so both sides score the same job.
+      await t.deps.repository.deleteApplication(USER_ID, aApp.id);
       const forA = (await t.api.get('/jobs/matches').expect(200)).body as { job: { id: string }; score: number; eligible: boolean; hits: { evidence?: string }[] }[];
       const forB = (await b.get('/jobs/matches').expect(200)).body as typeof forA;
       const nurse = (rows: typeof forA) => rows.find((m) => m.job.id === 'sample:staff-nurse-medical');
