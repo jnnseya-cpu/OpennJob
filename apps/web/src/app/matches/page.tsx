@@ -245,6 +245,7 @@ export default function MatchesPage() {
               )}
               <div className="row">
                 <span className="chip plain">{regionLabel(m.job.region)}</span>
+                {m.job.contractType ? <span className="chip plain" data-testid="contract-type">{m.job.contractType === 'contract' ? 'Contract' : 'Permanent'}</span> : null}
                 <span className="chip plain">{m.job.origin === 'employer' ? 'Posted by employer' : isAdzuna(m.job) ? 'Jobs by Adzuna' : 'Found by OpennJob'}</span>
                 {m.targetEmployer ? <span className="chip">{m.targetEmployer.how === 'employer' ? m.targetEmployer.name : `Names ${m.targetEmployer.name}`}</span> : null}
                 {m.job.language === 'fr' ? <span className="chip plain">Applies in French</span> : null}

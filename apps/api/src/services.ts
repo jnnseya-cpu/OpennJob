@@ -353,6 +353,7 @@ export class OpennJobService {
         region: job.region,
         language: job.language ?? 'en',
         origin: job.origin ?? 'discovered',
+        ...(job.contractType ? { contractType: job.contractType } : {}),
       },
       score: match.score,
       eligible: match.eligible,

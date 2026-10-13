@@ -23,6 +23,7 @@ export interface MatchView {
     region?: Region;
     language: JobLanguage;
     origin: 'discovered' | 'employer';
+    contractType?: 'permanent' | 'contract';
   };
   score: number;
   eligible: boolean;
