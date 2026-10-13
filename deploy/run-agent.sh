@@ -39,12 +39,13 @@ const { Client } = require("pg");
     });
     let body; try { body = await res.json(); } catch { body = await res.text(); }
     if (res.ok && body && typeof body === "object") {
-      const emailed = Array.isArray(body.emailed) ? body.emailed.length : body.emailed;
+      const e = body.emailed; // { sent, failed, wait? } in auto mode, else undefined
+      const emailed = e && typeof e === "object" ? "sent " + (e.sent || 0) + ", failed " + (e.failed || 0) : undefined;
       console.log(
         "run ok (mode " + mode + "): prepared " + (body.prepared ? body.prepared.length : 0) +
         ", redrafted " + (body.redrafted || 0) +
         ", closed below bar " + (body.closedBelowBar || 0) +
-        (emailed !== undefined ? ", e-mailed " + emailed : ""),
+        (emailed !== undefined ? ", e-mailed (" + emailed + ")" : ""),
       );
     } else {
       console.log("run failed: HTTP " + res.status + " " + (typeof body === "string" ? body.slice(0, 300) : JSON.stringify(body).slice(0, 300)));
