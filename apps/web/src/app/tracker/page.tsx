@@ -94,6 +94,21 @@ export default function TrackerPage() {
     }
   }
 
+  async function markSubmitted(a: Application) {
+    if (!a.applyUrl) return;
+    setBusyId(a.id);
+    setError('');
+    try {
+      const body = { pageUrl: a.applyUrl, confirmationText: 'Marked as submitted by me after applying on the employer’s site.' };
+      replace(await api<Application>(`/applications/${encodeURIComponent(a.id)}/submitted`, { method: 'POST', body }));
+      setAgent(await api<AgentStatus>('/agent/status'));
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusyId('');
+    }
+  }
+
   const replace = (updated: Application) => setApps((list) => list?.map((x) => (x.id === updated.id ? updated : x)));
   async function act(id: string, path: 'skip' | 'outcome' | 'retry', body?: object) {
     setBusyId(id);
@@ -213,7 +228,7 @@ export default function TrackerPage() {
         <section className="card" aria-label="Ready, but you apply" data-testid="no-route">
           <span className="label">Ready, but you apply · {noRoute.length}</span>
           <p className="small muted">
-            These adverts give no recruiter e-mail address and their application site is not switched on for OpennJob, so it cannot send them. Open the advert and apply there; your tailored CV and cover letter are on the review page. Then press “I have submitted it” there so the Tracker and the report count it.
+            These adverts give no recruiter e-mail address and their application site is not switched on for OpennJob, so it cannot send them. Open the advert and apply there; your tailored CV and cover letter are under “Documents”. Once you have applied, press “Mark submitted” here so the Tracker and the report count it.
           </p>
           <ul className="plain review-list">
             {noRoute.map((a) => (
@@ -235,6 +250,9 @@ export default function TrackerPage() {
                 <Link className="small" href={`/review/?job=${encodeURIComponent(a.jobId)}`}>
                   Documents
                 </Link>
+                <button type="button" className="btn primary" data-testid="mark-submitted" disabled={busyId === a.id || !a.applyUrl} onClick={() => markSubmitted(a)}>
+                  Mark submitted
+                </button>
                 <button type="button" className="btn" disabled={busyId === a.id} onClick={() => act(a.id, 'skip')}>
                   Skip
                 </button>
