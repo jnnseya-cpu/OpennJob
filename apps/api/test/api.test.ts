@@ -220,14 +220,19 @@ describe('GET /jobs/matches', () => {
     expect(nurse.hits.find((h: { label: string }) => h.label === 'Venepuncture and cannulation')).toMatchObject({ essential: false, matched: false });
   });
 
-  it('does not list a job that has already been submitted', async () => {
+  it('does not list a job that already has an application (prepared, submitted or closed)', async () => {
     await seeded();
     expect((await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id)).toContain(HCA_JOB);
     const app = (await t.api.post('/applications').send({ jobId: HCA_JOB, mode: 'review' }).expect(201)).body as Application;
+    // A draft (not yet submitted) already drops out: it lives in the tracker now.
+    const whileDraft = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
+    expect(whileDraft).not.toContain(HCA_JOB);
+    expect(whileDraft).toContain(NURSE_JOB); // others unaffected
     await t.api.post(`/applications/${app.id}/submitted`).send(RECEIPT).expect(200);
+    await t.api.post(`/applications/${app.id}/outcome`).send({ outcome: 'rejected' }).expect(200); // → closed
     const after = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
-    expect(after).not.toContain(HCA_JOB); // applied → gone from search
-    expect(after).toContain(NURSE_JOB); // others unaffected
+    expect(after).not.toContain(HCA_JOB); // still gone once closed
+    expect(after).toContain(NURSE_JOB);
   });
 
   it('filters with ?min= and validates it', async () => {

@@ -364,12 +364,13 @@ export class OpennJobService {
     const passport = await this.deps.repository.getPassport(userId);
     const pay = payExpectationOf(await this.deps.repository.getScreeningAnswers(userId));
     const jobs = await this.deps.repository.listJobs();
-    // A job already applied for (submitted) does not come back in search results. A re-advertised
-    // vacancy has a new id, so it appears again on its own.
-    const applied = new Set((await this.deps.repository.listApplications(userId)).filter((a) => a.submittedAt).map((a) => a.jobId));
+    // A job that already has an application of any kind — submitted, closed (rejected, no reply,
+    // or set aside), or still being prepared — does not come back in search results: it lives in
+    // the tracker now. A re-advertised vacancy has a new id, so it appears again on its own.
+    const seen = new Set((await this.deps.repository.listApplications(userId)).map((a) => a.jobId));
     return jobs
       // A job someone pasted ("Apply to a job you found") belongs to them alone: never listed here.
-      .filter((job) => job.source !== 'link' && !applied.has(job.id) && inScope(job, preferences) && payFits(job, pay))
+      .filter((job) => job.source !== 'link' && !seen.has(job.id) && inScope(job, preferences) && payFits(job, pay))
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
