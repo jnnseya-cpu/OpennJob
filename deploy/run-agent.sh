@@ -16,6 +16,15 @@ cd "${OPENNJOB_DIR:-/opt/opennjob}" || exit 1
 MODE="${1:-hybrid}"
 case "$MODE" in hybrid|auto|review) ;; *) echo "Mode must be hybrid, auto or review." >&2; exit 1 ;; esac
 
+# Wait for the API to answer: a recent restart (./oj up) may still be starting, which otherwise
+# shows as "fetch failed".
+ready=""
+for _ in $(seq 1 30); do
+  if ./oj exec -T api node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" 2>/dev/null; then ready=1; break; fi
+  sleep 2
+done
+[ -n "$ready" ] || { echo "The API is not answering yet. Try again in a moment, or: ./oj logs --tail=50 api" >&2; exit 1; }
+
 ./oj exec -T -e OJ_MODE="$MODE" api node -e '
 const { signAccessToken, passwordVersion } = require("/app/apps/api/dist/auth.js");
 const { Client } = require("pg");
