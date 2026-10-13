@@ -131,6 +131,19 @@ describe('spec T-05: a tailored document with an invented fact is rejected', () 
     // "40" must not be considered present just because the CV contains "140".
     expect(traceCheck({ statement: 'I managed 40 people.' }, { cvText: 'I managed 140 people.', job: JOB })[0]?.unsupported).toEqual(['40']);
   });
+
+  it('a line copied verbatim from the CV always traces (contact lines and odd spacing included)', () => {
+    // The shapes that were wrongly holding real applications: a run-together contact line and
+    // split digits. As the person's own CV, used verbatim, every line must trace.
+    const cv = [
+      'Justin Doe | Telephone: +44 7952 03018 4 | Languages: English, French',
+      'Delivered the 1,40 GW grid connection using a CDE.',
+      'PRINCE2 Foundation; MCIOB Chartered.',
+    ].join('\n');
+    expect(traceCheck({ tailoredCv: cv }, { cvText: cv })).toEqual([]);
+    // A reworded CV line that introduces a place the CV never mentions still fails.
+    expect(traceCheck({ tailoredCv: 'Delivered the grid connection in Tokyo.' }, { cvText: cv }).flatMap((x) => x.unsupported)).toContain('Tokyo');
+  });
 });
 
 describe('spec T-03: an empty language list is never evidence of a language', () => {

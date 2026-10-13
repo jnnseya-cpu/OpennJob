@@ -39,7 +39,6 @@ import {
   interviewFromDocuments,
   tailorCv,
   tailorCvForJob,
-  traceRewrittenCv,
   traceCheck,
   trainingWarnings,
   zonedDayStart,
@@ -464,9 +463,11 @@ export class OpennJobService {
   /** TAI-3: runs the trace check and returns the failures as the person will read them. */
   private static traceOf(statement: string, tailoredCv: string, job: Pick<Job, 'title' | 'employer' | 'location'>, profile: Profile, passport: Passport): string[] {
     const sources = { cvText: profile.cvText, passport, languages: preferencesOf(profile).languages, job, personName: `${profile.firstName} ${profile.lastName}` };
-    // The statement and the CV at fact level: a CV rewritten for the advert may reword, never add a fact.
-    const failures = [...traceCheck({ statement }, sources), ...traceRewrittenCv(tailoredCv, sources)];
-    return failures.map(describeTraceFailure);
+    // The statement and the CV together. A CV line copied from the person's CV passes as itself
+    // (it cannot add a fact); only a reworded line is checked at fact level. Using traceCheck here,
+    // not traceRewrittenCv, means the person's own CV — contact line included — always traces, so
+    // the fall back to it below can clear a hold.
+    return traceCheck({ statement, tailoredCv }, sources).map(describeTraceFailure);
   }
 
   /**
@@ -483,7 +484,9 @@ export class OpennJobService {
     }
     let cv = tailoredCv;
     let cvSource = tailoredCvSource;
-    if (cv && traceRewrittenCv(cv, sources).length > 0) {
+    // If the tailored CV does not trace (an AI rewrite that reworded a fact), fall back to the
+    // person's own CV, which always traces line for line.
+    if (cv && traceCheck({ tailoredCv: cv }, sources).length > 0) {
       cv = profile.cvText;
       cvSource = 'reorder';
     }
