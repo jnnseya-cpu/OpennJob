@@ -171,9 +171,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="top">
         <div className="top-in">
           <div className="brand">
-            {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
-            <img className="logo" src="/brand/opennjob-logo-192.png" alt="" width={52} height={52} />
-            <b>OpennJob</b>
+            <Link href={signedIn ? '/dashboard/' : '/'} className="brand-home" aria-label="OpennJob home">
+              {/* eslint-disable-next-line @next/next/no-img-element -- static export: no image optimiser */}
+              <img className="logo" src="/brand/opennjob-logo-192.png" alt="" width={52} height={52} />
+              <b>OpennJob</b>
+            </Link>
             <span className="muted small grow"><span className="tagline">Six industry packs · UK and worldwide</span></span>
             {!signedIn || isPublic ? <ThemeToggle /> : null}
             {signedIn && !isPublic ? (
