@@ -5,7 +5,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { hashPassword, passwordProblems, passwordVersion, signAccessToken, verifyPassword } from './auth';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
-import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput, RefreshInput } from './schemas';
+import type { ChangeEmailInput, ChangePasswordInput, DeleteAccountInput, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput, VerifyEmailInput, RefreshInput } from './schemas';
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 /** "Keep me signed in" lasts 60 days from the last use. */
@@ -211,6 +211,42 @@ export class AccountService {
     if (!user.emailVerifiedAt) await this.deps.repository.markEmailVerified(userId, this.now());
     await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.password_changed', userId, occurredAt: this.now(), payload: {} });
     return { reset: true };
+  }
+
+  /** Change the password while signed in. The current password is required, so a borrowed access token alone cannot. */
+  async changePassword(userId: string, input: ChangePasswordInput) {
+    const user = await this.mustGetUser(userId);
+    if (!(await verifyPassword(input.currentPassword, user.passwordHash))) throw new UnauthorizedException('Current password is incorrect');
+    const problems = passwordProblems(input.newPassword, user.email);
+    if (problems.length > 0) {
+      throw new BadRequestException({ statusCode: 400, error: 'Bad Request', message: 'Validation failed', issues: problems.map((message) => ({ path: 'newPassword', message })) });
+    }
+    const hash = await hashPassword(input.newPassword, this.deps.config.bcryptRounds);
+    await this.deps.repository.updatePasswordHash(userId, hash);
+    // Every other "keep me signed in" device has to sign in again with the new password.
+    await this.deps.repository.revokeAuthTokens(userId, 'refresh', this.now());
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.password_changed', userId, occurredAt: this.now(), payload: {} });
+    // The access token embeds the password version, so the one this session holds has just been
+    // invalidated: return a fresh one so the person is not signed out by their own change.
+    return { changed: true, ...this.token({ ...user, passwordHash: hash }) };
+  }
+
+  /** Change the e-mail address while signed in. The password is required; the new address starts unverified. */
+  async changeEmail(userId: string, input: ChangeEmailInput) {
+    const user = await this.mustGetUser(userId);
+    if (!(await verifyPassword(input.password, user.passwordHash))) throw new UnauthorizedException('Password is incorrect');
+    if (input.email === user.email) throw new BadRequestException('That is already your e-mail address');
+    try {
+      await this.deps.repository.updateEmail(userId, input.email);
+    } catch (err) {
+      if (err instanceof EmailTakenError) throw new ConflictException('An account with this email address already exists');
+      throw err;
+    }
+    const { emailVerifiedAt: _was, ...rest } = user;
+    const updated: User = { ...rest, email: input.email };
+    await this.deps.eventBus.publish({ id: this.deps.newId(), type: 'account.email_changed', userId, occurredAt: this.now(), payload: {} });
+    await this.sendVerification(updated);
+    return { user: publicUser(updated) };
   }
 
   private async mustGetUser(userId: string): Promise<User> {

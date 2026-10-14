@@ -323,6 +323,15 @@ export class PostgresRepository implements Repository {
     await this.db.query('UPDATE users SET password_hash = $2 WHERE id = $1', [userId, passwordHash]);
   }
 
+  async updateEmail(userId: string, email: string): Promise<void> {
+    try {
+      await this.db.query('UPDATE users SET email = $2, email_verified_at = NULL WHERE id = $1', [userId, email]);
+    } catch (err) {
+      if ((err as { code?: string; constraint?: string }).code === '23505') throw new EmailTakenError();
+      throw err;
+    }
+  }
+
   async listUserIds(): Promise<string[]> {
     const { rows } = await this.db.query('SELECT id FROM users ORDER BY created_at, id');
     return rows.map((r) => r.id as string);

@@ -44,6 +44,8 @@ const ROUTES = [
   'GET /profile',
   'GET /screening',
   'GET /usage',
+  'POST /account/email',
+  'POST /account/password',
   'POST /account/verification',
   'POST /agent/queue/:id/go',
   'POST /agent/queue/:id/result',

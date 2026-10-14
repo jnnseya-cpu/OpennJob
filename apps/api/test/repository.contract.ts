@@ -149,6 +149,18 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         read.email = 'changed@example.org';
         expect((await repo.getUserById(a))?.email).toBe(`${a}@example.org`);
       });
+
+      it('updateEmail moves the account to a new, unverified address, and refuses one another account holds', async () => {
+        const id = unique('user-e');
+        await repo.createUser({ ...user(id), emailVerifiedAt: '2026-10-06T09:05:00.000Z' });
+        await repo.updateEmail(id, 'moved@example.org');
+        const moved = await repo.getUserById(id);
+        expect(moved?.email).toBe('moved@example.org');
+        expect(moved?.emailVerifiedAt).toBeUndefined(); // the new address starts unverified
+        expect(await repo.getUserByEmail('moved@example.org')).toMatchObject({ id });
+        await expect(repo.updateEmail(id, `${a}@example.org`)).rejects.toBeInstanceOf(EmailTakenError);
+        expect((await repo.getUserById(id))?.email).toBe('moved@example.org'); // unchanged after the refusal
+      });
     });
 
     describe('profile', () => {

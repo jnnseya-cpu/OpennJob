@@ -10,6 +10,8 @@ import {
   ZodPipe,
   agentRunSchema,
   deleteAccountSchema,
+  changePasswordSchema,
+  changeEmailSchema,
   loginSchema,
   registerSchema,
   verifyEmailSchema,
@@ -39,7 +41,7 @@ import {
   refreshSchema,
 } from './schemas';
 import type { ApplyUrlInput, FromLinkInput, ApplicationSystemInput, AuthorisationInput, PauseInput, QuestionAnswerInput, QueueResultInput, ScreeningInput, SubmittedInput, OutcomeInput } from './schemas';
-import type { DeleteAccountInput, ForgotPasswordInput, LoginInput, RefreshInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
+import type { ChangeEmailInput, ChangePasswordInput, DeleteAccountInput, ForgotPasswordInput, LoginInput, RefreshInput, RegisterInput, ResetPasswordInput, VerifyEmailInput } from './schemas';
 import type { AgentRunInput, ConfirmApplicationInput, CreateApplicationInput, EmployerJobInput, InterviewFeedbackInput, MatchFilterInput, PassportInput, ProfileInput, StatementInput } from './schemas';
 
 // Note: every constructor parameter uses an explicit @Inject(...) so the app does not
@@ -162,6 +164,18 @@ export class AccountController {
   @HttpCode(200)
   resendVerification(@CurrentUser() userId: string) {
     return this.accounts.resendVerification(userId);
+  }
+
+  @Post('password')
+  @HttpCode(200)
+  changePassword(@CurrentUser() userId: string, @Body(new ZodPipe(changePasswordSchema)) body: ChangePasswordInput) {
+    return this.accounts.changePassword(userId, body);
+  }
+
+  @Post('email')
+  @HttpCode(200)
+  changeEmail(@CurrentUser() userId: string, @Body(new ZodPipe(changeEmailSchema)) body: ChangeEmailInput) {
+    return this.accounts.changeEmail(userId, body);
   }
 
   @Delete()

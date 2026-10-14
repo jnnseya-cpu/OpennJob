@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { api, errorText, signOut as endSession } from '../../lib/api';
+import { api, errorText, setSession, signOut as endSession } from '../../lib/api';
 import type { AgentStatus, Authorisation, PublicUser } from '../../lib/types';
 
 interface Prefs {
@@ -21,6 +21,14 @@ export default function AccountPage() {
   const [exportMsg, setExportMsg] = useState('');
   const [password, setPassword] = useState('');
   const [sure, setSure] = useState(false);
+  const [curPw, setCurPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string }>();
+  const [pwBusy, setPwBusy] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailPw, setEmailPw] = useState('');
+  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string }>();
+  const [emailBusy, setEmailBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [busy, setBusy] = useState(false);
   const [auth, setAuth] = useState<Authorisation>();
@@ -128,6 +136,41 @@ export default function AccountPage() {
     }
   }
 
+  async function changePassword(e: FormEvent) {
+    e.preventDefault();
+    setPwBusy(true);
+    setPwMsg(undefined);
+    try {
+      const res = await api<{ accessToken: string; expiresAt: string }>('/account/password', { method: 'POST', body: { currentPassword: curPw, newPassword: newPw }, passwordCheck: true });
+      // The old access token no longer works, so keep this session on the fresh one the change returns.
+      setSession({ accessToken: res.accessToken, expiresAt: res.expiresAt });
+      setCurPw('');
+      setNewPw('');
+      setPwMsg({ ok: true, text: 'Password changed. Other devices that kept you signed in will need the new password.' });
+    } catch (err) {
+      setPwMsg({ ok: false, text: errorText(err) });
+    } finally {
+      setPwBusy(false);
+    }
+  }
+
+  async function changeEmail(e: FormEvent) {
+    e.preventDefault();
+    setEmailBusy(true);
+    setEmailMsg(undefined);
+    try {
+      const res = await api<{ user: PublicUser }>('/account/email', { method: 'POST', body: { email: newEmail.trim(), password: emailPw }, passwordCheck: true });
+      setMe(res.user);
+      setNewEmail('');
+      setEmailPw('');
+      setEmailMsg({ ok: true, text: 'E-mail changed. We have sent a confirmation link to the new address — confirm it before anything is sent for you.' });
+    } catch (err) {
+      setEmailMsg({ ok: false, text: errorText(err) });
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
   function signOut() {
     void endSession('/signin/?notice=signedout');
   }
@@ -219,6 +262,40 @@ export default function AccountPage() {
           </section>
         ) : null}
 
+        <form className="card" onSubmit={changePassword} aria-label="Change password">
+          <span className="label">Change your password</span>
+          <p className="small">Set a new password without signing out. You need your current one.</p>
+          <label className="field">
+            <span>Current password</span>
+            <input type="password" autoComplete="current-password" required value={curPw} onChange={(e) => setCurPw(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>New password</span>
+            <input type="password" autoComplete="new-password" required value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+          </label>
+          {pwMsg ? <p className={`small note ${pwMsg.ok ? 'ok' : 'bad'}`} role={pwMsg.ok ? 'status' : 'alert'}>{pwMsg.text}</p> : null}
+          <button type="submit" className="btn" disabled={pwBusy || !curPw || !newPw}>
+            {pwBusy ? 'Saving…' : 'Change password'}
+          </button>
+        </form>
+
+        <form className="card" onSubmit={changeEmail} aria-label="Change e-mail address">
+          <span className="label">Change your e-mail address</span>
+          <p className="small">The new address must be confirmed before anything is sent for you. Confirm it with your password.</p>
+          <label className="field">
+            <span>New e-mail address</span>
+            <input type="email" autoComplete="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Your password</span>
+            <input type="password" autoComplete="current-password" required value={emailPw} onChange={(e) => setEmailPw(e.target.value)} />
+          </label>
+          {emailMsg ? <p className={`small note ${emailMsg.ok ? 'ok' : 'bad'}`} role={emailMsg.ok ? 'status' : 'alert'}>{emailMsg.text}</p> : null}
+          <button type="submit" className="btn" disabled={emailBusy || !newEmail.trim() || !emailPw}>
+            {emailBusy ? 'Saving…' : 'Change e-mail'}
+          </button>
+        </form>
+
         <section className="card">
           <span className="label">Your data</span>
           <p className="small">Download everything OpennJob holds about you: account, profile, CV, passport, applications, activity and usage.</p>
@@ -248,7 +325,6 @@ export default function AccountPage() {
         <section className="card">
           <span className="label">Not available yet</span>
           <ul className="plain small">
-            <li>Changing your password while signed in (use Forgot your password on the sign-in page) or your email address.</li>
             <li>Plans and billing. Nothing is charged.</li>
           </ul>
         </section>

@@ -244,6 +244,13 @@ export type RefreshInput = z.infer<typeof refreshSchema>;
 
 export const deleteAccountSchema = z.object({ password: z.string().min(1).max(1000) }).strict();
 
+/** Change the password while signed in: the current one, and the new one. */
+export const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(1000), newPassword: z.string().min(1).max(1000) }).strict();
+/** Change the e-mail address while signed in: confirmed with the password. */
+export const changeEmailSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000) }).strict();
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
+
 /** ACC-2 and ACC-3: the one-time token from the e-mail (base64url, 43 characters). */
 const oneTimeToken = z.string().trim().regex(/^[A-Za-z0-9_-]{32,128}$/, 'not a valid link');
 export const verifyEmailSchema = z.object({ token: oneTimeToken }).strict();

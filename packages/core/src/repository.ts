@@ -62,6 +62,8 @@ export interface Repository {
   // ----- accounts: verification, reset, listing -----
   markEmailVerified(userId: string, at: string): Promise<void>;
   updatePasswordHash(userId: string, passwordHash: string): Promise<void>;
+  /** Changes the account's e-mail to a new, unverified address. Throws EmailTakenError if another account holds it. */
+  updateEmail(userId: string, email: string): Promise<void>;
   /** Every account id, oldest first. For the scheduler. */
   listUserIds(): Promise<string[]>;
   /** Stores a one-time token. Only its SHA-256 is ever stored. */
@@ -242,6 +244,13 @@ export class InMemoryRepository implements Repository {
   async updatePasswordHash(userId: string, passwordHash: string) {
     const u = this.users.get(userId);
     if (u) this.users.set(userId, { ...u, passwordHash });
+  }
+  async updateEmail(userId: string, email: string) {
+    const u = this.users.get(userId);
+    if (!u) return;
+    for (const other of this.users.values()) if (other.id !== userId && other.email === email) throw new EmailTakenError();
+    const { emailVerifiedAt: _was, ...rest } = u;
+    this.users.set(userId, { ...rest, email });
   }
   async listUserIds() {
     return [...this.users.values()].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id)).map((u) => u.id);

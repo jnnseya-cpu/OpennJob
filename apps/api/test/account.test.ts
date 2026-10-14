@@ -97,6 +97,35 @@ for (const backend of BACKENDS) {
       expect((await fresh.get('/account/export').expect(200)).body).toMatchObject({ profile: null, passport: null, applications: [], usage: [] });
     });
 
+    it('POST /account/password: checks the current password, sets the new one, and keeps this session signed in', async () => {
+      await t.api.post('/account/password').send({ currentPassword: 'the wrong one', newPassword: 'another long fictional passphrase' }).expect(401);
+      const res = await t.api.post('/account/password').send({ currentPassword: USER_PASSWORD, newPassword: 'another long fictional passphrase' }).expect(200);
+      expect(res.body.changed).toBe(true);
+      expect(typeof res.body.accessToken).toBe('string');
+      // The old password no longer signs in; the new one does.
+      await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(401);
+      await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: 'another long fictional passphrase' }).expect(200);
+      // The token returned by the change still works, so the person is not signed out by their own change.
+      const after = t.as(res.body.accessToken);
+      await after.get('/account').expect(200);
+      // A weak new password is refused.
+      await after.post('/account/password').send({ currentPassword: 'another long fictional passphrase', newPassword: 'short' }).expect(400);
+    });
+
+    it('POST /account/email: checks the password, moves to a new unverified address, and refuses one already taken', async () => {
+      await t.api.post('/account/email').send({ email: 'moved.okafor@example.org', password: 'the wrong one' }).expect(401);
+      const res = await t.api.post('/account/email').send({ email: 'moved.okafor@example.org', password: USER_PASSWORD }).expect(200);
+      expect(res.body.user.email).toBe('moved.okafor@example.org');
+      expect(res.body.user.emailVerified).toBe(false);
+      // Sign-in uses the new address now; the session's token (password unchanged) still works.
+      await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(401);
+      await t.raw().post('/auth/login').send({ email: 'moved.okafor@example.org', password: USER_PASSWORD }).expect(200);
+      await t.api.get('/account').expect(200);
+      // An address another account holds cannot be taken.
+      await t.raw().post('/auth/register').send({ email: 'other.person@example.org', password: USER_PASSWORD, acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1' }).expect(201);
+      await t.api.post('/account/email').send({ email: 'other.person@example.org', password: USER_PASSWORD }).expect(409);
+    });
+
     // Defined only for the PostgreSQL store: it reads the tables directly.
     if (backend.persistence === 'postgres') it('in PostgreSQL no row that refers to the user is left in any table', async () => {
       const pool = made.db?.pool;
