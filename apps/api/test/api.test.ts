@@ -247,6 +247,20 @@ describe('GET /jobs/matches', () => {
     expect(after).toContain(NURSE_JOB);
   });
 
+  it('does not list a re-advertised copy of a job already applied to (same vacancy, new id)', async () => {
+    await seeded();
+    await t.api.post('/applications').send({ jobId: HCA_JOB, mode: 'review' }).expect(201);
+    const job = await t.deps.repository.getJob(HCA_JOB);
+    expect(job).toBeDefined();
+    // The same vacancy comes back from discovery under a new id (same employer, title and country).
+    const reposted = { ...(job as NonNullable<typeof job>), id: 'sample:hca-elderly-care-reposted', fetchedAt: NOW };
+    await t.deps.repository.upsertJobs([reposted]);
+    const ids = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
+    expect(ids).not.toContain(HCA_JOB); // the exact one, by id
+    expect(ids).not.toContain('sample:hca-elderly-care-reposted'); // the re-advertised copy, by vacancy
+    expect(ids).toContain(NURSE_JOB); // a different vacancy is unaffected
+  });
+
   it('drops a job discovery has not re-seen for a while (expired)', async () => {
     await seeded();
     expect((await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id)).toContain(HCA_JOB);

@@ -386,7 +386,11 @@ export class OpennJobService {
     // A job that already has an application of any kind — submitted, closed (rejected, no reply,
     // or set aside), or still being prepared — does not come back in search results: it lives in
     // the tracker now. A re-advertised vacancy has a new id, so it appears again on its own.
-    const seen = new Set((await this.deps.repository.listApplications(userId)).map((a) => a.jobId));
+    const applications = await this.deps.repository.listApplications(userId);
+    const seen = new Set(applications.map((a) => a.jobId));
+    // The same vacancy re-advertised later has a new job id, so excluding by id alone lets an
+    // already-applied job come back. Also exclude any job whose vacancy key matches one already applied.
+    const appliedKeys = new Set(applications.map((a) => a.dedupeKey).filter((k): k is string => Boolean(k)));
     const nowMs = this.deps.clock().getTime();
     const freshDays = limitsOf(this.deps.config).jobFreshDays;
     return jobs
@@ -398,12 +402,13 @@ export class OpennJobService {
       .filter((m) => m.score >= min)
       // Chosen cities rank matching jobs higher without excluding the rest (soft preference).
       .sort((a, b) => Number(b.eligible) - Number(a.eligible) || Number(cityPreferred(b.job, preferences)) - Number(cityPreferred(a.job, preferences)) || b.score - a.score || a.job.id.localeCompare(b.job.id))
-      // The same vacancy from two sources is listed once (the first, best-scored copy).
+      // The same vacancy from two sources is listed once (the first, best-scored copy), and a vacancy
+      // already applied to (seeded below) is dropped even when re-advertised under a new id.
       .filter(
         (
-          (seen) => (m: { job: Pick<Job, 'title' | 'employer' | 'location'> }) =>
+          (seen) => (m: { job: Pick<Job, 'title' | 'employer' | 'location' | 'country'> }) =>
             !seen.has(dedupeKey(m.job)) && Boolean(seen.add(dedupeKey(m.job)))
-        )(new Set<string>()),
+        )(new Set<string>(appliedKeys)),
       );
   }
 
