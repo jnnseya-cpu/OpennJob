@@ -27,6 +27,7 @@ import {
   findPackQuestion,
   findQuestion,
   inScope,
+  cityPreferred,
   matchJob,
   meteredLlm,
   normaliseJob,
@@ -395,7 +396,8 @@ export class OpennJobService {
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
-      .sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score || a.job.id.localeCompare(b.job.id))
+      // Chosen cities rank matching jobs higher without excluding the rest (soft preference).
+      .sort((a, b) => Number(b.eligible) - Number(a.eligible) || Number(cityPreferred(b.job, preferences)) - Number(cityPreferred(a.job, preferences)) || b.score - a.score || a.job.id.localeCompare(b.job.id))
       // The same vacancy from two sources is listed once (the first, best-scored copy).
       .filter(
         (
@@ -834,7 +836,9 @@ export class OpennJobService {
       else if (this.duplicateOf(existing, job, jobsById)) skipped.alreadyPrepared += 1;
       else candidates.push({ job, match });
     }
-    candidates.sort((a, b) => b.match.score - a.match.score || a.job.id.localeCompare(b.job.id));
+    // A chosen city ranks its jobs first (soft preference), so local roles go out before the rest
+    // under the daily limit; it never removes a job from the list.
+    candidates.sort((a, b) => Number(cityPreferred(b.job, preferences)) - Number(cityPreferred(a.job, preferences)) || b.match.score - a.match.score || a.job.id.localeCompare(b.job.id));
 
     const prepared: Application[] = [];
     for (const { job, match } of candidates) {

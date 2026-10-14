@@ -26,10 +26,10 @@ export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined)
  *  - countries: empty = any country. Otherwise the job's country must be one of them.
  *    A job whose country is unknown cannot be shown to be in a selected country, so it
  *    is out of scope while any country is selected.
- *  - cities: a city only narrows the country it belongs to. With "Lyon" selected, jobs in
- *    France must be in Lyon; jobs in every other country are unaffected. So a job in a
- *    selected country with no selected city in that country still passes. A city whose
- *    country OpennJob cannot tell (see geo.ts) narrows nothing.
+ *  - cities: a SOFT preference, never a filter (owner decision, 14 October 2026). A chosen
+ *    city no longer excludes the rest of its country; it ranks matching jobs higher instead
+ *    (see cityPreferred). So "United Kingdom" with "Stafford" chosen still shows every UK
+ *    job, with the Stafford ones first. Scope is decided by country and language only.
  *  - languages: empty excludes nothing. Otherwise the language the application is written
  *    in (job.language, "en" when not stated) must be one of them.
  */
@@ -44,19 +44,29 @@ export function inScope(
     if (!country || !p.countries.some((c) => c.trim().toUpperCase() === country)) return false;
   }
 
-  if (country) {
-    const citiesHere = p.cities.filter((c) => cityCountry(c) === country);
-    if (citiesHere.length > 0) {
-      const jobCity = job.city ? foldPlace(job.city) : '';
-      if (!jobCity || !citiesHere.some((c) => foldPlace(parseCity(c).city) === jobCity)) return false;
-    }
-  }
-
   if (p.languages.length > 0) {
     const needed = JOB_LANGUAGE_NAME[job.language ?? 'en'].toLowerCase();
     if (!p.languages.some((l) => l.trim().toLowerCase() === needed)) return false;
   }
   return matchesSearchTypes(job, p.searchTypes);
+}
+
+/**
+ * A soft preference used to rank, never to exclude (owner decision, 14 October 2026): true when the
+ * job is in one of the person's chosen cities. A chosen city with a known country (see geo.ts) only
+ * prefers jobs in that country; one whose country OpennJob cannot tell prefers jobs of that name
+ * anywhere. Nothing chosen, or a job with no city, is not preferred (false), not excluded.
+ */
+export function cityPreferred(job: Pick<Job, 'country' | 'city'>, preferences: Preferences | undefined): boolean {
+  const p = preferences ?? EMPTY_PREFERENCES;
+  if (!job.city || p.cities.length === 0) return false;
+  const country = job.country?.trim().toUpperCase();
+  const jobCity = foldPlace(job.city);
+  return p.cities.some((c) => {
+    const cc = cityCountry(c);
+    if (cc && country && cc !== country) return false;
+    return foldPlace(parseCity(c).city) === jobCity;
+  });
 }
 
 /**
