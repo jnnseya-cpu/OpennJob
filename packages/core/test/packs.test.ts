@@ -210,6 +210,11 @@ describe('countries and regions', () => {
     expect(parseCity('Lille, fr')).toEqual({ city: 'Lille', country: 'FR' });
     expect(parseCity('Lille, XX')).toEqual({ city: 'Lille, XX', country: undefined });
     expect(cityCountry('Lille')).toBeUndefined();
+    // People write "UK", a country name, or an alias after the city, not only the ISO code.
+    expect(parseCity('Stafford, UK')).toEqual({ city: 'Stafford', country: 'GB' });
+    expect(parseCity('Stafford, United Kingdom')).toEqual({ city: 'Stafford', country: 'GB' });
+    expect(parseCity('Lille, France')).toEqual({ city: 'Lille', country: 'FR' });
+    expect(cityCountry('New York, USA')).toBe('US');
   });
 
   it('infers a place from free-text locations, and returns nothing rather than guess', () => {

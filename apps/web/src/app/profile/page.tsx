@@ -186,7 +186,7 @@ export default function ProfilePage() {
     if (!value) return;
     const code = cityCountry(value);
     if (!code) {
-      setCityError('Write the city with its country code, for example "Lille, FR".');
+      setCityError('Add the country after the city, for example "Stafford, UK" or "Lille, France".');
       return;
     }
     if (!prefs.countries.includes(code)) {

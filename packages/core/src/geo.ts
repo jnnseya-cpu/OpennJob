@@ -122,15 +122,24 @@ export const KNOWN_CITIES: Readonly<Record<string, string>> = {
 
 const CITY_LOOKUP = new Map(Object.entries(KNOWN_CITIES).map(([city, code]) => [foldPlace(city), code]));
 
-/** "Lille, FR" -> { city: "Lille", country: "FR" }; "Lyon" -> { city: "Lyon", country: "FR" }; unknown -> country undefined. */
+/**
+ * "Lille, FR" -> { city: "Lille", country: "FR" }; "Lyon" -> { city: "Lyon", country: "FR" };
+ * unknown -> country undefined. The part after the last comma may be an ISO code ("FR"), a country
+ * name ("France") or a common alias ("UK", "England", "USA"): people write "Stafford, UK", not "GB".
+ */
 export function parseCity(value: string): { city: string; country: string | undefined } {
-  const m = /^(.*?),\s*([A-Za-z]{2})\s*$/.exec(value.trim());
-  if (m) {
-    const country = normaliseCountryCode(m[2]);
-    if (country) return { city: (m[1] as string).trim(), country };
+  const trimmed = value.trim();
+  const comma = trimmed.lastIndexOf(',');
+  if (comma > 0) {
+    const country = resolveCountry(trimmed.slice(comma + 1));
+    if (country) return { city: trimmed.slice(0, comma).trim(), country };
   }
-  const city = value.trim();
-  return { city, country: CITY_LOOKUP.get(foldPlace(city)) };
+  return { city: trimmed, country: CITY_LOOKUP.get(foldPlace(trimmed)) };
+}
+
+/** An ISO alpha-2 code ("GB"), a country name ("United Kingdom") or a common alias ("UK") -> its code. */
+export function resolveCountry(value: string): string | undefined {
+  return normaliseCountryCode(value) ?? NAME_MAP.get(foldPlace(value));
 }
 
 /** Which country a preference city belongs to, or undefined when OpennJob cannot tell. */
@@ -144,7 +153,11 @@ const NAME_LOOKUP: ReadonlyArray<[string, string]> = [
   ['uk', 'GB'], ['great britain', 'GB'], ['england', 'GB'], ['scotland', 'GB'], ['wales', 'GB'], ['northern ireland', 'GB'],
   ['usa', 'US'], ['united states of america', 'US'], ['uae', 'AE'], ['drc', 'CD'], ['democratic republic of the congo', 'CD'],
   ['ivory coast', 'CI'], ['turkey', 'TR'], ['czech republic', 'CZ'], ['republic of ireland', 'IE'],
+  ['britain', 'GB'], ['united states', 'US'], ['holland', 'NL'], ['the netherlands', 'NL'],
 ];
+
+/** Country names and aliases (folded) -> ISO alpha-2 code. Used by resolveCountry. */
+const NAME_MAP = new Map<string, string>(NAME_LOOKUP);
 
 /**
  * Best-effort guess at a job's country and city from a free-text location such as
