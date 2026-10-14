@@ -76,7 +76,17 @@ button.chip { cursor: pointer; padding: 5px 12px; }
 .btn { display: inline-block; font: 600 15px var(--body); border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 11px 16px; cursor: pointer; text-decoration: none; text-align: center; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.ghost { background: none; color: var(--muted); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Profile photo and cover banner, and the avatar shown on the dashboard. */
+.profile-banner { position: relative; margin-bottom: 34px; }
+.profile-cover { display: block; width: 100%; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.profile-cover.placeholder { background: linear-gradient(120deg, var(--bg), var(--line)); }
+.profile-avatar { position: absolute; left: 16px; bottom: -28px; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+.profile-avatar.placeholder { display: flex; align-items: center; justify-content: center; background: var(--accent); color: var(--on-accent); font: 700 20px var(--body); }
+.dash-hero { position: relative; margin-bottom: 40px; }
+.dash-hero .profile-cover { height: 140px; }
+.dash-hero .profile-avatar { width: 72px; height: 72px; bottom: -32px; font-size: 24px; }
 button.link { border: 0; background: none; color: var(--accent-ink); font: 600 14px var(--body); padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 textarea, input[type="text"], input[type="email"], input[type="password"], input[type="tel"], input[type="date"], select {

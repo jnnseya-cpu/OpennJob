@@ -27,6 +27,12 @@ const optionalText = (max: number) =>
   z.string().trim().max(max).optional().transform((v) => (v ? v : undefined));
 const isoDate = z.string().refine((v) => isoDateToUtcDay(v) !== undefined, 'must be a real date in YYYY-MM-DD format');
 
+/** A small raster image as a base64 data: URL (png, jpeg or webp), at most `max` characters. */
+const imageDataUrl = (max: number) =>
+  z.string().trim().max(max).regex(/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/]+=*$/, 'must be a PNG, JPEG or WebP image')
+    .optional()
+    .transform((v) => (v ? v : undefined));
+
 const unique = <T>(values: T[]): T[] => [...new Set(values)];
 
 /** ISO 3166-1 alpha-2, any case in, upper case out. Checked against the full list in packages/core/src/geo.ts. */
@@ -81,6 +87,10 @@ export const profileSchema = z
     postcode: text(12),
     cvText: z.string().trim().min(20, 'CV text is too short').max(50_000),
     preferences: preferencesSchema.optional(),
+    // The person's own photo and cover image, as a small data: URL. Resized by the browser before
+    // upload; capped here so the whole profile stays inside the request body limit.
+    avatar: imageDataUrl(50_000),
+    cover: imageDataUrl(100_000),
   })
   .strict();
 

@@ -23,6 +23,36 @@ interface Prefs {
   targetInterviewRate?: number | undefined;
 }
 
+/**
+ * Shrinks a chosen image to fit within maxW x maxH and returns a small JPEG data: URL. The resizing
+ * happens in the browser so the photo that leaves the device is already small (it must fit inside the
+ * API's request-body limit together with the rest of the profile).
+ */
+async function resizeImage(file: File, maxW: number, maxH: number, quality = 0.82): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(new Error('Could not read that file.'));
+    fr.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('That file is not an image OpennJob can read.'));
+    i.src = dataUrl;
+  });
+  const scale = Math.min(1, maxW / img.width, maxH / img.height);
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Image resizing is not supported in this browser.');
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 /** One company per line (or comma-separated), blanks dropped, each once. */
 function employerList(text: string): string[] {
   const seen = new Map<string, string>();
@@ -174,6 +204,19 @@ export default function ProfilePage() {
 
   const set = (key: keyof Details) => (e: { target: { value: string } }) => setDetails((d) => ({ ...d, [key]: e.target.value }));
 
+  async function pickImage(kind: 'avatar' | 'cover', file: File | undefined) {
+    if (!file) return;
+    setProfileMsg(undefined);
+    try {
+      const url = kind === 'avatar' ? await resizeImage(file, 256, 256) : await resizeImage(file, 1200, 360);
+      setDetails((d) => ({ ...d, [kind]: url }));
+      setProfileMsg({ ok: true, text: `${kind === 'avatar' ? 'Photo' : 'Cover image'} ready. Save your profile to keep it.` });
+    } catch (err) {
+      setProfileMsg({ ok: false, text: errorText(err) });
+    }
+  }
+  const removeImage = (kind: 'avatar' | 'cover') => setDetails((d) => ({ ...d, [kind]: undefined }));
+
   function removeCountry(code: string) {
     setPrefs((p) => {
       const countries = p.countries.filter((c) => c !== code);
@@ -313,6 +356,26 @@ export default function ProfilePage() {
       <h2>Profile</h2>
       <div className="cols">
         <form className="stack" onSubmit={saveProfile} aria-label="Profile">
+          <section className="card" aria-label="Photo and cover image">
+            <span className="label">Photo and cover image</span>
+            <div className="profile-banner" data-testid="profile-banner">
+              {details.cover ? <img className="profile-cover" src={details.cover} alt="Your cover image" /> : <div className="profile-cover placeholder" aria-hidden="true" />}
+              {details.avatar ? <img className="profile-avatar" src={details.avatar} alt="Your profile photo" /> : <div className="profile-avatar placeholder" aria-hidden="true">{(details.firstName[0] ?? '').toUpperCase()}{(details.lastName[0] ?? '').toUpperCase()}</div>}
+            </div>
+            <div className="row">
+              <label className="btn">
+                {details.avatar ? 'Change photo' : 'Add photo'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => void pickImage('avatar', e.target.files?.[0])} />
+              </label>
+              {details.avatar ? <button type="button" className="btn ghost" onClick={() => removeImage('avatar')}>Remove photo</button> : null}
+              <label className="btn">
+                {details.cover ? 'Change cover' : 'Add cover'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => void pickImage('cover', e.target.files?.[0])} />
+              </label>
+              {details.cover ? <button type="button" className="btn ghost" onClick={() => removeImage('cover')}>Remove cover</button> : null}
+            </div>
+            <p className="small muted">A photo and a banner for your dashboard. They are shrunk on your device, stored encrypted, and never sent to an employer.</p>
+          </section>
           <section className="card">
             <span className="label">Your details</span>
             <div className="grid2">

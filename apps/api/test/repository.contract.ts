@@ -171,6 +171,20 @@ export function repositoryContract(name: string, make: () => Promise<ContractBac
         expect(await repo.getProfile(a)).toEqual(p);
       });
 
+      it('round-trips the profile photo and cover image, and leaves them absent when unset', async () => {
+        const avatar = 'data:image/jpeg;base64,/9j/AAAAAAAAAAAAAAAAAAAA';
+        const cover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+        await repo.saveProfile(a, profile({ avatar, cover }));
+        const read = (await repo.getProfile(a)) as Profile;
+        expect(read.avatar).toBe(avatar);
+        expect(read.cover).toBe(cover);
+        // Without them, the keys are absent (not null/empty).
+        await repo.saveProfile(a, profile());
+        const bare = (await repo.getProfile(a)) as Profile;
+        expect('avatar' in bare).toBe(false);
+        expect('cover' in bare).toBe(false);
+      });
+
       it('keeps optional fields absent when absent and present when present', async () => {
         await repo.saveProfile(a, profile());
         const bare = (await repo.getProfile(a)) as Profile;

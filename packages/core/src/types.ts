@@ -106,6 +106,10 @@ export interface Profile {
   cvText: string;
   /** Absent means no preferences: everything is available. */
   preferences?: Preferences;
+  /** The person's own profile photo, as a small data: URL (personal data; stored encrypted). Absent means none. */
+  avatar?: string;
+  /** The person's own cover/banner image, as a small data: URL (personal data; stored encrypted). Absent means none. */
+  cover?: string;
 }
 
 export interface TrainingRecord {

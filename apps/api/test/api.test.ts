@@ -72,6 +72,18 @@ describe('PUT/GET /profile', () => {
     await t.api.put('/profile').send([]).expect(400);
     await t.api.get('/profile').expect(404); // nothing was stored
   });
+
+  it('stores a profile photo and cover image, and rejects a non-image or an oversized one', async () => {
+    t = await createTestApp();
+    const avatar = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
+    const cover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+    const put = await t.api.put('/profile').send({ ...PROFILE, avatar, cover }).expect(200);
+    expect(put.body.avatar).toBe(avatar);
+    expect(put.body.cover).toBe(cover);
+    // A non-image string, and an image too big to fit, are both refused.
+    await t.api.put('/profile').send({ ...PROFILE, avatar: 'data:text/html;base64,PHNjcmlwdD4=' }).expect(400);
+    await t.api.put('/profile').send({ ...PROFILE, avatar: `data:image/png;base64,${'A'.repeat(60_000)}` }).expect(400);
+  });
 });
 
 describe('PUT/GET /passport', () => {

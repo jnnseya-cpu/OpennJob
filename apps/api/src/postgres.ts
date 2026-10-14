@@ -141,20 +141,24 @@ export class PostgresRepository implements Repository {
       postcode: r.postcode as string,
       cvText: this.cipher.decrypt(r.cv_text as string, `profile.cv:${userId}`),
       preferences: r.preferences as Profile['preferences'] | null,
+      avatar: r.avatar ? this.cipher.decrypt(r.avatar as string, `profile.avatar:${userId}`) : null,
+      cover: r.cover ? this.cipher.decrypt(r.cover as string, `profile.cover:${userId}`) : null,
     });
   }
 
   async saveProfile(userId: string, p: Profile): Promise<void> {
     await this.db.query(
-      `INSERT INTO profiles (user_id, first_name, last_name, email, phone, address_line1, address_line2, city, postcode, cv_text, preferences, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+      `INSERT INTO profiles (user_id, first_name, last_name, email, phone, address_line1, address_line2, city, postcode, cv_text, preferences, avatar, cover, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
        ON CONFLICT (user_id) DO UPDATE SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, email = EXCLUDED.email,
          phone = EXCLUDED.phone, address_line1 = EXCLUDED.address_line1, address_line2 = EXCLUDED.address_line2, city = EXCLUDED.city,
-         postcode = EXCLUDED.postcode, cv_text = EXCLUDED.cv_text, preferences = EXCLUDED.preferences, updated_at = now()`,
+         postcode = EXCLUDED.postcode, cv_text = EXCLUDED.cv_text, preferences = EXCLUDED.preferences, avatar = EXCLUDED.avatar, cover = EXCLUDED.cover, updated_at = now()`,
       [
         userId, p.firstName, p.lastName, p.email, p.phone, p.addressLine1, p.addressLine2 ?? null, p.city, p.postcode,
         this.cipher.encrypt(p.cvText, `profile.cv:${userId}`),
         p.preferences ? json(p.preferences) : null,
+        p.avatar ? this.cipher.encrypt(p.avatar, `profile.avatar:${userId}`) : null,
+        p.cover ? this.cipher.encrypt(p.cover, `profile.cover:${userId}`) : null,
       ],
     );
   }
