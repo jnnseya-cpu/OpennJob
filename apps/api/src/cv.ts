@@ -42,13 +42,56 @@ async function loadPdfjs(): Promise<unknown> {
   }
 }
 
+/** A pdfjs text run: its text, whether the line ends after it, and its position/size on the page. */
+export interface PdfItem {
+  str?: string;
+  hasEOL?: boolean;
+  width?: number;
+  height?: number;
+  /** [scaleX, skewX, skewY, scaleY, x, y]. */
+  transform?: number[];
+}
+
+/**
+ * Join pdfjs text runs into lines. pdfjs splits a line into runs and does not keep the spaces
+ * between them, so joining the runs directly glues words ("MANAGER" + "TECHNICAL" ->
+ * "MANAGERTECHNICAL"). A space is inserted where the runs sit apart on the page (a horizontal gap),
+ * unless one side already has whitespace. This keeps real words separated without splitting a word
+ * a run happened to break.
+ */
+export function joinPdfItems(items: readonly PdfItem[]): string[] {
+  const lines: string[] = [];
+  let line = '';
+  let prevEndX: number | undefined;
+  let prevH = 10;
+  for (const item of items) {
+    const str = item.str ?? '';
+    if (str) {
+      const x = Array.isArray(item.transform) ? item.transform[4] : undefined;
+      const h = typeof item.height === 'number' && item.height > 0 ? item.height : prevH;
+      const gap = prevEndX !== undefined && x !== undefined ? x - prevEndX : 0;
+      if (line !== '' && !/\s$/.test(line) && !/^\s/.test(str) && gap > Math.max(1, 0.2 * h)) line += ' ';
+      line += str;
+      if (x !== undefined && typeof item.width === 'number') prevEndX = x + item.width;
+      prevH = h;
+    }
+    if (item.hasEOL) {
+      lines.push(line);
+      line = '';
+      prevEndX = undefined;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 async function pdfText(bytes: Buffer): Promise<{ text: string; pages: number }> {
   const pdfjs = (await loadPdfjs()) as {
     getDocument(o: { data: Uint8Array; isEvalSupported: boolean; useSystemFonts: boolean; disableFontFace: boolean; verbosity: number }): { promise: Promise<PdfDoc> };
   };
   interface PdfDoc {
     numPages: number;
-    getPage(n: number): Promise<{ getTextContent(): Promise<{ items: Array<{ str?: string; hasEOL?: boolean }> }> }>;
+    getPage(n: number): Promise<{ getTextContent(): Promise<{ items: PdfItem[] }> }>;
     destroy(): Promise<void>;
   }
   const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: false, disableFontFace: true, verbosity: 0 }).promise;
@@ -58,16 +101,7 @@ async function pdfText(bytes: Buffer): Promise<{ text: string; pages: number }> 
     for (let n = 1; n <= Math.min(doc.numPages, CV_MAX_PAGES); n += 1) {
       const page = await doc.getPage(n);
       const content = await page.getTextContent();
-      let line = '';
-      for (const item of content.items) {
-        line += item.str ?? '';
-        if (item.hasEOL) {
-          lines.push(line);
-          line = '';
-        }
-      }
-      if (line) lines.push(line);
-      lines.push('');
+      lines.push(...joinPdfItems(content.items), '');
     }
   } finally {
     await doc.destroy();
