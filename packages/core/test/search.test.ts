@@ -50,6 +50,15 @@ describe('searchPlan', () => {
     expect(searchPlan({ cvText: 'I enjoy hiking.', city: 'Leeds' }).queries).toEqual([]);
   });
 
+  it('titles the person set take priority over the CV, whatever their profession', () => {
+    const plan = searchPlan({ cvText: 'I enjoy hiking.', city: 'Leeds', preferences: { languages: [], countries: [], cities: [], searchTitles: ['Veterinary surgeon', 'VETERINARY SURGEON', '  ', 'Locum vet'] } }, 6);
+    expect(plan.titles).toEqual(['veterinary surgeon', 'locum vet']);
+    expect(plan.queries).toEqual([
+      { what: 'veterinary surgeon', country: 'GB' },
+      { what: 'locum vet', country: 'GB' },
+    ]);
+  });
+
   it('home country from the town, else the UK; one key per distinct search', () => {
     expect(homeCountry({ city: 'Lyon' })).toBe('FR');
     expect(homeCountry({ city: 'Nowhere-in-particular' })).toBe('GB');

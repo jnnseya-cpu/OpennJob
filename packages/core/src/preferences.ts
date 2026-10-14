@@ -11,6 +11,7 @@ export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined)
     countries: [...(p?.countries ?? [])],
     cities: [...(p?.cities ?? [])],
     searchTypes: [...(p?.searchTypes ?? [])],
+    ...(p?.searchTitles?.length ? { searchTitles: [...p.searchTitles] } : {}),
     ...(typeof p?.minScore === 'number' ? { minScore: p.minScore } : {}),
     ...(p?.targetEmployers?.length ? { targetEmployers: [...p.targetEmployers] } : {}),
     ...(typeof p?.targetInterviewRate === 'number' ? { targetInterviewRate: p.targetInterviewRate } : {}),

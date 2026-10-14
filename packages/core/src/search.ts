@@ -88,8 +88,11 @@ export const MAX_EMPLOYER_QUERIES = 60;
 
 /** The searches for one person, at most `maxQueries`: titles in rank order, each in every place. */
 export function searchPlan(profile: Pick<Profile, 'cvText' | 'city' | 'preferences'>, maxQueries = 6, maxEmployerQueries = MAX_EMPLOYER_QUERIES): SearchPlan {
-  const titles = titlesFromCv(profile.cvText ?? '', 5);
   const prefs = profile.preferences;
+  // The titles the person set take priority; otherwise they are read from the CV. This lets anyone
+  // search for their own job titles whatever their profession or however their CV text came through.
+  const chosenTitles = (prefs?.searchTitles ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const titles = chosenTitles.length ? [...new Set(chosenTitles)].slice(0, 8) : titlesFromCv(profile.cvText ?? '', 5);
   const places: { where?: string; country: string }[] = [];
   const countriesWithCity = new Set<string>();
   const chosenCountries = (prefs?.countries ?? []).map((c) => c.toUpperCase());

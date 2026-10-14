@@ -77,6 +77,8 @@ export interface Preferences {
   cities: string[];
   /** UK permanent, UK contract, international. Empty or absent means all three. */
   searchTypes?: SearchType[];
+  /** Job titles the person wants searched. When set, these are used instead of the titles read from the CV. */
+  searchTitles?: string[];
   /** The person's own minimum match score (50-100). The agent uses the higher of this and the platform's threshold. */
   minScore?: number;
   /**

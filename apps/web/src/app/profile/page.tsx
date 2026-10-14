@@ -78,6 +78,7 @@ export default function ProfilePage() {
   const [prefs, setPrefs] = useState<Prefs>({ languages: [], countries: [], cities: [] });
   const [cityInput, setCityInput] = useState('');
   const [employersText, setEmployersText] = useState('');
+  const [titlesText, setTitlesText] = useState('');
   const [cityError, setCityError] = useState('');
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string }>();
   const [savingProfile, setSavingProfile] = useState(false);
@@ -122,6 +123,7 @@ export default function ProfilePage() {
             ...(typeof preferences?.targetInterviewRate === 'number' ? { targetInterviewRate: preferences.targetInterviewRate } : {}),
           });
           setEmployersText((preferences?.targetEmployers ?? []).join('\n'));
+          setTitlesText((preferences?.searchTitles ?? []).join('\n'));
         } else {
           const me = await api<PublicUser>('/account');
           if (live) setDetails((d) => ({ ...d, email: me.email }));
@@ -242,7 +244,7 @@ export default function ProfilePage() {
     setProfileMsg(undefined);
     try {
       const { addressLine2, ...rest } = details;
-      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: { languages: prefs.languages, countries: prefs.countries, cities: prefs.cities, ...(prefs.searchTypes?.length ? { searchTypes: prefs.searchTypes } : {}), ...(prefs.minScore ? { minScore: prefs.minScore } : {}), ...(prefs.targetInterviewRate ? { targetInterviewRate: prefs.targetInterviewRate } : {}), ...(employerList(employersText).length ? { targetEmployers: employerList(employersText) } : {}) } } });
+      await api('/profile', { method: 'PUT', body: { ...rest, ...(addressLine2.trim() ? { addressLine2 } : {}), preferences: { languages: prefs.languages, countries: prefs.countries, cities: prefs.cities, ...(prefs.searchTypes?.length ? { searchTypes: prefs.searchTypes } : {}), ...(prefs.minScore ? { minScore: prefs.minScore } : {}), ...(prefs.targetInterviewRate ? { targetInterviewRate: prefs.targetInterviewRate } : {}), ...(employerList(employersText).length ? { targetEmployers: employerList(employersText) } : {}), ...(employerList(titlesText).length ? { searchTitles: employerList(titlesText).slice(0, 12) } : {}) } } });
       setProfileMsg({ ok: true, text: 'Profile saved. Your matches use it from now on.' });
     } catch (err) {
       setProfileMsg({ ok: false, text: errorText(err) });
@@ -455,6 +457,15 @@ export default function ProfilePage() {
             </label>
             <p className="small muted">
               After {OUTCOMES_BEFORE_LEARNING} recorded outcomes, automatic applications go only to matches whose score band has reached this rate for you; if none has, only the closest matches go. A higher target means fewer applications. No setting can promise interviews: employers decide.
+            </p>
+            <label className="field">
+              <span>
+                <b>Job titles to search for</b> <span className="muted">(one per line)</span>
+              </span>
+              <textarea aria-label="Job titles to search for" rows={4} placeholder={'For example:\nSenior project manager\nConstruction manager'} value={titlesText} onChange={(e) => setTitlesText(e.target.value)} />
+            </label>
+            <p className="small muted">
+              The titles you set here are what OpennJob searches for, in every place you chose. Leave it blank and OpennJob reads the titles from your CV instead. Use it when your job titles are not being picked up, or to search for roles your CV does not name. {employerList(titlesText).length ? `${employerList(titlesText).slice(0, 12).length} of 12.` : ''}
             </p>
             <label className="field">
               <span>
