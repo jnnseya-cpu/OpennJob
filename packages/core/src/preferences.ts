@@ -1,6 +1,6 @@
 import type { Job, Preferences, Profile } from './types';
 import { JOB_LANGUAGE_NAME } from './languages';
-import { cityCountry, foldPlace, parseCity } from './geo';
+import { cityCountry, foldPlace, parseCity, placeInCity } from './geo';
 
 export const EMPTY_PREFERENCES: Preferences = { languages: [], countries: [], cities: [], searchTypes: [] };
 
@@ -35,7 +35,7 @@ export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined)
  *    in (job.language, "en" when not stated) must be one of them.
  */
 export function inScope(
-  job: Pick<Job, 'country' | 'city' | 'language'> & Partial<Pick<Job, 'contractType'>>,
+  job: Pick<Job, 'country' | 'city' | 'language'> & Partial<Pick<Job, 'contractType' | 'location'>>,
   preferences: Preferences | undefined,
 ): boolean {
   const p = preferences ?? EMPTY_PREFERENCES;
@@ -48,8 +48,9 @@ export function inScope(
   if (country) {
     const citiesHere = p.cities.filter((c) => cityCountry(c) === country);
     if (citiesHere.length > 0) {
-      const jobCity = job.city ? foldPlace(job.city) : '';
-      if (!jobCity || !citiesHere.some((c) => foldPlace(parseCity(c).city) === jobCity)) return false;
+      // A chosen city matches a job by its town name OR by a postcode in that town's area, because
+      // adverts usually give a postcode ("B24 6BF"), not a town name (see placeInCity).
+      if (!citiesHere.some((c) => placeInCity(job.city, job.location, parseCity(c).city))) return false;
     }
   }
 

@@ -79,6 +79,17 @@ describe('inScope: a chosen city narrows its own country (owner decision, 15 Oct
     expect(inScope({ country: 'IE' }, prefs({ cities: ['Birmingham'] }))).toBe(true);
   });
 
+  it('matches a chosen city by a postcode in its area, since adverts give postcodes not town names', () => {
+    const p = prefs({ cities: ['Birmingham', 'Coventry', 'Wolverhampton', 'Stafford, GB'] });
+    expect(inScope({ country: 'GB', city: 'B24 6BF' }, p)).toBe(true); // Birmingham postcode
+    expect(inScope({ country: 'GB', city: 'CV1 2AB' }, p)).toBe(true); // Coventry
+    expect(inScope({ country: 'GB', city: 'WV10 7EH' }, p)).toBe(true); // Wolverhampton
+    expect(inScope({ country: 'GB', city: 'ST16 2AB' }, p)).toBe(true); // Stafford area
+    expect(inScope({ country: 'GB', city: 'M1 2AB' }, p)).toBe(false); // Manchester postcode: not chosen
+    // The postcode can also come from the free-text location when the city field has none.
+    expect(inScope({ country: 'GB', city: '', location: 'Some Street, B1 1AA, United Kingdom' }, p)).toBe(true);
+  });
+
   it('a city OpennJob cannot place in a country narrows nothing', () => {
     for (const job of EVERY) expect(inScope(job, prefs({ cities: ['Atlantis'] }))).toBe(true);
   });

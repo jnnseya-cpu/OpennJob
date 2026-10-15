@@ -147,6 +147,41 @@ export function cityCountry(value: string): string | undefined {
   return parseCity(value).country;
 }
 
+/**
+ * The area letters of a UK postcode in a free-text location ("B24 6BF" -> "B", "CV1 2AB" -> "CV",
+ * "WV10 7EH" -> "WV"). Adverts usually give a postcode, not a town name, so this lets a city
+ * preference match them. Undefined when no postcode-looking token is present.
+ */
+export function ukPostcodeArea(value: string | undefined): string | undefined {
+  const m = /(?:^|[\s,(])([A-Za-z]{1,2})\d/u.exec((value ?? '').trim());
+  return m?.[1] ? m[1].toUpperCase() : undefined;
+}
+
+/**
+ * UK postcode areas for the towns OpennJob can place, so a city preference also catches adverts
+ * that give only a postcode. Coarse on purpose (one area covers neighbouring towns): Solihull and
+ * West Bromwich sit in Birmingham's "B"; Stafford shares "ST" with Stoke-on-Trent. Keyed by folded
+ * city name.
+ */
+export const CITY_POSTCODE_AREAS: Readonly<Record<string, readonly string[]>> = {
+  birmingham: ['B'], solihull: ['B'], 'west bromwich': ['B'], coventry: ['CV'], wolverhampton: ['WV'],
+  walsall: ['WS'], dudley: ['DY'], stafford: ['ST'], 'stoke-on-trent': ['ST'], telford: ['TF'],
+  derby: ['DE'], leicester: ['LE'], nottingham: ['NG'],
+  manchester: ['M'], leeds: ['LS'], sheffield: ['S'], liverpool: ['L'], bristol: ['BS'], glasgow: ['G'],
+  edinburgh: ['EH'], cardiff: ['CF'], newcastle: ['NE'],
+  london: ['E', 'EC', 'N', 'NW', 'SE', 'SW', 'W', 'WC'], reading: ['RG'], slough: ['SL'], watford: ['WD'],
+};
+
+/** Does a job location (its city or free-text place) fall in the given town, by name or postcode area? */
+export function placeInCity(jobCity: string | undefined, jobLocation: string | undefined, cityName: string): boolean {
+  const target = foldPlace(cityName);
+  if (jobCity && foldPlace(jobCity) === target) return true;
+  const areas = CITY_POSTCODE_AREAS[target];
+  if (!areas) return false;
+  const area = ukPostcodeArea(jobCity) ?? ukPostcodeArea(jobLocation);
+  return area !== undefined && areas.includes(area);
+}
+
 
 const NAME_LOOKUP: ReadonlyArray<[string, string]> = [
   ...COUNTRIES.map((c): [string, string] => [foldPlace(c.name), c.code]),
