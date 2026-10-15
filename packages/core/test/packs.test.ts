@@ -225,6 +225,20 @@ describe('countries and regions', () => {
     expect(inferPlace('Remote')).toEqual({});
     expect(inferPlace(undefined)).toEqual({});
   });
+
+  it('recognises foreign hubs and extra UK towns, so a worldwide site cannot pass them off as its own country', () => {
+    // Foreign hubs that otherwise resolved to nothing (and got stamped with the site country).
+    expect(inferPlace('Niagara Falls').country).toBe('US');
+    expect(inferPlace('Schenectady').country).toBe('US');
+    expect(inferPlace('Noida').country).toBe('IN');
+    expect(inferPlace('Berlin').country).toBe('DE');
+    expect(inferPlace('Markham').country).toBe('CA');
+    expect(inferPlace('New Cairo').country).toBe('EG');
+    // UK towns beyond the picker list are confirmed as GB, so real UK jobs are kept.
+    expect(inferPlace('Stafford')).toEqual({ country: 'GB', city: 'Stafford' });
+    expect(inferPlace('Stone').country).toBe('GB');
+    expect(inferPlace('Warwick').country).toBe('GB');
+  });
 });
 
 describe('languages', () => {

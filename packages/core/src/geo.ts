@@ -160,6 +160,38 @@ const NAME_LOOKUP: ReadonlyArray<[string, string]> = [
 const NAME_MAP = new Map<string, string>(NAME_LOOKUP);
 
 /**
+ * A wider place gazetteer used ONLY to infer a job advert's country (inferPlace), so a worldwide
+ * careers site cannot pass its foreign jobs off as the site's country. It is deliberately NOT the
+ * city picker (KNOWN_CITIES): it holds common UK towns (so UK jobs are confirmed) and the foreign
+ * cities, US states and global hubs that otherwise resolve to nothing. Folded place -> ISO code.
+ */
+const WORLD_PLACES: Readonly<Record<string, string>> = {
+  // UK towns and cities beyond the picker list, so a UK job is confirmed rather than guessed.
+  stafford: 'GB', stone: 'GB', warwick: 'GB', rugby: 'GB', bristol: 'GB', leeds: 'GB', sheffield: 'GB', liverpool: 'GB',
+  newcastle: 'GB', nottingham: 'GB', leicester: 'GB', reading: 'GB', cardiff: 'GB', edinburgh: 'GB', aberdeen: 'GB', bath: 'GB',
+  oxford: 'GB', cambridge: 'GB', york: 'GB', watford: 'GB', amersham: 'GB', wakefield: 'GB', bridgwater: 'GB', prescot: 'GB',
+  stirling: 'GB', portsmouth: 'GB', southampton: 'GB', brighton: 'GB', hull: 'GB', preston: 'GB', bolton: 'GB', swindon: 'GB',
+  // United States: all states, plus common GE Vernova / industry hubs that appear as bare city names.
+  alabama: 'US', alaska: 'US', arizona: 'US', arkansas: 'US', california: 'US', colorado: 'US', connecticut: 'US', delaware: 'US',
+  florida: 'US', hawaii: 'US', idaho: 'US', illinois: 'US', indiana: 'US', iowa: 'US', kansas: 'US', kentucky: 'US',
+  louisiana: 'US', maine: 'US', maryland: 'US', massachusetts: 'US', michigan: 'US', minnesota: 'US', mississippi: 'US', missouri: 'US',
+  montana: 'US', nebraska: 'US', nevada: 'US', ohio: 'US', oklahoma: 'US', oregon: 'US', pennsylvania: 'US', tennessee: 'US',
+  texas: 'US', utah: 'US', vermont: 'US', virginia: 'US', washington: 'US', wisconsin: 'US', wyoming: 'US',
+  'niagara falls': 'US', schenectady: 'US', greenville: 'US', pensacola: 'US', 'oakbrook terrace': 'US', duquoin: 'US',
+  'findlay township': 'US', mckinney: 'US', atlanta: 'US', houston: 'US', 'new york': 'US', chicago: 'US', boston: 'US', dallas: 'US',
+  // Canada
+  markham: 'CA', toronto: 'CA', montreal: 'CA', calgary: 'CA', ottawa: 'CA',
+  // India
+  noida: 'IN', vadodara: 'IN', bengaluru: 'IN', bangalore: 'IN', chennai: 'IN', mumbai: 'IN', hyderabad: 'IN', pune: 'IN', 'new delhi': 'IN', delhi: 'IN',
+  // Europe (non-UK) and MENA hubs that show up on energy careers sites.
+  berlin: 'DE', munich: 'DE', hamburg: 'DE', milan: 'IT', rome: 'IT', madrid: 'ES', barcelona: 'ES', kirkkonummi: 'FI', helsinki: 'FI',
+  'new cairo': 'EG', cairo: 'EG', doha: 'QA', riyadh: 'SA', dubai: 'AE', 'abu dhabi': 'AE',
+  // East Asia / Pacific
+  shanghai: 'CN', beijing: 'CN', singapore: 'SG', tokyo: 'JP', sydney: 'AU', melbourne: 'AU',
+};
+const WORLD_PLACE_MAP = new Map<string, string>(Object.entries(WORLD_PLACES).map(([k, v]) => [foldPlace(k), v]));
+
+/**
  * Best-effort guess at a job's country and city from a free-text location such as
  * "Leeds, UK" or "Lyon". Looks for a known city, then for a country name. A heuristic:
  * it returns nothing rather than guess when it recognises neither.
@@ -170,10 +202,17 @@ export function inferPlace(location: string | undefined): { country?: string; ci
   let city: string | undefined;
   let country: string | undefined;
   for (const part of parts) {
-    const hit = Object.keys(KNOWN_CITIES).find((c) => foldPlace(c) === foldPlace(part));
+    const folded = foldPlace(part);
+    const hit = Object.keys(KNOWN_CITIES).find((c) => foldPlace(c) === folded);
     if (hit) {
       city = hit;
       country = KNOWN_CITIES[hit];
+      break;
+    }
+    const world = WORLD_PLACE_MAP.get(folded);
+    if (world) {
+      city = part;
+      country = world;
       break;
     }
   }
