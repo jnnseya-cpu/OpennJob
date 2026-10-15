@@ -6,6 +6,7 @@ import {
   collectJobs,
   credentialLabel,
   dedupeKey,
+  advertClosed,
   recruiterEmailIn,
   describeTraceFailure,
   draftStatement,
@@ -389,14 +390,23 @@ export class OpennJobService {
     const applications = await this.deps.repository.listApplications(userId);
     const seen = new Set(applications.map((a) => a.jobId));
     // The same vacancy re-advertised later has a new job id, so excluding by id alone lets an
-    // already-applied job come back. Also exclude any job whose vacancy key matches one already applied.
-    const appliedKeys = new Set(applications.map((a) => a.dedupeKey).filter((k): k is string => Boolean(k)));
+    // already-applied job come back. Also exclude any job whose vacancy key matches one already
+    // applied. The key is recomputed from the applied job where it is still stored, so it always
+    // matches the key computed for a listed job (a key stored on an old application in a now-changed
+    // format would otherwise never match and let the re-advert through).
+    const jobsById = new Map(jobs.map((j) => [j.id, j]));
+    const appliedKeys = new Set(
+      applications.map((a) => {
+        const j = jobsById.get(a.jobId);
+        return j ? dedupeKey(j) : a.dedupeKey;
+      }).filter((k): k is string => Boolean(k)),
+    );
     const nowMs = this.deps.clock().getTime();
     const freshDays = limitsOf(this.deps.config).jobFreshDays;
     return jobs
       // A job someone pasted ("Apply to a job you found") belongs to them alone: never listed here.
       // An expired job (not re-seen by discovery for freshDays) is dropped: its advert is likely gone.
-      .filter((job) => job.source !== 'link' && !seen.has(job.id) && isFresh(job, nowMs, freshDays) && inScope(job, preferences) && payFits(job, pay))
+      .filter((job) => job.source !== 'link' && !seen.has(job.id) && isFresh(job, nowMs, freshDays) && !advertClosed(job.description) && inScope(job, preferences) && payFits(job, pay))
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
@@ -830,8 +840,9 @@ export class OpennJobService {
     const freshDays = limitsOf(this.deps.config).jobFreshDays;
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
-      // An expired job (not re-seen by discovery for freshDays) is never newly prepared.
-      if (job.source === 'link' || !isFresh(job, nowMs, freshDays) || !inScope(job, preferences) || !payFits(job, pay)) {
+      // An expired job (not re-seen by discovery for freshDays, or whose advert says it is closed)
+      // is never newly prepared.
+      if (job.source === 'link' || !isFresh(job, nowMs, freshDays) || advertClosed(job.description) || !inScope(job, preferences) || !payFits(job, pay)) {
         skipped.outOfScope += 1;
         continue;
       }

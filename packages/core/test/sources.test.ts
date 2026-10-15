@@ -15,6 +15,7 @@ import {
   decodeEntities,
   dedupeJobs,
   dedupeKey,
+  advertClosed,
   escapedHtmlToText,
   reedAuthHeader,
 } from '../src';
@@ -271,6 +272,17 @@ describe('de-duplication across sources', () => {
     expect(dedupeKey(job('1', 'Senior Construction Delivery Manager', 'Clarion (example)', 'Birmingham'))).toBe(dedupeKey(job('2', 'Senior Construction Delivery Manager', 'Clarion Housing (example)', 'Birmingham, West Midlands')));
     expect(dedupeKey(job('1', 'Quantity Surveyor', 'Example Gordon Recruitment', 'Leeds'))).toBe(dedupeKey(job('2', 'Quantity Surveyor', 'Example Gordon Recruitment Limited', 'Leeds')));
     expect(dedupeKey(job('1', 'Quantity Surveyor', 'Example Build', 'Leeds'))).not.toBe(dedupeKey(job('2', 'Quantity Surveyor', 'Sample Build', 'Leeds')));
+  });
+
+  it('advertClosed flags a dead advert by its own wording, but not a mere deadline', () => {
+    expect(advertClosed('This vacancy has expired and is no longer available.')).toBe(true);
+    expect(advertClosed('Unfortunately this job has closed.')).toBe(true);
+    expect(advertClosed('Applications are now closed for this role.')).toBe(true);
+    expect(advertClosed('We are no longer accepting applications.')).toBe(true);
+    expect(advertClosed('This position has been filled.')).toBe(true);
+    // A live advert with only a deadline, or none of these phrases, is not closed.
+    expect(advertClosed('Applications close on 30 November. Apply today!')).toBe(false);
+    expect(advertClosed('A great opportunity for a Senior Project Manager in Birmingham.')).toBe(false);
   });
 
   it('keeps jobs that differ in title, employer or country', () => {

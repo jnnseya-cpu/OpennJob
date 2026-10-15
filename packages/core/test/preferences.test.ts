@@ -57,26 +57,30 @@ describe('inScope: countries', () => {
   });
 });
 
-describe('inScope: cities are a soft preference, never a filter (owner decision, 14 October 2026)', () => {
-  it('a chosen city no longer excludes the rest of its country', () => {
+describe('inScope: a chosen city narrows its own country (owner decision, 15 October 2026: hard filter)', () => {
+  it('a selected city narrows its own country and leaves every other country alone', () => {
     const p = prefs({ cities: ['Birmingham'] });
     expect(inScope(BIRMINGHAM, p)).toBe(true);
-    expect(inScope(GLASGOW, p)).toBe(true); // same country, different city: still in scope
-    expect(inScope(DUBLIN, p)).toBe(true);
+    expect(inScope(GLASGOW, p)).toBe(false); // same country, different city
+    expect(inScope(DUBLIN, p)).toBe(true); // no Irish city selected, so Ireland is unaffected
     expect(inScope(LYON_FR, p)).toBe(true);
   });
 
-  it('country still decides scope; a city alongside it changes nothing about scope', () => {
+  it('a job in a selected country with no selected city in that country still passes', () => {
     const p = prefs({ countries: ['GB', 'IE'], cities: ['Birmingham'] });
     expect(inScope(BIRMINGHAM, p)).toBe(true);
-    expect(inScope(GLASGOW, p)).toBe(true); // GB is selected, so every GB job is in scope
+    expect(inScope(GLASGOW, p)).toBe(false);
     expect(inScope(DUBLIN, p)).toBe(true);
     expect(inScope(LYON_FR, p)).toBe(false); // France is not selected
   });
 
-  it('a job with no city is never dropped for having none', () => {
-    expect(inScope({ country: 'GB' }, prefs({ cities: ['Birmingham'] }))).toBe(true);
-    expect(inScope({ country: 'GB' }, prefs({ countries: ['GB'], cities: ['Birmingham'] }))).toBe(true);
+  it('a job with no readable city, in a country narrowed by a city, is dropped', () => {
+    expect(inScope({ country: 'GB' }, prefs({ cities: ['Birmingham'] }))).toBe(false);
+    expect(inScope({ country: 'IE' }, prefs({ cities: ['Birmingham'] }))).toBe(true);
+  });
+
+  it('a city OpennJob cannot place in a country narrows nothing', () => {
+    for (const job of EVERY) expect(inScope(job, prefs({ cities: ['Atlantis'] }))).toBe(true);
   });
 });
 
@@ -125,17 +129,18 @@ describe('inScope: languages', () => {
   });
 });
 
-describe('inScope: country and language together (cities no longer affect scope)', () => {
-  it('both rules must pass; a chosen city does not narrow the country', () => {
+describe('inScope: the three rules together', () => {
+  it('every rule must pass', () => {
     const p = prefs({ languages: ['French'], countries: ['FR', 'CD'], cities: ['Kinshasa'] });
-    expect(inScope(LYON_FR, p)).toBe(true);
+    expect(inScope(LYON_FR, p)).toBe(true); // France selected, no French city selected
     expect(inScope(KINSHASA_FR, p)).toBe(true);
-    expect(inScope({ country: 'CD', city: 'Kolwezi', language: 'fr' }, p)).toBe(true); // DRC is selected: Kolwezi is in scope, Kinshasa just ranks higher
+    expect(inScope({ country: 'CD', city: 'Kolwezi', language: 'fr' }, p)).toBe(false); // DRC is narrowed to Kinshasa
     expect(inScope({ country: 'CD', city: 'Kinshasa', language: 'en' }, p)).toBe(false); // right place, wrong language
     expect(inScope({ country: 'SN', city: 'Dakar', language: 'fr' }, p)).toBe(false); // right language, wrong country
   });
 
-  it('agrees with a brute-force statement of the rule over every combination (scope = country AND language)', () => {
+  it('agrees with a brute-force statement of the rule over every combination', () => {
+    const countryOf: Record<string, string> = { Birmingham: 'GB', Glasgow: 'GB', Lyon: 'FR', Kinshasa: 'CD' };
     const subsets = <T>(items: T[]): T[][] => items.reduce<T[][]>((acc, item) => [...acc, ...acc.map((s) => [...s, item])], [[]]);
     const jobs: Place[] = [...EVERY, { country: 'CD', city: 'Kolwezi', language: 'fr' }, { country: 'FR', city: 'Lyon', language: 'en' }];
     let checked = 0;
@@ -144,9 +149,10 @@ describe('inScope: country and language together (cities no longer affect scope)
         for (const cities of subsets(['Birmingham', 'Glasgow', 'Lyon', 'Kinshasa'])) {
           for (const job of jobs) {
             const countryOk = countries.length === 0 || countries.includes(job.country as string);
+            const citiesHere = cities.filter((c) => countryOf[c] === job.country);
+            const cityOk = citiesHere.length === 0 || citiesHere.includes(job.city as string);
             const languageOk = languages.length === 0 || languages.includes(job.language === 'fr' ? 'French' : 'English');
-            // Cities are a soft preference: they never change the scope answer.
-            expect(inScope(job, { languages, countries, cities }), JSON.stringify({ job, languages, countries, cities })).toBe(countryOk && languageOk);
+            expect(inScope(job, { languages, countries, cities }), JSON.stringify({ job, languages, countries, cities })).toBe(countryOk && cityOk && languageOk);
             checked += 1;
           }
         }
@@ -237,13 +243,12 @@ describe('spec T-02 and T-04: scope by place and by search type', () => {
   const job = (country: string | undefined, city?: string, contractType?: 'permanent' | 'contract') => ({ country, city, language: 'en' as const, contractType });
   const prefs = (p: Partial<{ countries: string[]; cities: string[]; searchTypes: ('uk-permanent' | 'uk-contract' | 'international')[] }>) => ({ languages: [], countries: [], cities: [], searchTypes: [], ...p });
 
-  it('T-02: nothing selected excludes nothing; a country excludes others; a city no longer narrows (it ranks)', () => {
+  it('T-02: nothing selected excludes nothing; a country excludes others; a city narrows only its own country', () => {
     const jobs = [job('GB', 'Birmingham'), job('GB', 'Leeds'), job('FR', 'Lyon'), job('CD', 'Kinshasa'), job(undefined)];
     expect(jobs.filter((j) => inScope(j, prefs({})))).toHaveLength(5);
     expect(jobs.filter((j) => inScope(j, prefs({ countries: ['GB'] }))).map((j) => j.city)).toEqual(['Birmingham', 'Leeds']);
-    // A chosen city no longer drops the rest of its country: every selected-country job stays in scope.
-    const withCity = jobs.filter((j) => inScope(j, prefs({ countries: ['GB', 'FR'], cities: ['Birmingham'] })));
-    expect(withCity.map((j) => j.city)).toEqual(['Birmingham', 'Leeds', 'Lyon']);
+    const narrowed = jobs.filter((j) => inScope(j, prefs({ countries: ['GB', 'FR'], cities: ['Birmingham'] })));
+    expect(narrowed.map((j) => j.city)).toEqual(['Birmingham', 'Lyon']); // Leeds out; France untouched
   });
 
   it('T-04: no search type returns permanent, contract and international; "UK contract" alone returns only UK contracts', () => {

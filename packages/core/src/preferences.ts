@@ -26,10 +26,11 @@ export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined)
  *  - countries: empty = any country. Otherwise the job's country must be one of them.
  *    A job whose country is unknown cannot be shown to be in a selected country, so it
  *    is out of scope while any country is selected.
- *  - cities: a SOFT preference, never a filter (owner decision, 14 October 2026). A chosen
- *    city no longer excludes the rest of its country; it ranks matching jobs higher instead
- *    (see cityPreferred). So "United Kingdom" with "Stafford" chosen still shows every UK
- *    job, with the Stafford ones first. Scope is decided by country and language only.
+ *  - cities: a chosen city narrows the country it belongs to (owner decision, 15 October 2026:
+ *    reverted to a hard filter). With "Birmingham" selected, UK jobs must be in Birmingham; jobs
+ *    in other selected countries are unaffected. A job in a selected country with no selected city
+ *    in that country still passes; a job with no readable city, in a country narrowed by a city,
+ *    does not. A city whose country OpennJob cannot tell narrows nothing.
  *  - languages: empty excludes nothing. Otherwise the language the application is written
  *    in (job.language, "en" when not stated) must be one of them.
  */
@@ -42,6 +43,14 @@ export function inScope(
 
   if (p.countries.length > 0) {
     if (!country || !p.countries.some((c) => c.trim().toUpperCase() === country)) return false;
+  }
+
+  if (country) {
+    const citiesHere = p.cities.filter((c) => cityCountry(c) === country);
+    if (citiesHere.length > 0) {
+      const jobCity = job.city ? foldPlace(job.city) : '';
+      if (!jobCity || !citiesHere.some((c) => foldPlace(parseCity(c).city) === jobCity)) return false;
+    }
   }
 
   if (p.languages.length > 0) {

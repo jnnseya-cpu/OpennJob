@@ -187,26 +187,23 @@ describe('GET /jobs/matches: packs, places and preferences', () => {
     expect(new Set(rows.map((m) => m.job.country))).toEqual(new Set(['GB', 'IE']));
   });
 
-  it('a chosen city ranks its jobs first but no longer excludes the rest of the country (soft preference)', async () => {
+  it('a city narrows only its own country: other selected countries still pass, with or without a city', async () => {
     await infra({ preferences: { countries: ['GB', 'DE', 'IE'], cities: ['Birmingham'] } });
     const rows = await matches();
-    // The city no longer drops the rest of the UK: Slough is in scope now.
-    expect(ids(rows)).toContain('sample:d1'); // Slough: still shown (city ranks, does not exclude)
-    expect(ids(rows)).toContain('sample:d2'); // Frankfurt: Germany is selected
-    expect(ids(rows)).toContain('sample:c4'); // Dublin
-    expect(ids(rows)).not.toContain('sample:f1'); // Kinshasa: the DRC is not selected
     const uk = rows.filter((m) => m.job.country === 'GB');
-    expect(uk[0]?.job.city).toBe('Birmingham'); // Birmingham ranks first among UK jobs
-    expect(uk.some((m) => m.job.city !== 'Birmingham')).toBe(true); // others are still present
+    expect(uk.length).toBeGreaterThan(1);
+    expect(uk.every((m) => m.job.city === 'Birmingham')).toBe(true);
+    expect(ids(rows)).toContain('sample:d2'); // Frankfurt: Germany is selected and no German city narrows it
+    expect(ids(rows)).toContain('sample:c4'); // Dublin
+    expect(ids(rows)).not.toContain('sample:d1'); // Slough: the UK is narrowed to Birmingham
+    expect(ids(rows)).not.toContain('sample:f1'); // Kinshasa: the DRC is not selected
   });
 
-  it('a city with no country selected leaves the whole world in scope and just ranks that city first', async () => {
+  it('a city with no country selected leaves the rest of the world available', async () => {
     await infra({ preferences: { cities: ['Birmingham'] } });
     const rows = await matches();
+    expect(rows.filter((m) => m.job.country === 'GB').every((m) => m.job.city === 'Birmingham')).toBe(true);
     expect(new Set(rows.map((m) => m.job.country)).size).toBeGreaterThan(8);
-    const uk = rows.filter((m) => m.job.country === 'GB');
-    expect(uk[0]?.job.city).toBe('Birmingham'); // ranked first
-    expect(uk.some((m) => m.job.city !== 'Birmingham')).toBe(true); // no longer excluded
   });
 
   it('applies the language preference to the language of the application', async () => {
@@ -361,8 +358,7 @@ describe('POST /agent/run: the 80% rule', () => {
 
     await infra({ preferences: { countries: ['GB', 'DE'], cities: ['Birmingham'] } });
     res = await t.api.post('/agent/run').send({}).expect(200);
-    // The city no longer excludes: Slough (sample:d1) is in scope again alongside the Birmingham and DE jobs.
-    expect(res.body.prepared.map((a: { jobId: string }) => a.jobId).sort()).toEqual(['sample:c1', 'sample:d1', 'sample:d2']);
+    expect(res.body.prepared.map((a: { jobId: string }) => a.jobId).sort()).toEqual(['sample:c1', 'sample:d2']);
     await t.app.close();
 
     await infra({ preferences: { languages: ['French'] } });

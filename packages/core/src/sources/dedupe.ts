@@ -33,6 +33,17 @@ export const hasWayOut = (job: Pick<Job, 'description' | 'url' | 'applyUrl'>): b
   recruiterEmailIn(job.description) !== undefined || isEmployerLink(job.applyUrl ?? job.url);
 
 /**
+ * A job board keeps returning a dead advert for a while. When its own text says it is closed, the
+ * advert is over whatever its fetch date: it is not shown or applied for. Deliberately strict —
+ * only clear "closed / expired / filled" wordings, never a mere application deadline ("closes on").
+ */
+const CLOSED_ADVERT =
+  /\bthis (?:job|vacancy|position|role|advert(?:isement)?|opportunity) (?:has (?:now )?)?(?:expired|closed|been filled)\b|\bno longer (?:accepting|available|being advertised|open for applications|live)\b|\bapplications? (?:are )?(?:now )?closed\b|\b(?:vacancy|advert(?:isement)?|posting) (?:has )?expired\b|\bposition (?:has been|is now|is) filled\b|\bwe are no longer accepting\b/i;
+
+/** True when the advert's own text says it is closed, expired or filled. */
+export const advertClosed = (text: string): boolean => CLOSED_ADVERT.test(text);
+
+/**
  * Keeps one copy of each vacancy: the first (so list your preferred sources first), unless a
  * later copy has a way out the first lacks (a recruiter's address, the employer's own link). The
  * kept copy stays where the first one was.
