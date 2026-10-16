@@ -93,6 +93,8 @@ services:
       # What Adzuna and Reed are asked comes from each person's CV and places. Only how many searches:
       OPENNJOB_SEARCH_MAX_QUERIES_PER_USER: ${OPENNJOB_SEARCH_MAX_QUERIES_PER_USER:-40}
       OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH: ${OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH:-150}
+      # How many prepared applications have their whole advert re-read per run, to find a recruiter e-mail.
+      OPENNJOB_ADVERTS_READ_PER_RUN: ${OPENNJOB_ADVERTS_READ_PER_RUN:-80}
       OPENNJOB_DAILY_APPLICATION_LIMIT: ${OPENNJOB_DAILY_APPLICATION_LIMIT:-20}
       OPENNJOB_DUPLICATE_DAYS: ${OPENNJOB_DUPLICATE_DAYS:-30}
       OPENNJOB_OPERATOR_KEY: ${OPENNJOB_OPERATOR_KEY:-}
