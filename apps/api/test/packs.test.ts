@@ -192,7 +192,9 @@ describe('GET /jobs/matches: packs, places and preferences', () => {
     const rows = await matches();
     const uk = rows.filter((m) => m.job.country === 'GB');
     expect(uk.length).toBeGreaterThan(1);
-    expect(uk.every((m) => m.job.city === 'Birmingham')).toBe(true);
+    // OD-7: a city narrows only permanent and unknown-type UK roles; contract roles are country-wide.
+    expect(uk.filter((m) => m.job.contractType !== 'contract').every((m) => m.job.city === 'Birmingham')).toBe(true);
+    expect(uk.some((m) => m.job.contractType === 'contract' && m.job.city !== 'Birmingham')).toBe(true); // e1 Teesside (contract)
     expect(ids(rows)).toContain('sample:d2'); // Frankfurt: Germany is selected and no German city narrows it
     expect(ids(rows)).toContain('sample:c4'); // Dublin
     expect(ids(rows)).not.toContain('sample:d1'); // Slough: the UK is narrowed to Birmingham
@@ -202,7 +204,8 @@ describe('GET /jobs/matches: packs, places and preferences', () => {
   it('a city with no country selected leaves the rest of the world available', async () => {
     await infra({ preferences: { cities: ['Birmingham'] } });
     const rows = await matches();
-    expect(rows.filter((m) => m.job.country === 'GB').every((m) => m.job.city === 'Birmingham')).toBe(true);
+    // OD-7: permanent/unknown UK jobs are narrowed to Birmingham; contract UK jobs are country-wide.
+    expect(rows.filter((m) => m.job.country === 'GB' && m.job.contractType !== 'contract').every((m) => m.job.city === 'Birmingham')).toBe(true);
     expect(new Set(rows.map((m) => m.job.country)).size).toBeGreaterThan(8);
   });
 

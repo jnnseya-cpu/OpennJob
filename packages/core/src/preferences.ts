@@ -31,6 +31,9 @@ export function preferencesOf(profile: Pick<Profile, 'preferences'> | undefined)
  *    in other selected countries are unaffected. A job in a selected country with no selected city
  *    in that country still passes; a job with no readable city, in a country narrowed by a city,
  *    does not. A city whose country OpennJob cannot tell narrows nothing.
+ *    Owner decision OD-7 (16 October 2026): CONTRACT roles are searched country-wide. Interim and
+ *    contract work is national in most fields, so a chosen city narrows only permanent and
+ *    unknown-type roles in that country; a contract role in that country passes wherever it is.
  *  - languages: empty excludes nothing. Otherwise the language the application is written
  *    in (job.language, "en" when not stated) must be one of them.
  */
@@ -47,9 +50,10 @@ export function inScope(
 
   if (country) {
     const citiesHere = p.cities.filter((c) => cityCountry(c) === country);
-    if (citiesHere.length > 0) {
+    if (citiesHere.length > 0 && job.contractType !== 'contract') {
       // A chosen city matches a job by its town name OR by a postcode in that town's area, because
-      // adverts usually give a postcode ("B24 6BF"), not a town name (see placeInCity).
+      // adverts usually give a postcode ("B24 6BF"), not a town name (see placeInCity). Contract roles
+      // skip this narrowing (OD-7): they are searched country-wide.
       if (!citiesHere.some((c) => placeInCity(job.city, job.location, parseCity(c).city))) return false;
     }
   }

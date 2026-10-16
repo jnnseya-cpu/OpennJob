@@ -93,6 +93,25 @@ describe('inScope: a chosen city narrows its own country (owner decision, 15 Oct
   it('a city OpennJob cannot place in a country narrows nothing', () => {
     for (const job of EVERY) expect(inScope(job, prefs({ cities: ['Atlantis'] }))).toBe(true);
   });
+
+  it('OD-7: a contract role is country-wide; a city narrows only permanent and unknown-type roles', () => {
+    const p = prefs({ cities: ['Birmingham'] });
+    // Permanent or unknown-type UK jobs outside Birmingham are still dropped.
+    expect(inScope({ country: 'GB', city: 'Leeds', contractType: 'permanent' }, p)).toBe(false);
+    expect(inScope({ country: 'GB', city: 'Leeds' }, p)).toBe(false);
+    // A UK contract job passes wherever it is, because contract work is searched country-wide.
+    expect(inScope({ country: 'GB', city: 'Leeds', contractType: 'contract' }, p)).toBe(true);
+    expect(inScope({ country: 'GB', city: 'Glasgow', contractType: 'contract' }, p)).toBe(true);
+    // The country filter still applies: a contract job in an unselected country does not pass.
+    expect(inScope({ country: 'FR', city: 'Lyon', contractType: 'contract' }, prefs({ countries: ['GB'], cities: ['Birmingham'] }))).toBe(false);
+  });
+
+  it('a chosen city matches towns across its wider postcode area (any UK region)', () => {
+    expect(inScope({ country: 'GB', city: 'LS1 4DY' }, prefs({ cities: ['Leeds'] }))).toBe(true); // Leeds
+    expect(inScope({ country: 'GB', city: 'G2 1AB' }, prefs({ cities: ['Glasgow'] }))).toBe(true); // Glasgow
+    expect(inScope({ country: 'GB', city: 'WR1 1AA' }, prefs({ cities: ['Worcester'] }))).toBe(true); // Worcester
+    expect(inScope({ country: 'GB', city: 'SY1 1AA' }, prefs({ cities: ['Shrewsbury'] }))).toBe(true); // Shrewsbury
+  });
 });
 
 describe('cityPreferred: ranks matching jobs higher, never excludes', () => {

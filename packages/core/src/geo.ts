@@ -134,7 +134,10 @@ export function parseCity(value: string): { city: string; country: string | unde
     const country = resolveCountry(trimmed.slice(comma + 1));
     if (country) return { city: trimmed.slice(0, comma).trim(), country };
   }
-  return { city: trimmed, country: CITY_LOOKUP.get(foldPlace(trimmed)) };
+  const folded = foldPlace(trimmed);
+  // A UK town OpennJob can place by its postcode area (CITY_POSTCODE_AREAS) belongs to GB, so a
+  // person who picks "Leeds" or "Bristol" (not just a picker city) still narrows the United Kingdom.
+  return { city: trimmed, country: CITY_LOOKUP.get(folded) ?? (CITY_POSTCODE_AREAS[folded] ? 'GB' : undefined) };
 }
 
 /** An ISO alpha-2 code ("GB"), a country name ("United Kingdom") or a common alias ("UK") -> its code. */
@@ -164,12 +167,42 @@ export function ukPostcodeArea(value: string | undefined): string | undefined {
  * city name.
  */
 export const CITY_POSTCODE_AREAS: Readonly<Record<string, readonly string[]>> = {
-  birmingham: ['B'], solihull: ['B'], 'west bromwich': ['B'], coventry: ['CV'], wolverhampton: ['WV'],
-  walsall: ['WS'], dudley: ['DY'], stafford: ['ST'], 'stoke-on-trent': ['ST'], telford: ['TF'],
-  derby: ['DE'], leicester: ['LE'], nottingham: ['NG'],
-  manchester: ['M'], leeds: ['LS'], sheffield: ['S'], liverpool: ['L'], bristol: ['BS'], glasgow: ['G'],
-  edinburgh: ['EH'], cardiff: ['CF'], newcastle: ['NE'],
-  london: ['E', 'EC', 'N', 'NW', 'SE', 'SW', 'W', 'WC'], reading: ['RG'], slough: ['SL'], watford: ['WD'],
+  // West Midlands region (metropolitan county + Staffordshire, Warwickshire, Worcestershire,
+  // Herefordshire, Shropshire): neighbouring towns share one area, so the mapping is coarse.
+  birmingham: ['B'], solihull: ['B'], 'west bromwich': ['B'], 'sutton coldfield': ['B'], redditch: ['B'],
+  bromsgrove: ['B'], tamworth: ['B'], coventry: ['CV'], nuneaton: ['CV'], rugby: ['CV'], warwick: ['CV'],
+  wolverhampton: ['WV'], walsall: ['WS'], cannock: ['WS'], dudley: ['DY'], kidderminster: ['DY'],
+  stafford: ['ST'], 'stoke-on-trent': ['ST'], telford: ['TF'], shrewsbury: ['SY'], shropshire: ['SY', 'TF'],
+  worcester: ['WR'], hereford: ['HR'],
+  // East Midlands
+  derby: ['DE'], 'burton-on-trent': ['DE'], leicester: ['LE'], nottingham: ['NG'], northampton: ['NN'],
+  lincoln: ['LN'], peterborough: ['PE'],
+  // Yorkshire and the North East
+  leeds: ['LS'], sheffield: ['S'], barnsley: ['S'], rotherham: ['S'], bradford: ['BD'], wakefield: ['WF'],
+  huddersfield: ['HD'], halifax: ['HX'], harrogate: ['HG'], york: ['YO'], hull: ['HU'], doncaster: ['DN'],
+  newcastle: ['NE'], sunderland: ['SR'], middlesbrough: ['TS'], teesside: ['TS'], durham: ['DH'],
+  darlington: ['DL'], carlisle: ['CA'],
+  // North West
+  manchester: ['M'], stockport: ['SK'], bolton: ['BL'], oldham: ['OL'], wigan: ['WN'], warrington: ['WA'],
+  liverpool: ['L'], chester: ['CH'], crewe: ['CW'], preston: ['PR'], blackburn: ['BB'], blackpool: ['FY'],
+  lancaster: ['LA'],
+  // Scotland
+  glasgow: ['G'], edinburgh: ['EH'], aberdeen: ['AB'], dundee: ['DD'], perth: ['PH'], inverness: ['IV'],
+  paisley: ['PA'], kilmarnock: ['KA'], motherwell: ['ML'], falkirk: ['FK'], kirkcaldy: ['KY'], dumfries: ['DG'],
+  // Wales
+  cardiff: ['CF'], swansea: ['SA'], newport: ['NP'], wrexham: ['LL'],
+  // South West
+  bristol: ['BS'], bath: ['BA'], gloucester: ['GL'], swindon: ['SN'], plymouth: ['PL'], exeter: ['EX'],
+  torquay: ['TQ'], truro: ['TR'], taunton: ['TA'], bournemouth: ['BH'], dorchester: ['DT'], salisbury: ['SP'],
+  // South and South East
+  southampton: ['SO'], portsmouth: ['PO'], brighton: ['BN'], guildford: ['GU'], oxford: ['OX'],
+  'milton keynes': ['MK'], bedford: ['MK'], luton: ['LU'], basingstoke: ['RG'], reading: ['RG'], slough: ['SL'],
+  maidstone: ['ME'], canterbury: ['CT'], 'tunbridge wells': ['TN'], chelmsford: ['CM'], colchester: ['CO'],
+  southend: ['SS'], ipswich: ['IP'], norwich: ['NR'], cambridge: ['CB'],
+  // London and its outer areas
+  london: ['E', 'EC', 'N', 'NW', 'SE', 'SW', 'W', 'WC'], watford: ['WD'], bromley: ['BR'], croydon: ['CR'],
+  dartford: ['DA'], enfield: ['EN'], harrow: ['HA'], ilford: ['IG'], kingston: ['KT'], romford: ['RM'],
+  sutton: ['SM'], twickenham: ['TW'], uxbridge: ['UB'],
 };
 
 /** Does a job location (its city or free-text place) fall in the given town, by name or postcode area? */
@@ -206,6 +239,16 @@ const WORLD_PLACES: Readonly<Record<string, string>> = {
   newcastle: 'GB', nottingham: 'GB', leicester: 'GB', reading: 'GB', cardiff: 'GB', edinburgh: 'GB', aberdeen: 'GB', bath: 'GB',
   oxford: 'GB', cambridge: 'GB', york: 'GB', watford: 'GB', amersham: 'GB', wakefield: 'GB', bridgwater: 'GB', prescot: 'GB',
   stirling: 'GB', portsmouth: 'GB', southampton: 'GB', brighton: 'GB', hull: 'GB', preston: 'GB', bolton: 'GB', swindon: 'GB',
+  worcester: 'GB', hereford: 'GB', shrewsbury: 'GB', telford: 'GB', dudley: 'GB', walsall: 'GB', cannock: 'GB',
+  kidderminster: 'GB', redditch: 'GB', tamworth: 'GB', nuneaton: 'GB', 'sutton coldfield': 'GB', bromsgrove: 'GB',
+  'west bromwich': 'GB', 'stoke-on-trent': 'GB', doncaster: 'GB', bradford: 'GB', huddersfield: 'GB', halifax: 'GB',
+  harrogate: 'GB', middlesbrough: 'GB', sunderland: 'GB', durham: 'GB', darlington: 'GB', carlisle: 'GB',
+  stockport: 'GB', oldham: 'GB', wigan: 'GB', warrington: 'GB', chester: 'GB', crewe: 'GB', blackburn: 'GB',
+  blackpool: 'GB', lancaster: 'GB', dundee: 'GB', perth: 'GB', inverness: 'GB', paisley: 'GB', swansea: 'GB',
+  newport: 'GB', wrexham: 'GB', plymouth: 'GB', exeter: 'GB', torquay: 'GB', truro: 'GB', taunton: 'GB',
+  gloucester: 'GB', bournemouth: 'GB', salisbury: 'GB', guildford: 'GB', 'milton keynes': 'GB', luton: 'GB',
+  basingstoke: 'GB', maidstone: 'GB', canterbury: 'GB', chelmsford: 'GB', colchester: 'GB', ipswich: 'GB',
+  norwich: 'GB', northampton: 'GB', lincoln: 'GB', peterborough: 'GB', bedford: 'GB',
   // United States: all states, plus common GE Vernova / industry hubs that appear as bare city names.
   alabama: 'US', alaska: 'US', arizona: 'US', arkansas: 'US', california: 'US', colorado: 'US', connecticut: 'US', delaware: 'US',
   florida: 'US', hawaii: 'US', idaho: 'US', illinois: 'US', indiana: 'US', iowa: 'US', kansas: 'US', kentucky: 'US',
