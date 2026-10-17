@@ -1,9 +1,10 @@
 import jwt from 'jsonwebtoken';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PASSWORD_MAX_BYTES, RateLimiter, hashPassword, passwordProblems, signAccessToken, verifyAccessToken, verifyPassword } from '../src/auth';
+import { ACCOUNT_WIDE_FACTOR } from '../src/auth.guard';
 import { MIN_JWT_SECRET_LENGTH, createDefaultDeps, loadConfig, startupProblems } from '../src/deps';
 import { memoryLogger } from '../src/logging';
-import { JWT_SECRET, NOW, PROFILE, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, testConfig } from './helpers';
+import { JWT_SECRET, NOW, PROFILE, PWV, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
 let t: TestApp;
@@ -48,22 +49,22 @@ describe('access tokens', () => {
   const now = new Date(NOW);
 
   it('signs an HS256 token for one user that verifies until it expires', () => {
-    const token = signAccessToken('user-1', JWT_SECRET, 600, now);
+    const token = signAccessToken('user-1', JWT_SECRET, 600, now, PWV);
     expect(token).toMatchObject({ tokenType: 'Bearer', expiresIn: 600, expiresAt: '2026-10-06T09:10:00.000Z' });
     expect(jwt.decode(token.accessToken, { complete: true })).toMatchObject({ header: { alg: 'HS256' }, payload: { sub: 'user-1', iss: 'opennjob', aud: 'opennjob-api' } });
-    expect(verifyAccessToken(token.accessToken, JWT_SECRET, now)).toEqual({ ok: true, userId: 'user-1' });
-    expect(verifyAccessToken(token.accessToken, JWT_SECRET, new Date(now.getTime() + 599_000))).toEqual({ ok: true, userId: 'user-1' });
+    expect(verifyAccessToken(token.accessToken, JWT_SECRET, now)).toEqual({ ok: true, userId: 'user-1', pwv: PWV });
+    expect(verifyAccessToken(token.accessToken, JWT_SECRET, new Date(now.getTime() + 599_000))).toEqual({ ok: true, userId: 'user-1', pwv: PWV });
     expect(verifyAccessToken(token.accessToken, JWT_SECRET, new Date(now.getTime() + 601_000))).toEqual({ ok: false, reason: 'expired' });
   });
 
   it('rejects a token signed with another secret, altered, unsigned, or made for something else', () => {
     const at = Math.floor(now.getTime() / 1000);
-    const good = signAccessToken('user-1', JWT_SECRET, 600, now).accessToken;
+    const good = signAccessToken('user-1', JWT_SECRET, 600, now, PWV).accessToken;
     const [h, p, s] = good.split('.') as [string, string, string];
     const forgedPayload = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(p, 'base64url').toString()), sub: 'user-2' })).toString('base64url');
     const none = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString('base64url')}.${p}.`;
     const bad = [
-      signAccessToken('user-1', 'another-secret-another-secret-another', 600, now).accessToken,
+      signAccessToken('user-1', 'another-secret-another-secret-another', 600, now, PWV).accessToken,
       `${h}.${forgedPayload}.${s}`,
       none,
       jwt.sign({ sub: 'user-1', iat: at, exp: at + 600 }, JWT_SECRET, { algorithm: 'HS256' }), // no issuer or audience
@@ -77,7 +78,7 @@ describe('access tokens', () => {
   });
 
   it('cannot be signed without a secret', () => {
-    expect(() => signAccessToken('user-1', '', 600, now)).toThrow(/OPENNJOB_JWT_SECRET is not configured/);
+    expect(() => signAccessToken('user-1', '', 600, now, PWV)).toThrow(/OPENNJOB_JWT_SECRET is not configured/);
   });
 });
 
@@ -98,10 +99,10 @@ describe('RateLimiter', () => {
 describe('POST /auth/register', () => {
   it('creates an account, records consent with a timestamp, and returns a working token', async () => {
     t = await createTestApp();
-    await t.raw().get('/auth/versions').expect(200, { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1' });
+    await t.raw().get('/auth/versions').expect(200, { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1', registration: 'open' });
     const res = await t.raw().post('/auth/register').send(registration({ email: '  Bola.Adeyemi@Example.org ' })).expect(201);
     expect(res.body).toEqual({
-      user: { id: 'id-1', email: EMAIL, createdAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } },
+      user: { id: 'id-1', email: EMAIL, createdAt: NOW, emailVerified: false, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } },
       accessToken: expect.any(String),
       tokenType: 'Bearer',
       expiresIn: 3600,
@@ -117,7 +118,33 @@ describe('POST /auth/register', () => {
     const mine = t.as(res.body.accessToken);
     await mine.get('/account').expect(200, res.body.user);
     await mine.get('/profile').expect(404); // a new account starts empty: it does not see the first user's data
-    expect((await t.deps.repository.listEvents('id-1')).map((e) => [e.type, e.payload])).toEqual([['account.registered', { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1' }]]);
+    // ACC-2: registration sends the verification e-mail. The event carries no token.
+    expect((await t.deps.repository.listEvents('id-1')).map((e) => [e.type, e.payload])).toEqual([['account.registered', { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1' }], ['auth.verification_sent', {}]]);
+  });
+
+  it('invite-only pilot: only listed addresses may register; others get 403 and no account; sign-in is unaffected', async () => {
+    t = await createTestApp({ config: testConfig({ registrationAllowlist: ['bola.adeyemi@example.org'] }) });
+    await t.raw().get('/auth/versions').expect(200, { termsVersion: 'terms-test-1', privacyVersion: 'privacy-test-1', registration: 'invite' });
+    const refused = await t.raw().post('/auth/register').send(registration({ email: 'chidi.eze@example.org' })).expect(403);
+    expect(refused.body.message).toBe('Registration is by invitation only during the pilot');
+    expect(await t.deps.repository.getUserByEmail('chidi.eze@example.org')).toBeUndefined();
+    // The invited address, in any case and with spaces, is accepted.
+    await t.raw().post('/auth/register').send(registration({ email: '  Bola.Adeyemi@Example.org ' })).expect(201);
+    // The existing account (made before the allow-list) still signs in.
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(200);
+  });
+
+  it('reading the versions does not count towards the sign-in rate limit', async () => {
+    t = await createTestApp({ config: testConfig({ authRateLimitMax: 2 }) });
+    for (let i = 0; i < 10; i += 1) await t.raw().get('/auth/versions').expect(200);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(200);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(200);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(429);
+  });
+
+  it('reads OPENNJOB_REGISTRATION_ALLOWLIST as lower-case addresses; empty means open', () => {
+    expect(loadConfig({ OPENNJOB_REGISTRATION_ALLOWLIST: ' Bola.Adeyemi@Example.org , x@example.org ' }).registrationAllowlist).toEqual(['bola.adeyemi@example.org', 'x@example.org']);
+    expect(loadConfig({}).registrationAllowlist).toEqual([]);
   });
 
   it('requires acceptedTermsVersion and acceptedPrivacyVersion, and they must be the current versions', async () => {
@@ -170,7 +197,7 @@ describe('POST /auth/login', () => {
     expect(wrong.body).toEqual(unknown.body);
     expect(wrong.body.message).toBe('Email address or password is incorrect');
     await t.raw().post('/auth/login').send({ email: USER_EMAIL }).expect(400);
-    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD, remember: true }).expect(400);
+    await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD, isAdmin: true }).expect(400); // unknown keys are refused
   });
 });
 
@@ -187,16 +214,25 @@ describe('access token on protected routes', () => {
     expect(expired.body).toMatchObject({ code: 'token_expired', message: 'Access token has expired' });
     const invalid = await t.as(`${token}x`).get('/applications').expect(401);
     expect(invalid.body.code).toBe('token_invalid');
-    await t.as(signAccessToken(USER_ID, 'some-other-secret-some-other-secret', 120, now).accessToken).get('/applications').expect(401);
+    await t.as(signAccessToken(USER_ID, 'some-other-secret-some-other-secret', 120, now, PWV).accessToken).get('/applications').expect(401);
   });
 
   it('rejects a well-signed token whose account does not exist', async () => {
     t = await createTestApp();
-    const ghost = signAccessToken('no-such-user', JWT_SECRET, 3600, new Date(NOW)).accessToken;
+    const ghost = signAccessToken('no-such-user', JWT_SECRET, 3600, new Date(NOW), PWV).accessToken;
     const res = await t.as(ghost).get('/profile').expect(401);
     expect(res.body.code).toBe('token_invalid');
     await t.as(ghost).put('/profile').send(PROFILE).expect(401);
     expect(await t.deps.repository.getProfile('no-such-user')).toBeUndefined();
+  });
+
+  it('rejects a well-signed token without the password-version claim, or with an old one', async () => {
+    t = await createTestApp();
+    const jwt = (await import('jsonwebtoken')).default;
+    const iat = Math.floor(new Date(NOW).getTime() / 1000);
+    const bare = jwt.sign({ sub: USER_ID, iat, exp: iat + 600 }, JWT_SECRET, { algorithm: 'HS256', issuer: 'opennjob', audience: 'opennjob-api' });
+    expect((await t.as(bare).get('/profile').expect(401)).body.code).toBe('token_invalid');
+    await t.as(signAccessToken(USER_ID, JWT_SECRET, 600, new Date(NOW), 'oldpassword0').accessToken).get('/profile').expect(401);
   });
 
   it('the employer key is not a user token and a user token is not the employer key', async () => {
@@ -232,10 +268,20 @@ describe('rate limiting on /auth', () => {
     t = await createTestApp({ config: testConfig({ authRateLimitMax: 2, authRateLimitWindowMs: 60_000 }) });
     t.app.getHttpAdapter().getInstance().set('trust proxy', true);
     const from = (ip: string, email: string) => t.raw().post('/auth/login').set('X-Forwarded-For', ip).send({ email, password: 'a wrong passphrase' });
-    await from('203.0.113.1', USER_EMAIL).expect(401);
-    await from('203.0.113.2', USER_EMAIL).expect(401);
-    await from('203.0.113.3', USER_EMAIL).expect(429); // a third address, same account
-    await from('203.0.113.4', 'someone.else@example.org').expect(401); // another account, fresh address
+    // Account-wide limit: 2 x ACCOUNT_WIDE_FACTOR attempts from any mix of addresses.
+    for (let i = 0; i < 2 * ACCOUNT_WIDE_FACTOR; i += 1) await from(`203.0.113.${i + 1}`, USER_EMAIL).expect(401);
+    await from('203.0.113.200', USER_EMAIL).expect(429); // a fresh address, same account
+    await from('203.0.113.201', 'someone.else@example.org').expect(401); // another account, fresh address
+  });
+
+  it('someone guessing at an account from their machine does not lock the owner out on theirs', async () => {
+    t = await createTestApp({ config: testConfig({ authRateLimitMax: 2, authRateLimitWindowMs: 60_000 }) });
+    t.app.getHttpAdapter().getInstance().set('trust proxy', true);
+    const login = (ip: string, password: string) => t.raw().post('/auth/login').set('X-Forwarded-For', ip).send({ email: USER_EMAIL, password });
+    await login('198.51.100.9', 'a wrong passphrase').expect(401);
+    await login('198.51.100.9', 'a wrong passphrase').expect(401);
+    await login('198.51.100.9', 'a wrong passphrase').expect(429); // the guesser is stopped
+    await login('203.0.113.50', USER_PASSWORD).expect(200); // the owner, elsewhere, is not
   });
 });
 

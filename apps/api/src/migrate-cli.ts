@@ -15,7 +15,9 @@ async function main(): Promise<void> {
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   try {
-    const result = await runMigrations(client, loadMigrations(defaultMigrationsDir()));
+    const allowNewer = /^(1|true|yes|on)$/i.test((process.env.OPENNJOB_ALLOW_NEWER_SCHEMA ?? '').trim());
+    const result = await runMigrations(client, loadMigrations(defaultMigrationsDir()), { allowNewer });
+    if (result.newer.length > 0) console.log(`[opennjob] rollback: the database has newer migrations (${result.newer.join(', ')}); continuing with older code.`);
     for (const m of result.alreadyApplied) console.log(`[opennjob] already applied: ${m}`);
     for (const m of result.applied) console.log(`[opennjob] applied: ${m}`);
     console.log(`[opennjob] migrations: ${result.applied.length} applied, ${result.alreadyApplied.length} already in place.`);

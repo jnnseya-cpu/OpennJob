@@ -1,0 +1,17 @@
+# For a server that already hosts other sites: its existing web server (nginx, Apache, Caddy...)
+# keeps ports 80/443 and the HTTPS certificates, and forwards opennjob.com to OpennJob on a local
+# port. Use together with the main file:
+#
+#   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.behind-proxy.yml --env-file .env.production up -d --build
+#
+# deploy/install-hostinger.sh chooses this automatically when ports 80/443 are taken.
+services:
+  api:
+    environment:
+      # Two proxies now: the existing web server, then OpennJob's Caddy. The rate limit must see the client.
+      OPENNJOB_TRUST_PROXY: "2"
+  web:
+    environment:
+      SITE_ADDRESS: ":8080"
+    ports: !override
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8090}:8080"

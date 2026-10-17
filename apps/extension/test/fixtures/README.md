@@ -13,3 +13,12 @@ NOT show that the extension works on any real employer's website.
 - agency-quick-apply.html    : short form with no declarations
 - captcha-application.html   : short form with a CAPTCHA-like widget (a static mock-up)
 - login-wall.html            : a sign-in page
+- queue-*.html               : forms for the queue tests (queue.spec.ts). Each reports a real submit to
+                               the fixture server (`/hit?form=NAME`). plain: ordinary questions only, then
+                               a confirmation page; noconfirm: no confirmation; unknown: a required question
+                               with no stored answer; declaration: a convictions question; upload: a required CV file
+- queue-thanks.html          : the confirmation page ("Thank you. Your application has been received.")
+- queue-rtw.html, queue-rtw-convictions.html : right to work and sponsorship only, and the same with a convictions
+  question (work-rights.spec.ts, OD-5). Fictional employer.
+- queue-cv.html, queue-cv-cover.html : a required CV upload, and the same with a required cover-letter
+  file (cv-upload.spec.ts). Fictional employer.

@@ -210,6 +210,11 @@ describe('countries and regions', () => {
     expect(parseCity('Lille, fr')).toEqual({ city: 'Lille', country: 'FR' });
     expect(parseCity('Lille, XX')).toEqual({ city: 'Lille, XX', country: undefined });
     expect(cityCountry('Lille')).toBeUndefined();
+    // People write "UK", a country name, or an alias after the city, not only the ISO code.
+    expect(parseCity('Stafford, UK')).toEqual({ city: 'Stafford', country: 'GB' });
+    expect(parseCity('Stafford, United Kingdom')).toEqual({ city: 'Stafford', country: 'GB' });
+    expect(parseCity('Lille, France')).toEqual({ city: 'Lille', country: 'FR' });
+    expect(cityCountry('New York, USA')).toBe('US');
   });
 
   it('infers a place from free-text locations, and returns nothing rather than guess', () => {
@@ -219,6 +224,20 @@ describe('countries and regions', () => {
     expect(inferPlace('Germany')).toEqual({ country: 'DE' });
     expect(inferPlace('Remote')).toEqual({});
     expect(inferPlace(undefined)).toEqual({});
+  });
+
+  it('recognises foreign hubs and extra UK towns, so a worldwide site cannot pass them off as its own country', () => {
+    // Foreign hubs that otherwise resolved to nothing (and got stamped with the site country).
+    expect(inferPlace('Niagara Falls').country).toBe('US');
+    expect(inferPlace('Schenectady').country).toBe('US');
+    expect(inferPlace('Noida').country).toBe('IN');
+    expect(inferPlace('Berlin').country).toBe('DE');
+    expect(inferPlace('Markham').country).toBe('CA');
+    expect(inferPlace('New Cairo').country).toBe('EG');
+    // UK towns beyond the picker list are confirmed as GB, so real UK jobs are kept.
+    expect(inferPlace('Stafford')).toEqual({ country: 'GB', city: 'Stafford' });
+    expect(inferPlace('Stone').country).toBe('GB');
+    expect(inferPlace('Warwick').country).toBe('GB');
   });
 });
 

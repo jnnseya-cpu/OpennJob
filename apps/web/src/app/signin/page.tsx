@@ -1,0 +1,81 @@
+'use client';
+
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import type { FormEvent } from 'react';
+import { api, errorText, setSession } from '../../lib/api';
+import type { AuthResult } from '../../lib/types';
+
+const NOTICES: Record<string, string> = {
+  expired: 'Your session ended. Sign in again.',
+  deleted: 'Your account and everything stored for it were deleted.',
+  signedout: 'You are signed out on this device.',
+  reset: 'Your password was changed and every earlier session ended. Sign in with the new password.',
+};
+
+function SignIn() {
+  const notice = NOTICES[useSearchParams()?.get('notice') ?? ''];
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  // On by default: the app is used as an installed app, and closing it should not sign the person out.
+  const [keep, setKeep] = useState(true);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const r = await api<AuthResult & { refreshToken?: string }>('/auth/login', { method: 'POST', body: { email, password, remember: keep }, auth: false });
+      setSession({ accessToken: r.accessToken, expiresAt: r.expiresAt }, '/dashboard/', keep ? r.refreshToken : undefined);
+    } catch (err) {
+      setError(errorText(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <h1>Sign in</h1>
+      {notice ? <div className="note ok" role="status">{notice}</div> : null}
+      <form className="card" onSubmit={submit}>
+        <label className="field">
+          <span>Email address</span>
+          <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Password</span>
+          <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        <label className={`confirm ${keep ? 'on' : ''}`}>
+          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} data-testid="keep-signed-in" />
+          <span>
+            Keep me signed in on this device
+            <br />
+            <span className="muted small">For 60 days, until you sign out. Untick on a shared computer.</span>
+          </span>
+        </label>
+        {error ? <div className="note bad" role="alert">{error}</div> : null}
+        <button className="btn primary" type="submit" disabled={busy}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+        <Link href="/forgot-password/" className="small">
+          Forgot your password?
+        </Link>
+      </form>
+      <p className="small">
+        New here? <Link href="/register/">Create an account</Link>
+      </p>
+    </>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignIn />
+    </Suspense>
+  );
+}
