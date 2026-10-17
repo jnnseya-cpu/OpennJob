@@ -59,7 +59,8 @@ export function buildStatementPrompt(input: StatementInput): { system: string; p
     '',
     'Instructions:',
     `- About ${STATEMENT_TARGET_WORDS} words.`,
-    '- Address each essential criterion in the order given, using only evidence present in the CV below.',
+    '- Open with two or three sentences that position the applicant for THIS role, drawing only on the strongest, most relevant facts in the CV below: for example years and depth of experience, seniority, professional registration or chartered status, sector or domain specialism, and notable qualifications, standards or frameworks the CV names. State only what the CV shows; name nothing it does not contain, and give no numbers, titles or credentials that are not in the CV.',
+    '- Then address each essential criterion in the order given, woven into flowing paragraphs rather than a checklist, using only evidence present in the CV below.',
     '- Never invent experience. If something is not in the CV, leave it out of the statement.',
     french
       ? '- Write the statement in formal French (vouvoiement), even if the CV is in English. Translate faithfully; add nothing.'
