@@ -40,7 +40,7 @@ const INFRA_PASSPORT = { rightToWorkConfirmed: true, credentials: { prof: 'MCIOB
 
 type Prefs = { languages?: string[]; countries?: string[]; cities?: string[] };
 interface MatchRow {
-  job: { id: string; pack?: string; country?: string; city?: string; region?: string; language: string; origin: string; requiredCredential?: string };
+  job: { id: string; pack?: string; country?: string; city?: string; region?: string; language: string; origin: string; requiredCredential?: string; contractType?: 'permanent' | 'contract' };
   score: number;
   eligible: boolean;
   missingCredential?: string;
