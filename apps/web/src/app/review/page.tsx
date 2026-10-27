@@ -385,6 +385,15 @@ function Review() {
               <button className="btn" type="button" data-testid="copy-statement" onClick={() => copy('statement', statement)} disabled={statement.trim() === ''}>
                 {copied === 'statement' ? 'Copied' : 'Copy'}
               </button>
+              <button
+                className="btn"
+                type="button"
+                data-testid="download-statement-pdf"
+                disabled={!profile || statement.trim() === ''}
+                onClick={() => profile && savePdf(coverLetterPdf(coverLetterText(statement, profile, { title: app.jobTitle, employer: app.employer }, new Date())), coverLetterFileName(profile))}
+              >
+                Download PDF
+              </button>
             </div>
             <textarea id="statement" value={statement} readOnly={!editable} onChange={(e) => setStatement(e.target.value)} />
             <p className="small muted">
