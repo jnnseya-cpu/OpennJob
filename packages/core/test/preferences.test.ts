@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_PREFERENCES, inScope, matchJob, preferencesOf } from '../src';
+import { EMPTY_PREFERENCES, inScope, cityPreferred, matchJob, preferencesOf } from '../src';
+import { contractTypeOf } from '../src/sources/common';
 import type { Criterion, Job, Preferences } from '../src';
 
 type Place = Pick<Job, 'country' | 'city' | 'language'>;
@@ -56,52 +57,79 @@ describe('inScope: countries', () => {
   });
 });
 
-describe('inScope: cities only narrow the country they belong to', () => {
+describe('inScope: a chosen city narrows its own country (owner decision, 15 October 2026: hard filter)', () => {
   it('a selected city narrows its own country and leaves every other country alone', () => {
     const p = prefs({ cities: ['Birmingham'] });
     expect(inScope(BIRMINGHAM, p)).toBe(true);
     expect(inScope(GLASGOW, p)).toBe(false); // same country, different city
-    expect(inScope(DUBLIN, p)).toBe(true); // no country filter, no Irish city selected
+    expect(inScope(DUBLIN, p)).toBe(true); // no Irish city selected, so Ireland is unaffected
     expect(inScope(LYON_FR, p)).toBe(true);
-    expect(inScope(KINSHASA_FR, p)).toBe(true);
   });
 
   it('a job in a selected country with no selected city in that country still passes', () => {
     const p = prefs({ countries: ['GB', 'IE'], cities: ['Birmingham'] });
     expect(inScope(BIRMINGHAM, p)).toBe(true);
     expect(inScope(GLASGOW, p)).toBe(false);
-    expect(inScope(DUBLIN, p)).toBe(true); // Ireland is selected and no Irish city narrows it
+    expect(inScope(DUBLIN, p)).toBe(true);
     expect(inScope(LYON_FR, p)).toBe(false); // France is not selected
   });
 
-  it('several cities in one country: any of them passes', () => {
-    const p = prefs({ cities: ['Birmingham', 'Glasgow'] });
-    expect(inScope(BIRMINGHAM, p)).toBe(true);
-    expect(inScope(GLASGOW, p)).toBe(true);
-    expect(inScope({ country: 'GB', city: 'London' }, p)).toBe(false);
-  });
-
-  it('a city in a country that is not selected does not let that country in', () => {
-    const p = prefs({ countries: ['GB'], cities: ['Lyon'] });
-    expect(inScope(LYON_FR, p)).toBe(false);
-    expect(inScope(BIRMINGHAM, p)).toBe(true);
-    expect(inScope(GLASGOW, p)).toBe(true); // Lyon narrows France, not the UK
-  });
-
-  it('matches city names without regard to case, accents or spacing, and accepts "City, CC"', () => {
-    expect(inScope({ country: 'GB', city: 'birmingham ' }, prefs({ cities: ['  BIRMINGHAM'] }))).toBe(true);
-    expect(inScope({ country: 'FR', city: 'Lille' }, prefs({ cities: ['Lille, FR'] }))).toBe(true);
-    expect(inScope({ country: 'FR', city: 'Lyon' }, prefs({ cities: ['Lille, FR'] }))).toBe(false);
-    expect(inScope({ country: 'BE', city: 'Brussels' }, prefs({ cities: ['Lille, FR'] }))).toBe(true);
-  });
-
-  it('a job with no city, in a country narrowed by a city, cannot be shown to be in that city', () => {
+  it('a job with no readable city, in a country narrowed by a city, is dropped', () => {
     expect(inScope({ country: 'GB' }, prefs({ cities: ['Birmingham'] }))).toBe(false);
     expect(inScope({ country: 'IE' }, prefs({ cities: ['Birmingham'] }))).toBe(true);
   });
 
+  it('matches a chosen city by a postcode in its area, since adverts give postcodes not town names', () => {
+    const p = prefs({ cities: ['Birmingham', 'Coventry', 'Wolverhampton', 'Stafford, GB'] });
+    expect(inScope({ country: 'GB', city: 'B24 6BF' }, p)).toBe(true); // Birmingham postcode
+    expect(inScope({ country: 'GB', city: 'CV1 2AB' }, p)).toBe(true); // Coventry
+    expect(inScope({ country: 'GB', city: 'WV10 7EH' }, p)).toBe(true); // Wolverhampton
+    expect(inScope({ country: 'GB', city: 'ST16 2AB' }, p)).toBe(true); // Stafford area
+    expect(inScope({ country: 'GB', city: 'M1 2AB' }, p)).toBe(false); // Manchester postcode: not chosen
+    // The postcode can also come from the free-text location when the city field has none.
+    expect(inScope({ country: 'GB', city: '', location: 'Some Street, B1 1AA, United Kingdom' }, p)).toBe(true);
+  });
+
   it('a city OpennJob cannot place in a country narrows nothing', () => {
     for (const job of EVERY) expect(inScope(job, prefs({ cities: ['Atlantis'] }))).toBe(true);
+  });
+
+  it('OD-7: a contract role is country-wide; a city narrows only permanent and unknown-type roles', () => {
+    const p = prefs({ cities: ['Birmingham'] });
+    // Permanent or unknown-type UK jobs outside Birmingham are still dropped.
+    expect(inScope({ country: 'GB', city: 'Leeds', contractType: 'permanent' }, p)).toBe(false);
+    expect(inScope({ country: 'GB', city: 'Leeds' }, p)).toBe(false);
+    // A UK contract job passes wherever it is, because contract work is searched country-wide.
+    expect(inScope({ country: 'GB', city: 'Leeds', contractType: 'contract' }, p)).toBe(true);
+    expect(inScope({ country: 'GB', city: 'Glasgow', contractType: 'contract' }, p)).toBe(true);
+    // The country filter still applies: a contract job in an unselected country does not pass.
+    expect(inScope({ country: 'FR', city: 'Lyon', contractType: 'contract' }, prefs({ countries: ['GB'], cities: ['Birmingham'] }))).toBe(false);
+  });
+
+  it('a chosen city matches towns across its wider postcode area (any UK region)', () => {
+    expect(inScope({ country: 'GB', city: 'LS1 4DY' }, prefs({ cities: ['Leeds'] }))).toBe(true); // Leeds
+    expect(inScope({ country: 'GB', city: 'G2 1AB' }, prefs({ cities: ['Glasgow'] }))).toBe(true); // Glasgow
+    expect(inScope({ country: 'GB', city: 'WR1 1AA' }, prefs({ cities: ['Worcester'] }))).toBe(true); // Worcester
+    expect(inScope({ country: 'GB', city: 'SY1 1AA' }, prefs({ cities: ['Shrewsbury'] }))).toBe(true); // Shrewsbury
+  });
+});
+
+describe('cityPreferred: ranks matching jobs higher, never excludes', () => {
+  it('true only for a job in a chosen city, and respects the city country', () => {
+    expect(cityPreferred(BIRMINGHAM, prefs({ cities: ['Birmingham'] }))).toBe(true);
+    expect(cityPreferred(GLASGOW, prefs({ cities: ['Birmingham'] }))).toBe(false);
+    expect(cityPreferred({ country: 'FR', city: 'Lille' }, prefs({ cities: ['Lille, FR'] }))).toBe(true);
+    expect(cityPreferred({ country: 'GB', city: 'Lille' }, prefs({ cities: ['Lille, FR'] }))).toBe(false); // Lille, FR does not prefer a GB job
+  });
+
+  it('matches names without regard to case, accents or spacing', () => {
+    expect(cityPreferred({ country: 'GB', city: 'birmingham ' }, prefs({ cities: ['  BIRMINGHAM'] }))).toBe(true);
+  });
+
+  it('nothing chosen, or a job with no city, is not preferred (and not excluded)', () => {
+    expect(cityPreferred(BIRMINGHAM, prefs())).toBe(false);
+    expect(cityPreferred({ country: 'GB' }, prefs({ cities: ['Birmingham'] }))).toBe(false);
+    for (const job of EVERY) expect(cityPreferred(job, prefs({ cities: ['Atlantis'] }))).toBe(false);
   });
 });
 
@@ -166,14 +194,15 @@ describe('inScope: the three rules together', () => {
 
 describe('preferencesOf', () => {
   it('returns empty lists for a profile with no preferences, and a copy otherwise', () => {
-    expect(preferencesOf(undefined)).toEqual({ languages: [], countries: [], cities: [] });
-    expect(preferencesOf({})).toEqual({ languages: [], countries: [], cities: [] });
+    // searchTypes (PRO-3) was added after this test was written; empty means all three.
+    expect(preferencesOf(undefined)).toEqual({ languages: [], countries: [], cities: [], searchTypes: [] });
+    expect(preferencesOf({})).toEqual({ languages: [], countries: [], cities: [], searchTypes: [] });
     const stored = { languages: ['French'], countries: ['CD'], cities: ['Kinshasa'] };
     const copy = preferencesOf({ preferences: stored });
-    expect(copy).toEqual(stored);
+    expect(copy).toEqual({ ...stored, searchTypes: [] });
     copy.languages.push('German');
     expect(stored.languages).toEqual(['French']);
-    expect(EMPTY_PREFERENCES).toEqual({ languages: [], countries: [], cities: [] });
+    expect(EMPTY_PREFERENCES).toEqual({ languages: [], countries: [], cities: [], searchTypes: [] });
   });
 });
 
@@ -237,5 +266,36 @@ describe('matching: a selected language is evidence for a criterion that asks fo
   it('selecting a language does not make anyone eligible for a job that needs a credential', () => {
     const m = matchJob({ ...job, requiredCredential: 'sc' }, CV, undefined, { languages: ['French', 'German'] });
     expect(m).toMatchObject({ score: 100, eligible: false, missingCredential: 'sc' });
+  });
+});
+
+describe('spec T-02 and T-04: scope by place and by search type', () => {
+  const job = (country: string | undefined, city?: string, contractType?: 'permanent' | 'contract') => ({ country, city, language: 'en' as const, contractType });
+  const prefs = (p: Partial<{ countries: string[]; cities: string[]; searchTypes: ('uk-permanent' | 'uk-contract' | 'international')[] }>) => ({ languages: [], countries: [], cities: [], searchTypes: [], ...p });
+
+  it('T-02: nothing selected excludes nothing; a country excludes others; a city narrows only its own country', () => {
+    const jobs = [job('GB', 'Birmingham'), job('GB', 'Leeds'), job('FR', 'Lyon'), job('CD', 'Kinshasa'), job(undefined)];
+    expect(jobs.filter((j) => inScope(j, prefs({})))).toHaveLength(5);
+    expect(jobs.filter((j) => inScope(j, prefs({ countries: ['GB'] }))).map((j) => j.city)).toEqual(['Birmingham', 'Leeds']);
+    const narrowed = jobs.filter((j) => inScope(j, prefs({ countries: ['GB', 'FR'], cities: ['Birmingham'] })));
+    expect(narrowed.map((j) => j.city)).toEqual(['Birmingham', 'Lyon']); // Leeds out; France untouched
+  });
+
+  it('T-04: no search type returns permanent, contract and international; "UK contract" alone returns only UK contracts', () => {
+    const jobs = [job('GB', 'Leeds', 'permanent'), job('GB', 'Derby', 'contract'), job('GB', 'York'), job('DE', 'Frankfurt', 'contract')];
+    expect(jobs.filter((j) => inScope(j, prefs({})))).toHaveLength(4);
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['uk-contract'] }))).map((j) => j.city)).toEqual(['Derby']);
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['uk-permanent'] }))).map((j) => j.city)).toEqual(['Leeds']);
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['international'] }))).map((j) => j.city)).toEqual(['Frankfurt']);
+    // A UK job of unknown type passes only when both UK types are chosen.
+    expect(jobs.filter((j) => inScope(j, prefs({ searchTypes: ['uk-permanent', 'uk-contract'] }))).map((j) => j.city)).toEqual(['Leeds', 'Derby', 'York']);
+  });
+
+  it('DIS-3: contract type comes from the employment type, then the wording, and is never guessed', () => {
+    expect(contractTypeOf('Contract', 'Site Manager', '')).toBe('contract');
+    expect(contractTypeOf('Full-time, permanent', 'Site Manager', '')).toBe('permanent');
+    expect(contractTypeOf(undefined, 'Interim Programme Lead', '£500 per day outside IR35')).toBe('contract');
+    expect(contractTypeOf(undefined, 'Site Manager', 'A permanent role.')).toBe('permanent');
+    expect(contractTypeOf(undefined, 'Site Manager', 'Lead the site.')).toBeUndefined();
   });
 });

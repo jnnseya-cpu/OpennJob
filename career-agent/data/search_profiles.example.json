@@ -1,0 +1,75 @@
+[
+  {
+    "id": "uk-permanent",
+    "label": "UK permanent",
+    "countries": [
+      "United Kingdom"
+    ],
+    "work_types": [
+      "permanent"
+    ],
+    "titles": [
+      "Senior Construction Manager",
+      "Construction Subcontract Manager",
+      "Senior Project Manager – Infrastructure",
+      "EPC Project Manager",
+      "Client-side Construction Manager",
+      "Construction Package Manager",
+      "Programme Delivery Lead",
+      "Project Recovery Manager",
+      "Site Manager – Energy",
+      "Data Centre Construction Manager"
+    ],
+    "target_salary": null,
+    "previous_salary": null
+  },
+  {
+    "id": "uk-contract",
+    "label": "UK contract",
+    "countries": [
+      "United Kingdom"
+    ],
+    "work_types": [
+      "contract"
+    ],
+    "titles": [
+      "Senior Construction Manager",
+      "Construction Subcontract Manager",
+      "Senior Project Manager – Infrastructure",
+      "EPC Project Manager",
+      "Client-side Construction Manager",
+      "Construction Package Manager",
+      "Programme Delivery Lead",
+      "Project Recovery Manager",
+      "Site Manager – Energy",
+      "Data Centre Construction Manager"
+    ],
+    "target_day_rate": null,
+    "rate_is_hard_floor": false
+  },
+  {
+    "id": "international",
+    "label": "International opportunities",
+    "countries": [
+      "ANY_NON_UK"
+    ],
+    "work_types": [
+      "permanent",
+      "contract"
+    ],
+    "titles": [
+      "Senior Construction Manager",
+      "Construction Subcontract Manager",
+      "Senior Project Manager – Infrastructure",
+      "EPC Project Manager",
+      "Client-side Construction Manager",
+      "Construction Package Manager",
+      "Programme Delivery Lead",
+      "Project Recovery Manager",
+      "Site Manager – Energy",
+      "Data Centre Construction Manager"
+    ],
+    "relocation": true,
+    "require_sponsorship_or_confirmed_country_right": true
+  }
+]

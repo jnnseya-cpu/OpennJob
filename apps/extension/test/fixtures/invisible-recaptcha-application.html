@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Apply: Site Manager - Example Homes (example)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <header class="site">
+    <strong>Example Homes (example)</strong>
+    <p>Fictional employer. Test fixture for OpennJob. This page carries only an invisible reCAPTCHA (badge, no puzzle).</p>
+  </header>
+  <form id="invisible-apply" action="#" method="post">
+    <label for="i-name">Full name</label>
+    <input type="text" id="i-name" name="fullName" required>
+    <label for="i-email">Email</label>
+    <input type="email" id="i-email" name="email" required>
+    <!-- Static mock-ups shaped like Google's invisible reCAPTCHA. They load nothing. -->
+    <div class="g-recaptcha" data-size="invisible" data-sitekey="fixture-not-a-real-key"></div>
+    <textarea id="g-recaptcha-response" name="g-recaptcha-response" style="display:none"></textarea>
+    <p><button type="submit" id="i-submit">Send application</button></p>
+  </form>
+  <div class="grecaptcha-badge" style="position:fixed;bottom:14px;right:0;width:256px;height:60px;background:#eee">
+    <iframe title="reCAPTCHA" srcdoc="&lt;p&gt;protected by reCAPTCHA (mock)&lt;/p&gt;" style="width:256px;height:60px;border:0"></iframe>
+  </div>
+  <p id="result" hidden>Thanks (fixture).</p>
+</body>
+</html>

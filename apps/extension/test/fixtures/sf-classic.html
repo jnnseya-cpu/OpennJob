@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Application - Example Networks (fictional) - classic career portal style</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <!-- A FICTIONAL form in the style of older career portals (the classic SuccessFactors one among
+       them): labels are plain text in the table cell beside each box, with no <label> linked to it. -->
+  <header class="site"><strong>Example Networks (fictional)</strong></header>
+  <form id="application" action="#" method="post">
+    <table>
+      <tr><td>First Name *</td><td><input type="text" id="c-first" name="fld_1001" required></td></tr>
+      <tr><td>Last Name *</td><td><input type="text" id="c-last" name="fld_1002" required></td></tr>
+      <tr><td>Email Address *</td><td><input type="text" id="c-email" name="fld_1003" required></td></tr>
+      <tr><td>Cell Phone</td><td><input type="text" id="c-phone" name="fld_1004"></td></tr>
+      <tr><td>Address</td><td><input type="text" id="c-addr" name="fld_1005"></td></tr>
+      <tr><td>City</td><td><input type="text" id="c-city" name="fld_1006"></td></tr>
+      <tr><td>Zip/Postal Code</td><td><input type="text" id="c-post" name="fld_1007"></td></tr>
+      <tr><td><b>Have you ever been convicted of a criminal offence?</b> *</td><td><select id="c-conv" name="fld_1008" required><option value="">--Select--</option><option>Yes</option><option>No</option></select></td></tr>
+    </table>
+    <p><span>Cover letter</span> <textarea id="c-statement" name="fld_1009"></textarea></p>
+    <p><button type="submit" id="c-submit">Apply</button></p>
+  </form>
+</body>
+</html>

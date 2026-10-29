@@ -4,6 +4,9 @@ import { memoryLogger } from '../src/logging';
 import { CV_TEXT, PASSPORT, PROFILE, USER_EMAIL, USER_ID, USER_PASSWORD, createTestApp, scriptedLlm, testConfig } from './helpers';
 import type { TestApp } from './helpers';
 
+/** A fictional confirmation page, as "I have submitted it" records it (APP-7). */
+const RECEIPT = { pageUrl: 'https://example.org/applied/thanks', confirmationText: 'Thank you, your application has been received. (fictional)' };
+
 let t: TestApp;
 afterEach(async () => {
   await t?.app.close();
@@ -58,6 +61,9 @@ describe('CORS allow-list', () => {
     expect(originAllowed('https://other.example.org', strict)).toBe(false);
     expect(originAllowed('chrome-extension://abc', strict)).toBe(false);
     expect(originAllowed('chrome-extension://abc', { corsOrigins: [], corsAllowAnyExtension: true })).toBe(true);
+    // The OpennJob extension (fixed ID) is always allowed, whatever the settings file lists.
+    expect(originAllowed('chrome-extension://hempmcajfhphflmemhidmgbfookifiim', strict)).toBe(true);
+    expect(originAllowed('chrome-extension://hempmcajfhphflmemhidmgbfookifiimx', strict)).toBe(false);
   });
 });
 
@@ -118,20 +124,22 @@ describe('structured request logging', () => {
     await t.api.post('/agent/run').send({}).expect(200);
     await t.api.get('/applications').expect(200);
     await t.api.get(`/applications/${application.id}`).expect(200);
+    await t.api.put(`/applications/${application.id}/statement`).send({ statement: 'My edited statement about medication rounds and SBAR handovers.' }).expect(200);
     await t.api.post(`/applications/${application.id}/confirm`).send({ confirmedFields: ['nmcPin'] }).expect(200);
-    await t.api.post(`/applications/${application.id}/submitted`).expect(200);
+    await t.api.post(`/applications/${application.id}/submitted`).send(RECEIPT).expect(200);
     await t.api.post('/interview/feedback').send({ question: 'Tell me about a time you escalated a concern.', answer: 'A patient deteriorated and I escalated using NEWS2 and SBAR.' }).expect(200);
     await t.api.get('/usage').expect(200);
     await t.api.get('/account/export').expect(200);
     await t.api.put('/profile').set('Content-Type', 'application/json').send('{"cvText": "Registered nurse with five years').expect(400);
     await t.api.delete('/account').send({ password: USER_PASSWORD }).expect(200);
 
-    expect(logger.lines.length).toBeGreaterThanOrEqual(22);
+    expect(logger.lines.length).toBeGreaterThanOrEqual(23);
     const everything = JSON.stringify(logger.lines);
     const forbidden = [
       ...CV_TEXT.split('\n'),
       'Registered nurse',
       'medication rounds',
+      'SBAR handovers',
       application.statement as string,
       'Okafor',
       'Amara',
@@ -155,9 +163,9 @@ describe('structured request logging', () => {
       'escalated using NEWS2',
     ];
     for (const secret of forbidden) expect(everything, secret.slice(0, 40)).not.toContain(secret);
-    // Only these fields are ever written.
+    // Only these fields are ever written. event and channel come from the notification engine (catalogue key and channel name).
     const keys = new Set(logger.lines.flatMap((l) => Object.keys(l)));
-    expect([...keys].sort()).toEqual(['durationMs', 'level', 'method', 'msg', 'path', 'requestId', 'status', 'userId']);
+    expect([...keys].sort()).toEqual(['channel', 'durationMs', 'event', 'level', 'method', 'msg', 'path', 'requestId', 'status', 'userId']);
   });
 
   it('logs an unexpected error by type and code only, and replies 500 without detail', async () => {
@@ -186,5 +194,17 @@ describe('GET /health', () => {
       throw new Error('connection refused');
     };
     await t.raw().get('/health').expect(503, { status: 'degraded', persistence: 'memory', database: 'down' });
+  });
+});
+
+describe('the extension origin the API allows is the one the manifest key gives', () => {
+  it('matches apps/extension/manifest.json', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { createHash } = await import('node:crypto');
+    const { join } = await import('node:path');
+    const { OPENNJOB_EXTENSION_ORIGIN } = await import('../src/http');
+    const key = (JSON.parse(readFileSync(join(__dirname, '../../extension/manifest.json'), 'utf8')) as { key: string }).key;
+    const id = [...createHash('sha256').update(Buffer.from(key, 'base64')).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+    expect(OPENNJOB_EXTENSION_ORIGIN).toBe(`chrome-extension://${id}`);
   });
 });
