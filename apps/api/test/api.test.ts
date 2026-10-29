@@ -266,7 +266,7 @@ describe('GET /jobs/matches', () => {
     expect((await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id)).toContain(HCA_JOB);
     const job = await t.deps.repository.getJob(HCA_JOB);
     expect(job).toBeDefined();
-    const old = new Date(Date.parse(NOW) - 40 * 86_400_000).toISOString(); // 40 days > 21-day window
+    const old = new Date(Date.parse(NOW) - 40 * 86_400_000).toISOString(); // 40 days > 10-day window
     await t.deps.repository.upsertJobs([{ ...(job as NonNullable<typeof job>), fetchedAt: old }]);
     const after = (await t.api.get('/jobs/matches?min=0').expect(200)).body.map((m: { job: { id: string } }) => m.job.id);
     expect(after).not.toContain(HCA_JOB); // expired → gone from search

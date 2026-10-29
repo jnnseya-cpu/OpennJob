@@ -89,7 +89,7 @@ export interface OpennJobConfig {
   scheduler?: boolean;
   /** APP-6: an application to the same employer, title and location within this many days is a duplicate (OPENNJOB_DUPLICATE_DAYS, default 30). */
   duplicateDays?: number;
-  /** A job discovery has not re-seen for this many days is treated as expired and dropped from matches (OPENNJOB_JOB_FRESH_DAYS, default 21). */
+  /** A job discovery has not re-seen for this many days is treated as expired and dropped from matches (OPENNJOB_JOB_FRESH_DAYS, default 10). */
   jobFreshDays?: number;
   /** How many prepared applications get their whole advert re-read per agent run, to find a recruiter e-mail or the employer's own application page (OPENNJOB_ADVERTS_READ_PER_RUN, default 80). */
   advertsReadPerRun?: number;
@@ -117,7 +117,7 @@ export function applyThresholdOf(config: OpennJobConfig): number {
 }
 
 export const DEFAULT_DUPLICATE_DAYS = 30;
-export const DEFAULT_JOB_FRESH_DAYS = 21;
+export const DEFAULT_JOB_FRESH_DAYS = 10;
 export const DEFAULT_ADVERTS_READ_PER_RUN = 80;
 export const DEFAULT_DAILY_APPLICATION_LIMIT = 20;
 export const DEFAULT_LLM_DAILY_ACU_PER_USER = 50;
