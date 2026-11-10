@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "attempt_id": "SYNTHETIC-ATTEMPT-001",
+  "applicant_id": "synthetic-applicant",
+  "tenant_id": null,
+  "posting_id": "synthetic-posting",
+  "jd": {
+    "version_id": "jd-v1",
+    "jd_url": "https://employer.example/jobs/fixture",
+    "apply_url": "https://employer.example/apply/fixture",
+    "normalized_text": "Construction leadership required.",
+    "sha256": "aef61cda6658992e100413c8c833a741619e5e85b0bd7019c30fa271a25084dc",
+    "fetched_at": "2026-10-06T11:00:00Z",
+    "country": "United Kingdom"
+  },
+  "versions": {
+    "profile": "p1",
+    "policy": "pol1",
+    "answers": "a1",
+    "model_prompt": "prompt1",
+    "parser": "parser1"
+  },
+  "scorecard": {
+    "requirements": [
+      {
+        "text": "Construction leadership",
+        "jd_quote": "Construction leadership required.",
+        "weight": 100,
+        "state": "met",
+        "hard": true,
+        "evidence_ids": [
+          "synthetic-evidence-1"
+        ]
+      }
+    ],
+    "raw_coverage": "100",
+    "reviewed": true
+  },
+  "documents": [
+    {
+      "kind": "cv",
+      "artifact_id": "synthetic-document-not-a-real-CV",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "mime_type": "application/pdf"
+    }
+  ],
+  "answers": [
+    {
+      "question_id": "email",
+      "answer_key": "email",
+      "value": "synthetic@example.com",
+      "confirmation_version": "a1"
+    }
+  ],
+  "prepared_at": "2026-10-06T11:01:00Z",
+  "authorization": {
+    "version": "pol1",
+    "enabled": true,
+    "minimum_match": 80
+  },
+  "adapter": {
+    "id": "synthetic-route",
+    "version": "r1",
+    "certification_id": "SYNTHETIC-NOT-LIVE",
+    "form_schema_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

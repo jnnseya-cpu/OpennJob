@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nseya:attempt-snapshot:v1",
+  "title": "Target attempt snapshot \u2014 not current source payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "applicant_id",
+    "tenant_id",
+    "posting_id",
+    "jd",
+    "versions",
+    "scorecard",
+    "documents",
+    "answers",
+    "prepared_at",
+    "authorization",
+    "adapter"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "attempt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "applicant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tenant_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "posting_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "jd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version_id",
+        "jd_url",
+        "apply_url",
+        "normalized_text",
+        "sha256",
+        "fetched_at",
+        "country"
+      ],
+      "properties": {
+        "version_id": {
+          "type": "string"
+        },
+        "jd_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "apply_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "normalized_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "country": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "policy",
+        "answers",
+        "model_prompt",
+        "parser"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answers": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parser": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scorecard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirements",
+        "raw_coverage",
+        "reviewed"
+      ],
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "text",
+              "jd_quote",
+              "weight",
+              "state",
+              "hard",
+              "evidence_ids"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "jd_quote": {
+                "type": "string",
+                "minLength": 1
+              },
+              "weight": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 100
+              },
+              "state": {
+                "enum": [
+                  "met",
+                  "partial",
+                  "unknown",
+                  "unmet"
+                ]
+              },
+              "hard": {
+                "type": "boolean"
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        },
+        "raw_coverage": {
+          "type": "string",
+          "pattern": "^([0-9]{1,2}(\\.[0-9]+)?|100(\\.0+)?)$"
+        },
+        "reviewed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "artifact_id",
+          "sha256",
+          "mime_type"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "cv",
+              "cover"
+            ]
+          },
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "mime_type": {
+            "const": "application/pdf"
+          }
+        }
+      }
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question_id",
+          "answer_key",
+          "value",
+          "confirmation_version"
+        ],
+        "properties": {
+          "question_id": {
+            "type": "string"
+          },
+          "answer_key": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "confirmation_version": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "prepared_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "enabled",
+        "minimum_match"
+      ],
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "minimum_match": {
+          "type": "number",
+          "minimum": 80,
+          "maximum": 100
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "certification_id",
+        "form_schema_hash"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "certification_id": {
+          "type": "string"
+        },
+        "form_schema_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

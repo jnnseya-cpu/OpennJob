@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PipeTransform } from '@nestjs/common';
 import { z } from 'zod';
-import { CREDENTIAL_IDS, PACK_IDS, REGION_IDS, cityCountry, isoDateToUtcDay, normaliseCountryCode, normaliseLanguage } from '@opennjob/core';
+import { CREDENTIAL_IDS, NOTIFICATION_CATALOGUE, PACK_IDS, REGION_IDS, WORK_RIGHTS_BASES, cityCountry, isoDateToUtcDay, normaliseCountryCode, normaliseLanguage } from '@opennjob/core';
 
 /** Validates a request body/query against a zod schema; replies 400 with the list of problems. */
 @Injectable()
@@ -26,6 +26,12 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) =>
   z.string().trim().max(max).optional().transform((v) => (v ? v : undefined));
 const isoDate = z.string().refine((v) => isoDateToUtcDay(v) !== undefined, 'must be a real date in YYYY-MM-DD format');
+
+/** A small raster image as a base64 data: URL (png, jpeg or webp), at most `max` characters. */
+const imageDataUrl = (max: number) =>
+  z.string().trim().max(max).regex(/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/]+=*$/, 'must be a PNG, JPEG or WebP image')
+    .optional()
+    .transform((v) => (v ? v : undefined));
 
 const unique = <T>(values: T[]): T[] => [...new Set(values)];
 
@@ -57,6 +63,15 @@ export const preferencesSchema = z
       .max(100)
       .default([])
       .transform(unique),
+    searchTypes: z.array(z.enum(['uk-permanent', 'uk-contract', 'international'])).max(3).optional().transform((v) => (v ? unique(v) : undefined)),
+    // Job titles to search for; used instead of the titles read from the CV when given.
+    searchTitles: z.array(text(80)).max(12).optional().transform((v) => (v?.length ? unique(v) : undefined)),
+    // The person's own bar: the agent prepares only matches at or above this (never below the platform's threshold).
+    minScore: z.number().int().min(50).max(100).optional(),
+    // Companies searched for by name on the job-search APIs, on top of the CV's titles.
+    targetEmployers: z.array(text(80)).max(60).optional().transform((v) => (v?.length ? unique(v) : undefined)),
+    // The interview rate the person aims for: the automatic bar rises toward it as outcomes come in.
+    targetInterviewRate: z.number().int().min(5).max(100).optional(),
   })
   .strict();
 
@@ -72,6 +87,10 @@ export const profileSchema = z
     postcode: text(12),
     cvText: z.string().trim().min(20, 'CV text is too short').max(50_000),
     preferences: preferencesSchema.optional(),
+    // The person's own photo and cover image, as a small data: URL. Resized by the browser before
+    // upload; capped here so the whole profile stays inside the request body limit.
+    avatar: imageDataUrl(50_000),
+    cover: imageDataUrl(100_000),
   })
   .strict();
 
@@ -94,6 +113,24 @@ export const passportSchema = z
       .strict()
       .optional(),
     rightToWorkConfirmed: z.boolean(),
+    // OD-5: right to work and sponsorship per country, resting on a document the person holds.
+    // `confirmed: true` is the person's confirmation; the API stamps the time (confirmedAt).
+    workRights: z
+      .array(
+        z
+          .object({
+            country: z.string().refine((v) => normaliseCountryCode(v) !== undefined, 'must be an ISO 3166-1 alpha-2 country code').transform((v) => normaliseCountryCode(v) as string),
+            rightToWork: z.boolean(),
+            requiresSponsorship: z.boolean(),
+            basis: z.enum(WORK_RIGHTS_BASES),
+            documentExpires: isoDate.optional(),
+            confirmed: z.literal(true, { errorMap: () => ({ message: 'tick to confirm these answers are true and you hold this document' }) }),
+          })
+          .strict(),
+      )
+      .max(10)
+      .refine((rows) => new Set(rows.map((r) => r.country)).size === rows.length, 'one record per country')
+      .optional(),
     training: z
       .array(z.object({ name: text(120), completedOn: isoDate.optional(), expiresOn: isoDate.optional() }).strict())
       .max(50)
@@ -123,10 +160,29 @@ export const confirmApplicationSchema = z
   .object({ confirmedFields: z.array(text(200)).min(1).max(200) })
   .strict();
 
+/** The user's own edit of a drafted statement. Same upper bound as an LLM draft could reach, with room to spare. */
+export const statementSchema = z.object({ statement: z.string().trim().min(1).max(20_000) }).strict();
+
+const notificationKey = z.string().trim().max(80).refine((k) => NOTIFICATION_CATALOGUE.some((e) => e.key === k), 'unknown notification event');
+
+export const notificationPreferencesSchema = z
+  .object({ email: z.boolean(), sms: z.boolean(), push: z.boolean(), whatsapp: z.boolean(), muted: z.array(notificationKey).max(200).default([]).transform(unique) })
+  .strict();
+
+export const markReadSchema = z.object({ ids: z.array(text(200)).min(1).max(500).optional() }).strict();
+
+export const notificationTestSchema = z.object({ event: notificationKey.default('account.test') }).strict();
+
+export const notificationPreviewSchema = z.object({ event: notificationKey }).strict();
+
 export const interviewFeedbackSchema = z
   .object({ questionId: text(80).optional(), question: text(500).optional(), answer: z.string().trim().min(1).max(8000) })
   .strict()
   .refine((v) => Boolean(v.questionId) !== Boolean(v.question), 'provide exactly one of questionId or question');
+
+export const applicationInterviewFeedbackSchema = z
+  .object({ questionId: z.string().regex(/^doc-\d{1,2}$/), answer: z.string().trim().min(1).max(8000) })
+  .strict();
 
 export const minScoreSchema = z
   .union([z.undefined(), z.string().regex(/^\d{1,3}$/, 'min must be a whole number from 0 to 100')])
@@ -190,9 +246,29 @@ export const registerSchema = z
   .object({ email: accountEmail, password: z.string().min(1).max(1000), acceptedTermsVersion: version, acceptedPrivacyVersion: version })
   .strict();
 
-export const loginSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000) }).strict();
+export const loginSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000), remember: z.boolean().optional() }).strict();
+
+/** "Keep me signed in": the refresh token issued at sign-in (base64url, 43 characters). */
+export const refreshSchema = z.object({ refreshToken: z.string().trim().regex(/^[A-Za-z0-9_-]{32,128}$/, 'not a valid session') }).strict();
+export type RefreshInput = z.infer<typeof refreshSchema>;
 
 export const deleteAccountSchema = z.object({ password: z.string().min(1).max(1000) }).strict();
+
+/** Change the password while signed in: the current one, and the new one. */
+export const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(1000), newPassword: z.string().min(1).max(1000) }).strict();
+/** Change the e-mail address while signed in: confirmed with the password. */
+export const changeEmailSchema = z.object({ email: accountEmail, password: z.string().min(1).max(1000) }).strict();
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
+
+/** ACC-2 and ACC-3: the one-time token from the e-mail (base64url, 43 characters). */
+const oneTimeToken = z.string().trim().regex(/^[A-Za-z0-9_-]{32,128}$/, 'not a valid link');
+export const verifyEmailSchema = z.object({ token: oneTimeToken }).strict();
+export const forgotPasswordSchema = z.object({ email: accountEmail }).strict();
+export const resetPasswordSchema = z.object({ token: oneTimeToken, password: z.string().min(1).max(1000) }).strict();
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -204,4 +280,102 @@ export type EmployerJobInput = z.infer<typeof employerJobSchema>;
 export type PassportInput = z.infer<typeof passportSchema>;
 export type CreateApplicationInput = z.infer<typeof createApplicationSchema>;
 export type ConfirmApplicationInput = z.infer<typeof confirmApplicationSchema>;
+export type StatementInput = z.infer<typeof statementSchema>;
 export type InterviewFeedbackInput = z.infer<typeof interviewFeedbackSchema>;
+
+// ----- applying on the person's behalf (P3) -------------------------------------------
+
+const httpUrl = z.string().trim().url().max(2000).refine((v) => /^https?:\/\//i.test(v), 'must be an http(s) URL');
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, 'must be a SHA-256 hex digest');
+
+/** APP-7: what proves an application was sent. The site's own confirmation text is required. */
+export const receiptSchema = z
+  .object({
+    pageUrl: httpUrl,
+    confirmationText: z.string().trim().min(3).max(2000),
+    documentsSha256: z.record(z.string().max(40), sha256Hex).refine((r) => Object.keys(r).length <= 10, 'at most 10 documents').default({}),
+  })
+  .strict();
+
+/** "I have submitted it": the person records the confirmation page they saw. */
+export const outcomeSchema = z.object({ outcome: z.enum(['interview', 'rejected', 'no-reply']) }).strict();
+
+export const submittedSchema = z.object({ pageUrl: httpUrl, confirmationText: z.string().trim().min(3).max(2000) }).strict();
+
+export const authorisationSchema = z
+  .object({ enabled: z.boolean(), scopeVersion: z.string().trim().max(60).optional() })
+  .strict();
+
+export const pauseSchema = z.object({ paused: z.boolean() }).strict();
+
+/** What the extension reports after working on one queued application. */
+export const queueResultSchema = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('submitted'), receipt: receiptSchema }).strict(),
+  z.object({ outcome: z.literal('held'), reasons: z.array(z.string().trim().min(1).max(300)).min(1).max(30) }).strict(),
+  z.object({ outcome: z.literal('uncertain'), pageUrl: httpUrl.optional() }).strict(),
+]);
+
+const shortAnswer = z.string().trim().min(1).max(500);
+export const screeningSchema = z
+  .object({
+    noticePeriod: shortAnswer.optional(),
+    salaryExpectation: shortAnswer.optional(),
+    dayRate: shortAnswer.optional(),
+    yearsExperience: shortAnswer.optional(),
+    relocation: z.boolean().optional(),
+    travel: z.boolean().optional(),
+    drivingLicence: z.boolean().optional(),
+    // OD-6 (owner decision, 8 October 2026): declarations the person answers once.
+    declarations: z
+      .object({
+        everConvicted: z.boolean().optional(),
+        conflictOfInterest: z.boolean().optional(),
+        certifyAndConsent: z.boolean().optional(),
+        equalityPreferNotToSay: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    custom: z.record(z.string().trim().min(1).max(300), z.string().trim().min(1).max(2000)).refine((r) => Object.keys(r).length <= 200, 'at most 200 answers').default({}),
+  })
+  .strict();
+
+export const questionAnswerSchema = z.object({ question: z.string().trim().min(1).max(300), answer: z.string().trim().min(1).max(2000) }).strict();
+
+export const applicationSystemSchema = z
+  .object({
+    enabled: z.boolean(),
+    termsCheckedAt: z.string().datetime().optional(),
+    supervisedSubmissionAt: z.string().datetime().optional(),
+    note: z.string().trim().max(500).optional(),
+    // The employer's own domains running this system, e.g. "jobs.example.org".
+    extraHosts: z
+      .array(z.string().trim().toLowerCase().regex(/^(?=.{3,253}$)([a-z0-9-]+\.)+[a-z]{2,}$/, 'a host name such as jobs.example.org'))
+      .max(100)
+      .optional(),
+  })
+  .strict();
+
+export type ReceiptInput = z.infer<typeof receiptSchema>;
+export type SubmittedInput = z.infer<typeof submittedSchema>;
+export type OutcomeInput = z.infer<typeof outcomeSchema>;
+export type AuthorisationInput = z.infer<typeof authorisationSchema>;
+export type PauseInput = z.infer<typeof pauseSchema>;
+export type QueueResultInput = z.infer<typeof queueResultSchema>;
+export type ScreeningInput = z.infer<typeof screeningSchema>;
+export type QuestionAnswerInput = z.infer<typeof questionAnswerSchema>;
+export type ApplicationSystemInput = z.infer<typeof applicationSystemSchema>;
+
+/** The employer's own application page for a job found on a job board (https only). */
+export const applyUrlSchema = z.object({ url: z.string().trim().url().max(2000).refine((u) => u.startsWith('https://'), 'an https:// address') }).strict();
+export type ApplyUrlInput = z.infer<typeof applyUrlSchema>;
+/** A job the person found themselves: its application page and the advert as they copied it. */
+export const fromLinkSchema = z
+  .object({
+    url: z.string().trim().url().max(2000).refine((u) => u.startsWith('https://'), 'an https:// address'),
+    title: z.string().trim().min(2).max(200),
+    employer: z.string().trim().min(2).max(200),
+    location: z.string().trim().max(200).optional(),
+    description: z.string().trim().min(50, 'paste the advert text (at least a few sentences)').max(30000),
+  })
+  .strict();
+export type FromLinkInput = z.infer<typeof fromLinkSchema>;

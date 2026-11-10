@@ -148,14 +148,14 @@ test('with a live PostgreSQL: the API will not start before `migrate`; after it,
   try {
     const early = await start(MAIN, env);
     expect(await early.exit).toBe(1);
-    expect(early.output()).toContain('The database is missing migrations: 001_initial_schema, 002_accounts_and_encryption');
+    expect(early.output()).toContain('The database is missing migrations: 001_initial_schema, 002_accounts_and_encryption, 003_notifications, 004_applying');
 
     const first = await start(MIGRATE, env);
     expect(await first.exit).toBe(0);
-    expect(first.output()).toContain('migrations: 2 applied, 0 already in place.');
+    expect(first.output()).toContain('migrations: 4 applied, 0 already in place.');
     const second = await start(MIGRATE, env);
     expect(await second.exit).toBe(0);
-    expect(second.output()).toContain('migrations: 0 applied, 2 already in place.');
+    expect(second.output()).toContain('migrations: 0 applied, 4 already in place.');
 
     const one = await start(MAIN, env);
     await waitForHealth(one);

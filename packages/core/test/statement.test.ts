@@ -134,7 +134,7 @@ describe('draftStatement', () => {
   it('falls back with a warning when the LLM fails or returns nothing', async () => {
     const failed = await draftStatement(input, { complete: async () => { throw new Error('overloaded'); } });
     expect(failed.source).toBe('fallback');
-    expect(failed.warnings[0]).toMatch(/overloaded/);
+    expect(failed.warnings[0]).toBe('The AI could not be reached, so this was drafted without AI.'); // never the provider's own text
     const empty = await draftStatement(input, new FakeLlm(() => 'GAPS:\nnone'));
     expect(empty.source).toBe('fallback');
   });
@@ -148,5 +148,17 @@ describe('helpers', () => {
   });
   it('findUnsupportedClaims ignores evidenced criteria', () => {
     expect(findUnsupportedClaims('I give medication and care for people with dementia.', match)).toEqual([]);
+  });
+});
+
+describe('why the AI was not used, in plain words', () => {
+  it('never copies the provider\'s error text; names the cause', async () => {
+    const { llmFailureWarning } = await import('../src/statement');
+    const credit = Object.assign(new Error('400 {"type":"error","error":{"message":"Your credit balance is too low"},"request_id":"req_fictional"}'), { status: 400 });
+    expect(llmFailureWarning(credit)).toBe('The AI account has no credit left (top it up with the AI provider), so this was drafted without AI.');
+    expect(llmFailureWarning(credit)).not.toContain('req_');
+    expect(llmFailureWarning(Object.assign(new Error('x'), { status: 401 }))).toContain('key was refused');
+    expect(llmFailureWarning(Object.assign(new Error('x'), { status: 429 }))).toContain('rate limited');
+    expect(llmFailureWarning(new Error('socket hang up'))).toBe('The AI could not be reached, so this was drafted without AI.');
   });
 });

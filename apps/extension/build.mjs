@@ -33,4 +33,5 @@ await build({
 for (const file of ['manifest.json', 'src/popup/popup.html', 'src/popup/popup.css']) {
   cpSync(path.join(here, file), path.join(dist, path.basename(file)));
 }
+cpSync(path.join(here, 'icons'), path.join(dist, 'icons'), { recursive: true });
 console.log(`Extension built: ${dist}`);

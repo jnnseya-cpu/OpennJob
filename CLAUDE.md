@@ -20,11 +20,11 @@ All from the repository root. Node 20+ (built on 22), npm workspaces.
 
 ```bash
 npm install                 # install (npm ci in CI)
-npm run build               # packages/core, then apps/api, then apps/extension
-npm run typecheck           # tsc --noEmit for all three, tests included
+npm run build               # packages/core, then apps/api, apps/extension, apps/web (static export to apps/web/out)
+npm run typecheck           # tsc --noEmit for all four, tests included
 npm test                    # vitest: unit + API tests. PostgreSQL tests are SKIPPED without DATABASE_URL
 npm run test:pg             # the same, against a throwaway PostgreSQL it starts itself (needs initdb/pg_ctl)
-npm run test:e2e            # builds, then Playwright: the extension in Chromium + the built API process
+npm run test:e2e            # builds, then Playwright: the extension, the web app, the built API process
 npm run migrate             # apply db/migrations to DATABASE_URL (needs npm run build first)
 npm start                   # run the API: node apps/api/dist/main.js (needs npm run build first)
 docker compose up --build   # postgres + one-shot migrate + api on 127.0.0.1:3000 (needs .env)
@@ -32,9 +32,18 @@ docker compose up --build   # postgres + one-shot migrate + api on 127.0.0.1:300
 npx vitest run apps/api/test/auth.test.ts          # one file
 npx vitest run -t "refuses a second account"       # by test name
 npx playwright test apps/extension/test/e2e/real-extension.spec.ts
+npx playwright test apps/web/test/e2e             # the web app (needs npm run build)
+npm run dev -w @opennjob/web                       # web dev server on :3001 (API needs OPENNJOB_CORS_ORIGINS=http://127.0.0.1:3001)
 DATABASE_URL=postgres://... npm test               # run the PostgreSQL tests against your own database
 npm run test:pg -- npm run test:e2e                # e2e with a throwaway PostgreSQL
+npm run test:agent                                 # career-agent/ Python tests (uses career-agent/.venv if present)
 ```
+
+`career-agent/` follows the same non-negotiable rules: it never fills a declaration (except right to work and sponsorship, from the applicant's own document-backed record for that country), never ticks a
+declaration or consent box, and never commits personal data (`career-agent/data/local/` is git-ignored). It presses submit itself only under the applicant's standing authorisation (dated, to a named scope,
+revocable) and only on a route certified for it (one supervised, receipt-proven submission), when the form has no declaration and no other sensitive question, every required answer is confirmed, and a
+re-read of authorisation and inputs just before the click still allows it (owner's NSEYA build requirements, 6 October 2026). Otherwise the applicant presses submit. `npm run test:agent` or
+`career-agent/scripts/release_gate.py` (writes `career-agent/docs/ACCEPTANCE.md`, T01-T60).
 
 - Do not run `playwright install` where Chromium is pre-installed
   (`PLAYWRIGHT_BROWSERS_PATH`); `@playwright/test` is pinned to match that browser.
@@ -52,10 +61,12 @@ packages/core/                Pure TypeScript domain logic. No framework, no I/O
   src/policy.ts                 THE SAFETY CORE: decide() for review / hybrid / auto
   src/fields.ts                 classifies form fields: sensitive or not, and what may fill them
   src/matching.ts statement.ts interview.ts packs.ts preferences.ts geo.ts languages.ts passport.ts
+  src/tailoring.ts screening.ts adapters.ts interview-docs.ts time.ts   tailored CV + trace check, screening rules, application systems + standing-authorisation wording, interview from sent documents, London time
   src/repository.ts             Repository interface + InMemoryRepository
   src/usage.ts events.ts llm.ts UsageMeter, EventBus, LlmPort (+ fakes)
   src/sources/                  job-source adapters (response shapes UNVERIFIED against live APIs)
   src/browser.ts                the subset bundled into the extension (policy + fields)
+  src/web.ts                    the subset the web app imports (packs, countries, languages)
 apps/api/                     NestJS REST API
   src/main.ts                   process entry: start, SIGTERM/SIGINT graceful shutdown
   src/server.ts                 startServer(env): start-up checks, migration check, wiring
@@ -63,7 +74,10 @@ apps/api/                     NestJS REST API
   src/deps.ts                   config from env, startupProblems(), createDefaultDeps() (Postgres if DATABASE_URL)
   src/auth.ts                   password rules, bcrypt, JWT sign/verify, RateLimiter
   src/auth.guard.ts             AccessTokenGuard (global), @Public, @EmployerRoute, @CurrentUser, AuthRateLimitGuard
-  src/account.service.ts        register, login, export, delete
+  src/account.service.ts        register, login, e-mail verification, password reset, export, delete
+  src/applying.service.ts       standing authorisation, pauses, queue (next/go/result), receipts, screening answers
+  src/scheduler.ts              London-time daily jobs (06:00 discovery, 09:00 report, 03:00 retention), claimed once per day; operator alerts
+  src/cv.ts                     PDF (pdfjs-dist) and Word (mammoth) CV to text; the file is not kept
   src/services.ts               everything else; every method takes userId first
   src/controllers.ts schemas.ts routes and zod validation
   src/postgres.ts               PostgresRepository, PostgresUsageMeter
@@ -71,14 +85,29 @@ apps/api/                     NestJS REST API
   src/migrations.ts migrate-cli.ts   versioned SQL migrations
   src/logging.ts                JSON logger, request log, SafeExceptionFilter
   test/                         vitest (*.test.ts); test/e2e/*.spec.ts runs the built process under Playwright
+apps/web/                     candidate web app: Next.js 14 App Router, static export (out/), all client-side
+  src/app/<screen>/page.tsx     signin register verify-email forgot-password reset-password profile matches review tracker interview notifications account
+  src/components/AppShell.tsx   header (pack, mode), tabs, sign-in guard, shared state
+  src/lib/api.ts                the only API client; API address from /opennjob-config.json; token in sessionStorage
+  src/lib/declarations.ts       what the review screen asks the user to confirm (from the pack registry)
+  test/e2e/                     Playwright: built site served statically + built API process (PostgreSQL if DATABASE_URL)
 apps/extension/               Chrome MV3 extension, bundled by esbuild into dist/
-  src/agent/                    scan, blockers (CAPTCHA / login wall), fill, apply the policy
+  src/agent/                    scan, blockers (CAPTCHA / login wall), fill, apply the policy;
+                                steps.ts: multi-step systems (Workday, SuccessFactors): Apply, Save and Continue, Submit
   src/popup/                    popup UI: API address, sign-in, mode, scan, fill
   test/fixtures/                fictional application forms
   test/e2e/                     Playwright tests
+career-agent/                 SEPARATE single-user Python tool (personal trial), not part of OpennJob. See its README.
+  agent/                        store (SQLite, migrations, atomic claims), scoring (Decimal), contracts (JSON Schema), policy,
+                                worker (Playwright, certified routes), discovery, budget, report, server (local API + dashboard)
+  data/*.example.json           fictional; personal data only in data/local/ (git-ignored, CAREER_DATA overrides)
+  tests/                        unittest, fictional data; `npm run test:agent`
 db/migrations/                NNN_name.sql, applied in order, tracked in schema_migrations
 deploy/gcp-cloud-run.md       Cloud Run + Cloud SQL + Secret Manager steps (from memory, not executed)
+docs/traceability.md          every spec requirement and test case -> its tests, or not done and why
+docs/sources.md               terms-check register for every job source (a test fails if one is missing)
 Dockerfile docker-compose.yml .github/workflows/ci.yml .env.example
+docker-compose.prod.yml deploy/   production on one server (Caddy + API + PostgreSQL + backups), Vercel, Cloud Run
 ```
 
 Data flow for a request: `AccessTokenGuard` verifies the JWT and that the account still
@@ -96,14 +125,43 @@ hold them, whatever a task seems to ask. If a request conflicts with one, stop a
    of interest, fitness to practise, safeguarding, health, equality monitoring, and any
    "I declare / I confirm" box are answered by the person, every time. The code holds no
    fill value for them and must not gain one. Do not store those answers.
+   **One exception, owner decision OD-5 (6 October 2026):** the two plain questions "Do you
+   have the right to work in <country>?" and "Will you need visa sponsorship?" may be
+   answered from the person's own right-to-work record for the job's country
+   (`packages/core/src/work-rights.ts`): confirmed by them, answered yes or no, naming the
+   document they hold, not expired. Nothing else about immigration (nationality, passport,
+   share code, NI number, visa type or expiry, evidence), no question worded the other way
+   round, and no other declaration falls under it.
+   **Second exception, owner decision OD-6 (8 October 2026):** declarations the person answers
+   once on their Profile ("Declarations OpennJob answers for you", stored encrypted with the
+   screening answers) are answered from those answers on every form (`packages/core/src/own-answers.ts`):
+   convictions or cautions and conflict of interest (their yes or no, plain wordings only),
+   the "I certify the information is true" and privacy/terms consent boxes (when they allowed
+   it; a box claiming a fact is never ticked), and equality monitoring "Prefer not to say".
+   Health, safeguarding, fitness to practise, vetting and security clearance stay the person's.
 2. **A sensitive field is confirmed by the user before it is written. It is never
    auto-filled.** In every mode. Bulk "tick all" exists only for ordinary fields.
 3. **Auto mode never submits a form that has any sensitive field**, even after the user
    has confirmed those fields. It submits only a form with no sensitive field, at least
-   one field, and no empty required field. `review` and `hybrid` never submit.
+   one field, and no empty required field. `review` and `hybrid` never submit. Under
+   OD-5 a right-to-work or sponsorship field answered from a valid record
+   (`fromWorkRights` in `policy.ts`), and under OD-6 a declaration answered from the
+   person's own answers (`fromOwnRecord`), does not count as stopping auto mode; any other
+   sensitive field still does. Review mode still asks for them.
+   **Applications by e-mail** (owner request, 6 October 2026): when an advert names a
+   recruiter's e-mail address, `ApplyingService.sendByEmail` may e-mail the tailored CV (PDF)
+   and the statement there, in the person's name, replies to them. Only in auto mode, under
+   standing authorisation whose wording names this route, with a verified address, no pause
+   and within the daily limit; each application is claimed once and a refused message is held,
+   never retried. No form is involved, so no declaration is answered.
 4. **No CAPTCHA solving and no bot-evasion.** On a CAPTCHA or a login wall the agent
    stops and says why. No proxy rotation, fingerprint spoofing, stealth plugins, headless
    detection workarounds, or anything meant to get past a site's defences.
+   Owner decisions, 8 October 2026: a CAPTCHA means one the person can see (tick box,
+   picture puzzle, Cloudflare check, typed letters); Google's invisible reCAPTCHA (badge, no
+   puzzle) does not stop the agent and is never touched (`apps/extension/src/agent/blockers.ts`).
+   On a sign-in page the queue brings the tab forward and waits for the person to sign in
+   (up to ten minutes), then goes on; it never types a password.
 5. **No automation against a site whose terms forbid it.** No scrapers or automated
    access for NHS Jobs, Trac, LinkedIn, Indeed or any other site without a terms-of-use
    check or a partnership. A new job source or target site needs that check first.
@@ -119,13 +177,16 @@ hold them, whatever a task seems to ask. If a request conflicts with one, stop a
    Do not mark anything in `GO-LIVE.md` as done without a test or a real-world check.
 
 The decision logic is one pure function, `decide()` in `packages/core/src/policy.ts`,
-with a sweep test over about 68,000 combinations. The extension bundles that same file.
+with a sweep test over about 68,000 combinations, and a second sweep (about 25,000)
+that includes fields answered from the right-to-work record (OD-5). The extension bundles that same file.
 Changing it changes what the product does to people's applications: treat any edit there
 as needing explicit sign-off from the owner.
 
 ## Conventions
 
 - TypeScript strict, `noUncheckedIndexedAccess`. No `any`; no non-null `!` in `src/`.
+- Layers: shared `packages/core`, backend `apps/api`, frontend `apps/web`. `packages/core/test/boundaries.test.ts`
+  fails if the frontend imports anything but `@core/web`, or shared imports a framework or an app.
 - `packages/core` imports no framework and nothing from `apps/`. Database and HTTP code
   lives in `apps/api`.
 - NestJS: explicit `@Inject(...)` on every constructor parameter; zod (`ZodPipe`), not
@@ -145,10 +206,26 @@ as needing explicit sign-off from the owner.
 - Tests: vitest for unit and API (`supertest` against `createApp`), Playwright for the
   extension and the built process. Add tests with the change. Do not skip or delete a
   test to get green; fix the code or say why the test is wrong.
+- Web app: no `console` calls; no `dangerouslySetInnerHTML`; nothing personal in
+  `localStorage` (mode, pack and theme; and, when the person ticks "Keep me signed in", a revocable
+  refresh token, `opennjob.keep`, which holds no personal data). It never submits anything to an employer, never
+  pre-ticks a declaration and offers no "tick all" for them. A new API call goes through
+  `src/lib/api.ts`. Imports from core only via `@core/web` (`packages/core/src/web.ts`).
+- A new job source needs a row in `docs/sources.md`; `packages/core/test/sources-register.test.ts`
+  fails without it. The row says "not checked" until someone has read that source's terms.
+- New accounts must verify their e-mail before anything is submitted. Tests that run the
+  queue against the built API verify through `OPENNJOB_DEV_MAILBOX_DIR` (development only;
+  the API refuses it in production).
 - Extension: page-derived text goes into the popup with `textContent` only. Permissions
-  stay at `activeTab`, `scripting`, `storage`.
+  stay at `activeTab`, `scripting`, `storage`. The one addition (owner decision OD-4,
+  6 October 2026) is `optional_host_permissions: ["https://*/*"]` for the queue: it is
+  requested one site at a time, only when the person presses "Allow OpennJob on <site>".
+  No host permission is granted at install.
 - Plain British English in docs and messages. No marketing language.
 - Commits: one logical change, imperative subject. Do not push unless asked.
 
 ## Next task
-The candidate web app. Read `docs/WEB-APP-BRIEF.md` and open `docs/prototype/opennjob-demo.html` first.
+None set. `GO-LIVE.md` lists what is open, and `docs/traceability.md` marks each spec
+requirement that is not done (DIS-2 live recordings, APP-9 a supervised real submission,
+REP-4 SPF/DKIM, DP-3/4/6, NFR-6/7/8) with the reason. Most need the owner or a real-world
+check, not code.

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Apply: Project Manager - Larchfield Build (fictional)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="queue.js"></script>
+</head>
+<body>
+  <header class="site"><strong>Project Manager - Larchfield Build (fictional)</strong><p>Fictional employer. Right-to-work test fixture for OpennJob (OD-5).</p></header>
+  <form id="apply" action="#" method="post" data-name="rtw" data-after="thanks">
+    <label for="q-first">First name</label><input type="text" id="q-first" name="firstName" autocomplete="given-name" required>
+    <label for="q-last">Last name</label><input type="text" id="q-last" name="lastName" autocomplete="family-name" required>
+    <label for="q-email">Email</label><input type="email" id="q-email" name="email" required>
+    <label for="q-phone">Phone</label><input type="tel" id="q-phone" name="phone" required>
+    <fieldset><legend>Do you have the right to work in the UK?</legend><label><input type="radio" name="rtw" id="q-rtw-yes" value="yes" required> Yes</label><label><input type="radio" name="rtw" id="q-rtw-no" value="no"> No</label></fieldset>
+    <fieldset><legend>Will you now or in the future require visa sponsorship?</legend><label><input type="radio" name="sponsorship" id="q-sp-yes" value="yes" required> Yes</label><label><input type="radio" name="sponsorship" id="q-sp-no" value="no"> No</label></fieldset>
+
+    <label for="q-statement">Supporting statement</label><textarea id="q-statement" name="statement" required></textarea>
+    <p><button type="submit" id="q-submit">Submit application</button></p>
+  </form>
+</body>
+</html>

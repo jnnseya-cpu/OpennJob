@@ -30,7 +30,46 @@ function ownLabel(el: Control): string {
   const labelledBy = (el.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
   const fromIds = labelledBy.map((id) => clean(doc.getElementById(id)?.textContent)).filter(Boolean).join(' ');
   if (fromIds) return fromIds;
-  return clean(el.getAttribute('title'));
+  return clean(el.getAttribute('title')) || nearbyLabel(el);
+}
+
+/** Text that reads like a label: short, not just punctuation. */
+const labelLike = (s: string): string => {
+  const t = clean(s).replace(/\s*:\s*$/, '');
+  return t.length >= 2 && t.length <= 120 && /[\p{L}]/u.test(t) ? t : '';
+};
+
+/**
+ * Older application systems (the classic SAP SuccessFactors career portal, many in-house forms) write
+ * the label as plain text next to the box instead of a <label> linked to it: in the table cell to its
+ * left, or just before it. Used only when the box has no label of its own.
+ */
+function nearbyLabel(el: HTMLElement): string {
+  const cell = el.closest('td, th');
+  if (cell) {
+    // The cell before this one in the same row, or (label above the box) the same column one row up.
+    let prev = cell.previousElementSibling;
+    while (prev && !labelLike(prev.textContent ?? '')) prev = prev.previousElementSibling;
+    if (prev) return labelLike(prev.textContent ?? '');
+    const row = cell.parentElement;
+    const index = row ? Array.from(row.children).indexOf(cell) : -1;
+    const above = row?.previousElementSibling?.children[index];
+    if (above && !above.querySelector('input, select, textarea')) {
+      const t = labelLike(above.textContent ?? '');
+      if (t) return t;
+    }
+  }
+  // Text just before the box among its siblings (a <span>, <b>, <div> or a bare text node).
+  for (let node: Node | null = el.previousSibling, steps = 0; node && steps < 4; node = node.previousSibling, steps++) {
+    if (node instanceof HTMLElement && node.querySelector('input, select, textarea')) break;
+    if (node instanceof HTMLElement && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(node.tagName)) break;
+    const t = labelLike(node.textContent ?? '');
+    if (t) return t;
+  }
+  // The box's own container, when it holds only this box and a few words.
+  const parent = el.parentElement;
+  if (parent && parent.querySelectorAll('input, select, textarea').length === 1) return labelLike(parent.textContent ?? '');
+  return '';
 }
 
 /** Legend of the enclosing fieldset (for a radio group this is the question itself). */
@@ -97,6 +136,7 @@ export function scanFields(doc: Document): DetectedField[] {
         sensitive: c.sensitive,
         category: c.category,
         key: c.key,
+        ...(c.country ? { country: c.country } : {}),
         required: (el as HTMLInputElement).required,
         elements: [el],
       };
@@ -126,11 +166,65 @@ export function scanFields(doc: Document): DetectedField[] {
       sensitive: c.sensitive,
       category: c.category,
       key: c.key,
+      ...(c.country ? { country: c.country } : {}),
       required: el.required || el.getAttribute('aria-required') === 'true',
       elements: [el],
     });
   });
+  scanListboxes(doc, fields, uniqueId);
   return fields;
+}
+
+/** What a drop-down button shows before anything is chosen. */
+const LISTBOX_PLACEHOLDER = /^(select one|select|select\.\.\.|choose|choose one|please select|please choose|--.*--|)$/i;
+
+function listboxLabel(el: HTMLElement): string {
+  const doc = el.ownerDocument;
+  const fieldBox = el.closest('[data-automation-id^="formField"], .field, [class*="formField"]');
+  const fromBox = clean(fieldBox?.querySelector('label, legend')?.textContent);
+  if (fromBox) return fromBox.replace(/\*\s*$/, '').trim();
+  const labelledBy = (el.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
+  const fromIds = labelledBy.map((id) => clean(doc.getElementById(id)?.textContent)).filter(Boolean).join(' ');
+  if (fromIds) return fromIds;
+  if (el.id) {
+    const forLabel = doc.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    if (forLabel) return clean(forLabel.textContent);
+  }
+  return clean(el.getAttribute('aria-label'));
+}
+
+/** Drop-downs built from a button and a list of options (Workday and other single-page apps). */
+function scanListboxes(doc: Document, fields: DetectedField[], uniqueId: (base: string) => string): void {
+  const buttons = Array.from(doc.querySelectorAll<HTMLElement>('button[aria-haspopup="listbox"], [role="combobox"][aria-haspopup="listbox"]'));
+  buttons.forEach((el, index) => {
+    if ((el as HTMLButtonElement).disabled || !isVisible(el)) return;
+    const label = listboxLabel(el);
+    const c = classifyField({ label, name: el.getAttribute('name') ?? '', id: el.id, type: 'select', tag: 'select', groupLabel: sectionHeading(el) });
+    if (c.ignore) return;
+    // A list of options is never one of the person's free-text details ("Phone Device Type" is not
+    // the phone number): such a key is dropped, so the person's stored answer for the question is used.
+    const FREE_TEXT = new Set(['firstName', 'lastName', 'fullName', 'email', 'phone', 'addressLine1', 'addressLine2', 'postcode', 'supportingStatement']);
+    if (c.key && FREE_TEXT.has(c.key)) c.key = null;
+    const box = el.closest('[data-automation-id^="formField"], .field, [class*="formField"]');
+    const required = el.getAttribute('aria-required') === 'true' || /\*\s*$/.test(clean(box?.querySelector('label, legend')?.textContent)) || /\brequired\b/i.test(el.getAttribute('aria-label') ?? '');
+    fields.push({
+      id: uniqueId(el.id || el.getAttribute('data-automation-id') || `listbox-${index}`),
+      label: label || 'Unlabelled list',
+      kind: 'listbox',
+      sensitive: c.sensitive,
+      category: c.category,
+      key: c.key,
+      ...(c.country ? { country: c.country } : {}),
+      required,
+      elements: [el],
+    });
+  });
+}
+
+/** The option a drop-down button shows as chosen, or '' when nothing is chosen. */
+export function listboxValue(el: HTMLElement): string {
+  const shown = clean(el.textContent);
+  return LISTBOX_PLACEHOLDER.test(shown) ? '' : shown;
 }
 
 /** Does the control currently hold a value / selection? */
@@ -141,6 +235,8 @@ export function hasValue(field: DetectedField): boolean {
       return (first as HTMLInputElement).checked;
     case 'radio':
       return field.elements.some((el) => (el as HTMLInputElement).checked);
+    case 'listbox':
+      return listboxValue(first as HTMLElement) !== '';
     default:
       return clean((first as Control).value) !== '';
   }

@@ -1,12 +1,76 @@
 import type { Criterion, Job, Passport, Preferences } from './types';
-import type { LlmPort } from './llm';
 import { languagesAskedBy } from './languages';
+import { cvShowsTranslatedTitle } from './title-translations';
 import { classifyPack } from './packs';
 import { credentialOf, requiredCredentialOf } from './passport';
-import { extractJsonObject, keywordInText, splitSentences } from './text';
+import { keywordInText, splitSentences } from './text';
 
 export const ESSENTIAL_WEIGHT = 2;
 export const DESIRABLE_WEIGHT = 1;
+/** The highest score a job in another field can get: well under any threshold the agent prepares at. */
+export const OTHER_FIELD_MAX_SCORE = 30;
+
+/**
+ * Words in a job title that say how senior or what kind of post, not what field. They are left out
+ * when the title is checked against the CV. "Assistant", "graduate", "junior", "administrator" and
+ * "coordinator" are kept on purpose: a CV without them is not evidence for those posts.
+ */
+const TITLE_GENERIC = new Set([
+  'senior', 'snr', 'sr', 'lead', 'head', 'of', 'principal', 'chief', 'deputy', 'interim', 'acting', 'the', 'and', 'for', 'in', 'a', 'an', 'to', 'with',
+  'manager', 'management', 'director', 'officer', 'partner', 'specialist', 'consultant', 'executive', 'advisor', 'adviser', 'supervisor', 'engineer',
+  'professional', 'expert', 'practitioner', 'leader', 'team', 'role', 'job', 'vacancy', 'opportunity', 'uk', 'wide', 'permanent', 'contract', 'temporary',
+  'temp', 'ftc', 'fixed', 'term', 'hybrid', 'remote', 'level', 'grade', 'band', 'i', 'ii', 'iii', 'iv', 'new', 'urgent', 'immediate', 'start',
+  'consultancy', 'consulting', 'sector', 'semi', 'staff', 'country', 'regional', 'region', 'national', 'global', 'international', 'area', 'group', 'emea', 'europe', 'general', 'qualified', 'experienced', 'registered',
+]);
+
+/** "Senior Project Manager - Water & Environment (UK Wide)" -> "Senior Project Manager": the post, before any dash, bracket or slash detail. */
+export function coreTitle(title: string): string {
+  return title.split(/\s[-–—|]\s|[(\[|]|\s-(?=\S)|(?<=\S)-\s/)[0]?.trim() ?? '';
+}
+
+/** The words of the post that name its field: "Tax Director" -> ["tax"]. */
+export function titleFieldWords(title: string): string[] {
+  const own = fieldWordsOf(coreTitle(title));
+  // "Senior Manager - Group Reporting": the post alone names no field, so the detail does.
+  return own.length > 0 ? own : fieldWordsOf(title);
+}
+
+function fieldWordsOf(text: string): string[] {
+  const words = text.toLowerCase().replace(/&/g, ' ').replace(/[^a-zà-ÿ0-9\s/]+/g, ' ').split(/[\s/]+/);
+  return [...new Set(words.filter((w) => w.length > 1 && !/^\d+$/.test(w) && !TITLE_GENERIC.has(w)))];
+}
+
+/** Does the CV use this word ("surveyor" also matches "surveyors", "proposal" matches "proposals")? */
+function cvHasWord(word: string, cvLower: string): boolean {
+  const stem = word.length > 4 && word.endsWith('s') ? word.slice(0, -1) : word;
+  const esc = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![a-zà-ÿ0-9])${esc}(s|es)?(?![a-zà-ÿ0-9])`, 'i').test(cvLower);
+}
+
+export interface RoleFit {
+  /** The post as checked, e.g. "Tax Director". */
+  role: string;
+  /** More than half of the title's field words appear in the CV. true when the title has no field words. */
+  fits: boolean;
+  /** The field words the CV does not use. */
+  missing: string[];
+}
+
+/**
+ * Is the job in the person's field? More than half of the words of the post that name a field must
+ * appear somewhere in the CV: "Tax Director" needs "tax", "Sales Performance Manager" needs both
+ * "sales" and "performance", "Associate Project Manager Construction" two of its three words. A heuristic, deliberately strict in one direction: a job in another field must not be
+ * scored as a match because its advert and the CV share a word like "team".
+ */
+export function roleFit(title: string, cvText: string): RoleFit {
+  const role = coreTitle(title) || title.trim();
+  const words = titleFieldWords(title);
+  const cvLower = cvText.toLowerCase();
+  const missing = words.filter((w) => !cvHasWord(w, cvLower));
+  // A title in another language ("Ingénieur électricien", "Bauleiter") fits when the CV shows its English title.
+  const fits = words.length === 0 || (words.length - missing.length) * 2 > words.length || cvShowsTranslatedTitle(title, cvText);
+  return { role, fits, missing: fits ? [] : missing };
+}
 
 export interface CriterionHit {
   criterion: Criterion;
@@ -35,7 +99,14 @@ export interface MatchResult {
   hits: CriterionHit[];
   /** Labels of essential criteria with no evidence in the CV. */
   unmetEssential: string[];
+  /** The job title checked against the CV. Absent when the job has no title. */
+  role?: RoleFit;
+  /** The keyword reader found fewer than four requirements in the advert, so the score is capped (THIN_EVIDENCE_CAP). */
+  thinEvidence?: true;
 }
+
+/** The highest score a job can get, by how many requirements its advert gave (four or more: no cap). */
+export const THIN_EVIDENCE_CAP: Readonly<Record<number, number>> = { 1: 60, 2: 75, 3: 85 };
 
 /**
  * Scores a job against the CV.
@@ -46,7 +117,7 @@ export interface MatchResult {
  * empty list excludes nothing).
  */
 export function matchJob(
-  job: Pick<Job, 'criteria' | 'requiresRegistration'> & Partial<Pick<Job, 'requiredCredential'>>,
+  job: Pick<Job, 'criteria' | 'requiresRegistration'> & Partial<Pick<Job, 'requiredCredential' | 'title' | 'language' | 'criteriaSource'>>,
   cvText: string,
   passport: Pick<Passport, 'nmcPin' | 'credentials'> | undefined,
   preferences?: Pick<Preferences, 'languages'>,
@@ -72,16 +143,29 @@ export function matchJob(
     return { criterion, matched: true, keyword, ...(evidence ? { evidence } : {}) };
   });
 
+  // The post itself: a job in another field is never a match, however many words the advert shares with the CV.
+  // It caps the score; it does not add to it, so the requirements still decide among jobs in the field.
+  // Not for a French title: its words cannot be checked against an English CV without translating them.
+  const role = job.title && job.language !== 'fr' ? roleFit(job.title, cvText) : undefined;
   const required = requiredCredentialOf(job);
   const eligible = required === undefined || credentialOf(passport, required).length > 0;
+  const raw = totalWeight === 0 ? 0 : Math.round((100 * matchedWeight) / totalWeight);
+  // Requirements read from a short advert by the keyword reader (no AI) are often one or two generic
+  // ones: a CV meeting "project management" alone is not shown to fit the post. Such a score is
+  // capped by how many requirements it rests on. Requirements an employer gave, or the AI read from
+  // the whole advert, are not capped.
+  const evidenceCap = job.criteriaSource === 'fallback' ? (THIN_EVIDENCE_CAP[job.criteria.length] ?? 100) : 100;
+  const capped = Math.min(raw, evidenceCap);
   return {
-    score: totalWeight === 0 ? 0 : Math.round((100 * matchedWeight) / totalWeight),
+    score: role && !role.fits ? Math.min(capped, OTHER_FIELD_MAX_SCORE) : capped,
+    ...(evidenceCap < 100 && job.criteria.length > 0 ? { thinEvidence: true } : {}),
     eligible,
     ...(eligible || required === undefined ? {} : { missingCredential: required }),
     matchedWeight,
     totalWeight,
     hits,
     unmetEssential: hits.filter((h) => !h.matched && h.criterion.essential).map((h) => h.criterion.label),
+    ...(role ? { role } : {}),
   };
 }
 
@@ -254,76 +338,3 @@ export function extractCriteriaFallback(jobDescription: string, title = ''): Ext
   };
 }
 
-export const CRITERIA_SYSTEM_PROMPT =
-  'You extract person-specification criteria from job adverts (healthcare, construction, data centres, energy, rail; in English or French). ' +
-  'Reply with one JSON object and nothing else.';
-
-export function buildCriteriaPrompt(jobDescription: string, title = ''): string {
-  return [
-    'Read the job advert below and list its selection criteria.',
-    'Return JSON exactly in this shape:',
-    '{"criteria":[{"label":"short name of the criterion","essential":true,"keywords":["word or short phrase a matching CV would contain"]}],"requiresRegistration":false}',
-    'Rules:',
-    '- "essential" is true for essential/required criteria and false for desirable ones.',
-    '- Give 2 to 6 keywords per criterion: lower-case words or short phrases, including common UK synonyms and abbreviations.',
-    '- For an advert written in French, write the labels in French and give keywords in both French and English.',
-    '- "requiresRegistration" is true only if the role requires registration with a professional regulator (for example an NMC PIN).',
-    '- Use only what the advert says. At most 15 criteria.',
-    '',
-    title ? `Job title: ${title}` : '',
-    'Job advert:',
-    '"""',
-    jobDescription,
-    '"""',
-  ]
-    .filter((l) => l !== '')
-    .join('\n');
-}
-
-/** Validates the LLM's JSON. Returns undefined when it is not usable. */
-export function parseCriteriaReply(text: string): { criteria: Criterion[]; requiresRegistration: boolean } | undefined {
-  const obj = extractJsonObject(text);
-  if (!obj || typeof obj !== 'object') return undefined;
-  const raw = (obj as { criteria?: unknown }).criteria;
-  if (!Array.isArray(raw)) return undefined;
-  const criteria: Criterion[] = [];
-  for (const item of raw.slice(0, 15)) {
-    if (!item || typeof item !== 'object') continue;
-    const { label, essential, keywords } = item as Record<string, unknown>;
-    if (typeof label !== 'string' || !label.trim() || !Array.isArray(keywords)) continue;
-    const clean = [...new Set(keywords.filter((k): k is string => typeof k === 'string').map((k) => k.trim()).filter(Boolean))].slice(0, 8);
-    if (clean.length === 0) continue;
-    criteria.push({ label: label.trim().slice(0, 120), essential: essential === true, keywords: clean });
-  }
-  if (criteria.length === 0) return undefined;
-  return { criteria, requiresRegistration: (obj as { requiresRegistration?: unknown }).requiresRegistration === true };
-}
-
-/**
- * Turns a raw job description into criteria. Uses the LLM when one is supplied and falls
- * back to the deterministic extractor when there is no LLM, the call fails, or the reply
- * cannot be parsed.
- */
-export async function extractCriteria(jobDescription: string, llm?: LlmPort, title = ''): Promise<ExtractedCriteria> {
-  const fallback = () => extractCriteriaFallback(jobDescription, title);
-  if (!llm) return fallback();
-  try {
-    const reply = await llm.complete({
-      system: CRITERIA_SYSTEM_PROMPT,
-      prompt: buildCriteriaPrompt(jobDescription, title),
-      maxTokens: 1200,
-    });
-    const parsed = parseCriteriaReply(reply.text);
-    if (!parsed) return fallback();
-    // Either signal is enough: we would rather warn about registration than miss it.
-    const requiredCredential = parsed.requiresRegistration ? 'pin' : detectRequiredCredential(title, jobDescription);
-    return {
-      criteria: parsed.criteria,
-      requiresRegistration: requiredCredential === 'pin',
-      ...(requiredCredential ? { requiredCredential } : {}),
-      source: 'llm',
-    };
-  } catch {
-    return fallback();
-  }
-}

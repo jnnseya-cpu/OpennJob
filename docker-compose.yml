@@ -32,6 +32,8 @@ services:
     command: ["node", "apps/api/dist/migrate-cli.js"]
     restart: "no"
     environment:
+      # Who may register. Empty: anyone who can reach the API (the API warns at start-up).
+      OPENNJOB_REGISTRATION_ALLOWLIST: ${OPENNJOB_REGISTRATION_ALLOWLIST:-}
       DATABASE_URL: postgres://opennjob:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/opennjob
     depends_on:
       postgres:

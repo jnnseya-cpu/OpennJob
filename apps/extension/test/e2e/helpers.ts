@@ -47,11 +47,11 @@ export function runAgent(
   page: Page,
   mode: Mode,
   confirmedFieldIds: string[] = [],
-  options: { values?: FillValues; dryRun?: boolean } = {},
+  options: { values?: FillValues; dryRun?: boolean; declarations?: Record<string, boolean> } = {},
 ): Promise<RunReport> {
   return page.evaluate(
     (request) => (window as unknown as { __opennjob: { run: (r: unknown) => RunReport } }).__opennjob.run(request),
-    { mode, confirmedFieldIds, values: options.values ?? VALUES, dryRun: options.dryRun ?? false },
+    { mode, confirmedFieldIds, values: options.values ?? VALUES, dryRun: options.dryRun ?? false, ...(options.declarations ? { declarations: options.declarations } : {}) },
   );
 }
 

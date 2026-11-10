@@ -32,9 +32,9 @@ for (const backend of BACKENDS) {
       const res = await t.api.get('/account/export').expect(200);
       expect(res.headers['content-type']).toMatch(/application\/json/);
       const body = res.body;
-      expect(Object.keys(body).sort()).toEqual(['applications', 'events', 'exportedAt', 'passport', 'profile', 'usage', 'user']);
+      expect(Object.keys(body).sort()).toEqual(['applications', 'events', 'exportedAt', 'notificationDeliveries', 'notificationPreferences', 'notifications', 'passport', 'profile', 'usage', 'user']);
       expect(body.exportedAt).toBe(NOW);
-      expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL, createdAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } });
+      expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL, createdAt: NOW, emailVerified: true, emailVerifiedAt: NOW, consent: { acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1', acceptedAt: NOW } });
       expect(body.profile).toEqual({ ...PROFILE, preferences: { languages: ['English'], countries: ['GB'], cities: [] } });
       expect(body.profile.cvText).toBe(CV_TEXT);
       expect(body.passport).toEqual(PASSPORT);
@@ -42,8 +42,8 @@ for (const backend of BACKENDS) {
       expect([...body.applications].sort((x: Application, y: Application) => x.id.localeCompare(y.id))).toEqual([...applications].sort((x, y) => x.id.localeCompare(y.id)));
       expect(body.applications.find((a: Application) => a.status === 'confirmed')).toMatchObject({ confirmedFields: ['nmcPin'], statement: expect.stringContaining('registered nurse') });
       expect(body.events.map((e: { type: string }) => e.type)).toEqual(['profile.updated', 'passport.updated', 'jobs.refreshed', 'application.drafted', 'application.confirmed', 'application.drafted']);
-      expect(body.usage).toHaveLength(2);
-      expect(body.usage.every((u: { userId: string; purpose: string }) => u.userId === USER_ID && u.purpose === 'supporting-statement')).toBe(true);
+      expect(body.usage).toHaveLength(4); // one call drafts the statement, one rewrites the CV for the advert, for each of the two applications
+      expect(body.usage.every((u: { userId: string; purpose: string }) => u.userId === USER_ID && ['supporting-statement', 'cv-tailoring'].includes(u.purpose))).toBe(true);
       expect(JSON.stringify(body)).not.toMatch(/passwordHash|password_hash|\$2b\$/);
     });
 
@@ -97,6 +97,35 @@ for (const backend of BACKENDS) {
       expect((await fresh.get('/account/export').expect(200)).body).toMatchObject({ profile: null, passport: null, applications: [], usage: [] });
     });
 
+    it('POST /account/password: checks the current password, sets the new one, and keeps this session signed in', async () => {
+      await t.api.post('/account/password').send({ currentPassword: 'the wrong one', newPassword: 'another long fictional passphrase' }).expect(401);
+      const res = await t.api.post('/account/password').send({ currentPassword: USER_PASSWORD, newPassword: 'another long fictional passphrase' }).expect(200);
+      expect(res.body.changed).toBe(true);
+      expect(typeof res.body.accessToken).toBe('string');
+      // The old password no longer signs in; the new one does.
+      await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(401);
+      await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: 'another long fictional passphrase' }).expect(200);
+      // The token returned by the change still works, so the person is not signed out by their own change.
+      const after = t.as(res.body.accessToken);
+      await after.get('/account').expect(200);
+      // A weak new password is refused.
+      await after.post('/account/password').send({ currentPassword: 'another long fictional passphrase', newPassword: 'short' }).expect(400);
+    });
+
+    it('POST /account/email: checks the password, moves to a new unverified address, and refuses one already taken', async () => {
+      await t.api.post('/account/email').send({ email: 'moved.okafor@example.org', password: 'the wrong one' }).expect(401);
+      const res = await t.api.post('/account/email').send({ email: 'moved.okafor@example.org', password: USER_PASSWORD }).expect(200);
+      expect(res.body.user.email).toBe('moved.okafor@example.org');
+      expect(res.body.user.emailVerified).toBe(false);
+      // Sign-in uses the new address now; the session's token (password unchanged) still works.
+      await t.raw().post('/auth/login').send({ email: USER_EMAIL, password: USER_PASSWORD }).expect(401);
+      await t.raw().post('/auth/login').send({ email: 'moved.okafor@example.org', password: USER_PASSWORD }).expect(200);
+      await t.api.get('/account').expect(200);
+      // An address another account holds cannot be taken.
+      await t.raw().post('/auth/register').send({ email: 'other.person@example.org', password: USER_PASSWORD, acceptedTermsVersion: 'terms-test-1', acceptedPrivacyVersion: 'privacy-test-1' }).expect(201);
+      await t.api.post('/account/email').send({ email: 'other.person@example.org', password: USER_PASSWORD }).expect(409);
+    });
+
     // Defined only for the PostgreSQL store: it reads the tables directly.
     if (backend.persistence === 'postgres') it('in PostgreSQL no row that refers to the user is left in any table', async () => {
       const pool = made.db?.pool;
@@ -104,11 +133,11 @@ for (const backend of BACKENDS) {
       const count = async (table: string, column: string): Promise<number> => Number((await pool.query(`SELECT count(*) AS n FROM ${table} WHERE ${column} = $1`, [USER_ID])).rows[0]?.n);
       const tables: [string, string][] = [['users', 'id'], ['profiles', 'user_id'], ['passports', 'user_id'], ['applications', 'user_id'], ['events', 'user_id'], ['usage_records', 'user_id']];
       const before = Object.fromEntries(await Promise.all(tables.map(async ([table, column]) => [table, await count(table, column)])));
-      expect(before).toEqual({ users: 1, profiles: 1, passports: 1, applications: 2, events: 6, usage_records: 2 });
+      expect(before).toEqual({ users: 1, profiles: 1, passports: 1, applications: 2, events: 6, usage_records: 4 }); // a statement and a CV rewrite per application
       await t.api.delete('/account').send({ password: USER_PASSWORD }).expect(200);
       for (const [table, column] of tables) expect(await count(table, column), table).toBe(0);
       // Nothing anywhere in the database still mentions the id (jobs and the system event included).
-      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
+      const everything = JSON.stringify(await Promise.all(['users', 'profiles', 'passports', 'applications', 'events', 'usage_records', 'jobs', 'notifications', 'notification_deliveries', 'notification_preferences', 'auth_tokens', 'screening_answers', 'standing_authorisations'].map(async (table) => (await pool.query(`SELECT * FROM ${table}`)).rows)));
       expect(everything).not.toContain(USER_ID);
       expect(everything).not.toContain(USER_EMAIL);
     });

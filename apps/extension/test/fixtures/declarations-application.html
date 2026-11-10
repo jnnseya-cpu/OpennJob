@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Apply: Site Manager - Hollowmere Construction (fictional)</title>
+  <link rel="stylesheet" href="fixture.css">
+  <script src="fixture.js"></script>
+</head>
+<body>
+  <header class="site"><strong>Site Manager - Hollowmere Construction (fictional)</strong><p>Fictional employer. Declarations test fixture for OpennJob (OD-6).</p></header>
+  <form id="apply" action="#" method="post">
+    <label for="d-first">First name</label><input type="text" id="d-first" name="firstName" autocomplete="given-name" required>
+    <label for="d-last">Last name</label><input type="text" id="d-last" name="lastName" autocomplete="family-name" required>
+    <label for="d-email">Email</label><input type="email" id="d-email" name="email" required>
+    <fieldset><legend>Have you ever been convicted of a criminal offence or received a caution?</legend><label><input type="radio" name="convictions" id="d-conv-yes" value="yes" required> Yes</label><label><input type="radio" name="convictions" id="d-conv-no" value="no"> No</label></fieldset>
+    <fieldset><legend>Do you have any conflict of interest with this company?</legend><label><input type="radio" name="conflict" id="d-coi-yes" value="yes" required> Yes</label><label><input type="radio" name="conflict" id="d-coi-no" value="no"> No</label></fieldset>
+    <label for="d-gender">Gender (equality monitoring)</label>
+    <select id="d-gender" name="gender" required><option value="">Select</option><option>Male</option><option>Female</option><option>Prefer not to say</option></select>
+    <fieldset><legend>Ethnicity (equality monitoring)</legend><label><input type="radio" name="ethnicity" id="d-eth-w" value="white"> White</label><label><input type="radio" name="ethnicity" id="d-eth-x" value="undisclosed"> I do not wish to disclose</label></fieldset>
+    <label><input type="checkbox" id="d-certify" name="certify" required> I certify that the information I have given is true and complete.</label>
+    <label><input type="checkbox" id="d-privacy" name="privacy" required> I have read and accept the privacy notice.</label>
+    <p><button type="submit" id="d-submit">Submit application</button></p>
+  </form>
+  <p id="result" hidden>Thanks (fixture).</p>
+</body>
+</html>

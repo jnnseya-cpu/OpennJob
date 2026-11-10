@@ -34,6 +34,8 @@ export interface UsageMeter {
   totals(userId: string): Promise<UsageTotals>;
   /** Removes every record of one account (account deletion). */
   deleteForUser(userId: string): Promise<void>;
+  /** ACU spent since an instant, by one account or (userId null) by everyone. The LLM ceiling (NFR-5). */
+  acuSince(userId: string | null, since: string): Promise<number>;
 }
 
 export class InMemoryUsageMeter implements UsageMeter {
@@ -41,6 +43,11 @@ export class InMemoryUsageMeter implements UsageMeter {
 
   async record(entry: UsageRecord): Promise<void> {
     this.records.push({ ...entry });
+  }
+
+  async acuSince(userId: string | null, since: string): Promise<number> {
+    const sum = this.records.filter((r) => (userId === null || r.userId === userId) && r.at >= since).reduce((a, r) => a + r.acu, 0);
+    return Math.round(sum * 1000) / 1000;
   }
 
   async list(userId: string): Promise<UsageRecord[]> {

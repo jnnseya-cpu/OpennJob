@@ -229,3 +229,24 @@ describe('detectRequiresRegistration', () => {
     expect(detectRequiresRegistration(title, description)).toBe(expected);
   });
 });
+
+describe('thin evidence: few requirements read by the keyword reader', () => {
+  const cv = 'Project Manager (fictional)\nProject management of hospital and school builds. NEC contracts. SMSTS.';
+  const crit = (n: number) => [
+    { label: 'Project management', essential: true, keywords: ['project management'] },
+    { label: 'NEC contracts', essential: true, keywords: ['nec'] },
+    { label: 'SMSTS', essential: true, keywords: ['smsts'] },
+    { label: 'Hospital builds', essential: false, keywords: ['hospital'] },
+  ].slice(0, n);
+  it('caps a full match on one, two or three keyword-read requirements, and says so', () => {
+    for (const [n, cap] of [[1, 60], [2, 75], [3, 85], [4, 100]] as const) {
+      const r = matchJob({ criteria: crit(n), requiresRegistration: false, criteriaSource: 'fallback' }, cv, undefined);
+      expect(r.score).toBe(cap);
+      expect(r.thinEvidence).toBe(n < 4 ? true : undefined);
+    }
+  });
+  it('does not cap requirements an employer gave or the AI read', () => {
+    expect(matchJob({ criteria: crit(1), requiresRegistration: false, criteriaSource: 'provided' }, cv, undefined).score).toBe(100);
+    expect(matchJob({ criteria: crit(2), requiresRegistration: false, criteriaSource: 'llm' }, cv, undefined).score).toBe(100);
+  });
+});

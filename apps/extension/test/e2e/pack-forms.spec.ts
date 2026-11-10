@@ -88,7 +88,9 @@ test.describe('construction-sector form (English)', () => {
     expect(fields.spoken).toMatchObject({ key: 'languages', sensitive: false });
     expect(fields['radio:workRight']?.key).toBe('rightToWork');
     // No stored answer exists for clearance, sponsorship, conflict of interest, convictions or the declaration.
-    for (const id of ANSWER_YOURSELF) expect(fields[id], id).toMatchObject({ key: null, proposed: null, state: 'answer-yourself' });
+    // OD-5: the plain sponsorship question is recognised (key visaSponsorship), but with no right-to-work
+    // record it has no proposed answer and waits for the person, like the others.
+    for (const id of ANSWER_YOURSELF) expect(fields[id], id).toMatchObject({ key: id === 'radio:sponsor' ? 'visaSponsorship' : null, proposed: null, state: 'answer-yourself' });
     expect(await formSnapshot(page)).toEqual(EMPTY);
     expect((await fixtureLog(page)).inputEvents).toEqual({});
   });
