@@ -29,16 +29,18 @@ Built to the *Trend Intelligence AI* build specification (v2.3, 10 Nov 2026).
 |---|---|
 | Deterministic detection & scoring core (`engine/scoring.py`) | ✅ lift/z + gates, opportunity & confidence scores, single-family cap, decision gating — spec §5/§17 |
 | Growth Brief v1 contract (`contracts/growth-brief.v1.schema.yaml`) + validator (`engine/brief.py`) | ✅ closed-object schema + runtime window/scope rules — spec §6/App. A |
-| Tests (`tests/test_engine.py`) | ✅ 15 tests; reproduce the spec's worked example (86.25 / 83.5) and conformance TI-01/03/04 |
+| Source registry (`engine/sources.py`) | ✅ access-path/family/terms, stale/failed cannot action, feed gap = unknown — spec §3 |
+| Observation schema + scoped idempotent store (`engine/observations.py`, `engine/store.py`) | ✅ unique source-version key, replay→duplicate, changed-hash→conflict, atomic batch, PII reject, installation isolation — spec §5/§15/§16 |
+| Tests (`tests/`) | ✅ 24 tests; spec worked example (86.25 / 83.5) + conformance TI-01/02/03/04 |
 
 Run: `cd trend-intelligence && python3 -m unittest discover -s tests`
 
 ## Build sequence (remaining, staged — spec §11/§20)
 
-1. **Foundation** — source registry, observation schema, first-party/import ingest,
-   tenant isolation (installation-scoped rows, RLS), snapshots. *(next)*
+1. **Foundation** — source registry, observation schema, idempotent scoped ingest,
+   installation isolation. ✅ *(in-memory reference; PostgreSQL + RLS adapter to follow)*
 2. **Intelligence** — baselines, clustering, score explanations, deterministic/inference
-   adapter, coverage indicators.
+   adapter, coverage indicators. *(next)*
 3. **Agent integration** — brief SDK, one SEO + one marketing draft route, approvals,
    audit, draft-only workflow.
 4. **Controlled activation** — native owned-surface renderer, approved reversible
