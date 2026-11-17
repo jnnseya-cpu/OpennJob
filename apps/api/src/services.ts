@@ -86,6 +86,17 @@ function isFresh(job: Job, nowMs: number, freshDays: number): boolean {
   return Number.isNaN(seen) || seen >= nowMs - freshDays * DAY_MS;
 }
 
+/**
+ * A board advert POSTED more than maxAgeDays ago is almost always closed, even if discovery
+ * re-saw it recently (boards keep returning stale postings). Dropped from matches and never
+ * prepared. A job with no posting date, or an employer's own posting, is kept — unknown is not old.
+ */
+function isRecentlyPosted(job: Job, nowMs: number, maxAgeDays: number): boolean {
+  if (job.origin === 'employer' || !job.postedAt) return true;
+  const posted = Date.parse(job.postedAt);
+  return Number.isNaN(posted) || posted >= nowMs - maxAgeDays * DAY_MS;
+}
+
 /** How many unsent applications, at most, get their whole advert read in one agent run. */
 export const ADVERTS_READ_PER_RUN = 80;
 /** How long "Look for jobs now" waits before it answers that the search carries on in the background. */
@@ -402,11 +413,11 @@ export class OpennJobService {
       }).filter((k): k is string => Boolean(k)),
     );
     const nowMs = this.deps.clock().getTime();
-    const freshDays = limitsOf(this.deps.config).jobFreshDays;
+    const { jobFreshDays: freshDays, jobMaxPostAgeDays: maxPostAgeDays } = limitsOf(this.deps.config);
     return jobs
       // A job someone pasted ("Apply to a job you found") belongs to them alone: never listed here.
-      // An expired job (not re-seen by discovery for freshDays) is dropped: its advert is likely gone.
-      .filter((job) => job.source !== 'link' && !seen.has(job.id) && isFresh(job, nowMs, freshDays) && !advertClosed(job.description) && inScope(job, preferences) && payFits(job, pay))
+      // An expired job (not re-seen by discovery for freshDays, or posted too long ago) is dropped: its advert is likely gone.
+      .filter((job) => job.source !== 'link' && !seen.has(job.id) && isFresh(job, nowMs, freshDays) && isRecentlyPosted(job, nowMs, maxPostAgeDays) && !advertClosed(job.description) && inScope(job, preferences) && payFits(job, pay))
       .filter((job) => (!filters.pack || job.pack === filters.pack) && (!filters.region || job.region === filters.region) && (!filters.country || job.country === filters.country))
       .map((job) => OpennJobService.matchView(job, matchJob(job, profile.cvText, passport, preferences), preferences.targetEmployers))
       .filter((m) => m.score >= min)
@@ -837,12 +848,12 @@ export class OpennJobService {
 
     const skipped = { outOfScope: 0, belowThreshold: 0, ineligible: 0, alreadyPrepared: 0 };
     const nowMs = this.deps.clock().getTime();
-    const freshDays = limitsOf(this.deps.config).jobFreshDays;
+    const { jobFreshDays: freshDays, jobMaxPostAgeDays: maxPostAgeDays } = limitsOf(this.deps.config);
     const candidates: { job: Job; match: MatchResult }[] = [];
     for (const job of jobs) {
-      // An expired job (not re-seen by discovery for freshDays, or whose advert says it is closed)
-      // is never newly prepared.
-      if (job.source === 'link' || !isFresh(job, nowMs, freshDays) || advertClosed(job.description) || !inScope(job, preferences) || !payFits(job, pay)) {
+      // An expired job (not re-seen by discovery for freshDays, posted too long ago, or whose advert
+      // says it is closed) is never newly prepared.
+      if (job.source === 'link' || !isFresh(job, nowMs, freshDays) || !isRecentlyPosted(job, nowMs, maxPostAgeDays) || advertClosed(job.description) || !inScope(job, preferences) || !payFits(job, pay)) {
         skipped.outOfScope += 1;
         continue;
       }

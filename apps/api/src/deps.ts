@@ -91,6 +91,8 @@ export interface OpennJobConfig {
   duplicateDays?: number;
   /** A job discovery has not re-seen for this many days is treated as expired and dropped from matches (OPENNJOB_JOB_FRESH_DAYS, default 10). */
   jobFreshDays?: number;
+  /** A job whose advert was POSTED more than this many days ago is dropped from matches and never prepared: an old board posting is almost always closed, even if we re-saw it recently (OPENNJOB_JOB_MAX_AGE_DAYS, default 21). Jobs with no posting date, and employers' own postings, are kept. */
+  jobMaxPostAgeDays?: number;
   /** How many prepared applications get their whole advert re-read per agent run, to find a recruiter e-mail or the employer's own application page (OPENNJOB_ADVERTS_READ_PER_RUN, default 80). */
   advertsReadPerRun?: number;
   /** APP-8: automatic submissions per person per London day (OPENNJOB_DAILY_APPLICATION_LIMIT, default 20). */
@@ -118,6 +120,7 @@ export function applyThresholdOf(config: OpennJobConfig): number {
 
 export const DEFAULT_DUPLICATE_DAYS = 30;
 export const DEFAULT_JOB_FRESH_DAYS = 10;
+export const DEFAULT_JOB_MAX_AGE_DAYS = 21;
 export const DEFAULT_ADVERTS_READ_PER_RUN = 80;
 export const DEFAULT_DAILY_APPLICATION_LIMIT = 20;
 export const DEFAULT_LLM_DAILY_ACU_PER_USER = 50;
@@ -128,6 +131,7 @@ export function limitsOf(config: OpennJobConfig) {
   return {
     duplicateDays: config.duplicateDays ?? DEFAULT_DUPLICATE_DAYS,
     jobFreshDays: config.jobFreshDays ?? DEFAULT_JOB_FRESH_DAYS,
+    jobMaxPostAgeDays: config.jobMaxPostAgeDays ?? DEFAULT_JOB_MAX_AGE_DAYS,
     dailyApplicationLimit: config.dailyApplicationLimit ?? DEFAULT_DAILY_APPLICATION_LIMIT,
     llmDailyAcuPerUser: config.llmDailyAcuPerUser ?? DEFAULT_LLM_DAILY_ACU_PER_USER,
     llmDailyAcuTotal: config.llmDailyAcuTotal ?? DEFAULT_LLM_DAILY_ACU_TOTAL,
@@ -226,6 +230,7 @@ export function loadConfig(env: Env): OpennJobConfig {
   }
   config.duplicateDays = int(env.OPENNJOB_DUPLICATE_DAYS, DEFAULT_DUPLICATE_DAYS, 1, 3650);
   config.jobFreshDays = int(env.OPENNJOB_JOB_FRESH_DAYS, DEFAULT_JOB_FRESH_DAYS, 1, 3650);
+  config.jobMaxPostAgeDays = int(env.OPENNJOB_JOB_MAX_AGE_DAYS, DEFAULT_JOB_MAX_AGE_DAYS, 1, 3650);
   config.advertsReadPerRun = int(env.OPENNJOB_ADVERTS_READ_PER_RUN, DEFAULT_ADVERTS_READ_PER_RUN, 1, 1000);
   config.searchMaxQueriesPerUser = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_USER, 6, 1, 60);
   config.searchMaxQueriesPerRefresh = int(env.OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH, 60, 1, 1000);

@@ -24,6 +24,7 @@ describe('loadConfig', () => {
       llmCriteriaMaxJobs: 25,
       duplicateDays: 30,
       jobFreshDays: 10,
+      jobMaxPostAgeDays: 21,
       advertsReadPerRun: 80,
       dailyApplicationLimit: 20,
       llmDailyAcuPerUser: 50,

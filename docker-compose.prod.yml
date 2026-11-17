@@ -95,6 +95,9 @@ services:
       OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH: ${OPENNJOB_SEARCH_MAX_QUERIES_PER_REFRESH:-150}
       # How many prepared applications have their whole advert re-read per run, to find a recruiter e-mail.
       OPENNJOB_ADVERTS_READ_PER_RUN: ${OPENNJOB_ADVERTS_READ_PER_RUN:-80}
+      # Drop board adverts older than this many days (posting date): old postings are almost always closed.
+      OPENNJOB_JOB_FRESH_DAYS: ${OPENNJOB_JOB_FRESH_DAYS:-10}
+      OPENNJOB_JOB_MAX_AGE_DAYS: ${OPENNJOB_JOB_MAX_AGE_DAYS:-21}
       OPENNJOB_DAILY_APPLICATION_LIMIT: ${OPENNJOB_DAILY_APPLICATION_LIMIT:-20}
       OPENNJOB_DUPLICATE_DAYS: ${OPENNJOB_DUPLICATE_DAYS:-30}
       OPENNJOB_OPERATOR_KEY: ${OPENNJOB_OPERATOR_KEY:-}
