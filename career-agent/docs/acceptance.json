@@ -1,0 +1,684 @@
+{
+  "environment": {
+    "run_at_utc": "2026-10-06T13:29:18+00:00",
+    "python": "3.13.16",
+    "platform": "Linux-6.18.44-fc-v70-x86_64-with-glibc2.39",
+    "playwright": "1.56.0",
+    "reportlab": "4.5.1",
+    "python-docx": "1.2.0",
+    "jsonschema": "4.26.0",
+    "chromium": "/opt/pw-browsers",
+    "commit": "6a05673"
+  },
+  "totals": {
+    "run": 125,
+    "passed": 125,
+    "failed": 0,
+    "skipped": 0
+  },
+  "static_checks": {
+    "compileall": true,
+    "node --check extension/popup.js": true,
+    "node --check dashboard/app.js": true,
+    "node --check dashboard/connect.js": true
+  },
+  "cases": [
+    {
+      "case": "T01",
+      "priority": "P0",
+      "title": "Regression: unit, compile and JS syntax",
+      "result": "Passed",
+      "tests": [
+        "125 of 125 tests"
+      ],
+      "note": "The whole suite, compileall and node --check."
+    },
+    {
+      "case": "T02",
+      "priority": "P0",
+      "title": "Clean install from the lock",
+      "result": "Passed (manual)",
+      "tests": [],
+      "note": "Fresh venv from requirements.lock, full suite green, 6 October 2026; Chromium was the pre-installed build, playwright install was not run here."
+    },
+    {
+      "case": "T03",
+      "priority": "P0",
+      "title": "Contracts: malformed fields, missing country, timestamps",
+      "result": "Passed",
+      "tests": [
+        "T03_Contracts.test_malformed_records_are_rejected_and_country_is_never_guessed",
+        "T03_Contracts.test_snapshot_contract_example_and_runtime_checks"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T04",
+      "priority": "P0",
+      "title": "Profile/policy v2 invalidates readiness; snapshot kept",
+      "result": "Passed",
+      "tests": [
+        "T04_Versions.test_changing_profile_or_policy_invalidates_and_narrative_edits_do_not",
+        "T04_Versions.test_versions_are_recorded_in_the_ledger"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T05",
+      "priority": "P0",
+      "title": "Separate JD and apply URLs; formatting vs material change",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T05_separate_jd_page_normalises_formatting_and_blocks_a_material_change",
+        "T05_Normalisation.test_formatting_differences_normalise_and_material_changes_do_not"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T06",
+      "priority": "P0",
+      "title": "Three search profiles without employer accounts",
+      "result": "Passed",
+      "tests": [
+        "T06_Profiles.test_a_mixed_feed_lands_in_the_right_profiles_without_any_employer_account",
+        "T06_Profiles.test_the_cost_prefilter_keeps_leadership_variants_and_drops_unrelated_titles"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T07",
+      "priority": "P0",
+      "title": "Multi-page sources; no starvation; truncation explicit",
+      "result": "Passed",
+      "tests": [
+        "T07_T08_Sources.test_a_capped_source_resumes_from_its_cursor_so_no_page_is_starved"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T08",
+      "priority": "P0",
+      "title": "429/503 bounded backoff; healthy source continues",
+      "result": "Passed",
+      "tests": [
+        "T07_T08_Sources.test_429_and_503_back_off_for_reads_and_a_healthy_source_keeps_going",
+        "T07_T08_Sources.test_malformed_postings_are_rejected_with_a_visible_event"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T09",
+      "priority": "P0",
+      "title": "One canonical posting across seed, feed, import, profiles",
+      "result": "Passed",
+      "tests": [
+        "T09_Dedup.test_seed_feed_import_and_two_profiles_share_one_posting_with_provenance"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T10",
+      "priority": "P0",
+      "title": "Withdrawn, closed or past-deadline: no click",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T10_closed_or_gone_or_past_deadline_vacancies_are_never_clicked",
+        "T10_Withdrawn.test_a_changed_description_blocks_a_ready_application",
+        "T10_Withdrawn.test_a_posting_missing_from_a_complete_read_is_withdrawn_and_its_ready_application_expires"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T11",
+      "priority": "P0",
+      "title": "Score boundaries 79 to 100, raw Decimal",
+      "result": "Passed",
+      "tests": [
+        "T11_ExactThreshold.test_score_boundaries_from_the_supplied_fixture",
+        "T11_ExactThreshold.test_threshold_cannot_be_lowered"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T12",
+      "priority": "P0",
+      "title": "Malformed weights and states refused",
+      "result": "Passed",
+      "tests": [
+        "T12_MalformedWeights.test_bad_weights_and_states_are_refused"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T13",
+      "priority": "P0",
+      "title": "Unknown essential blocks at 95",
+      "result": "Passed",
+      "tests": [
+        "T13_EssentialsIndependent.test_score_95_with_an_unknown_required_licence_is_blocked"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T14",
+      "priority": "P0",
+      "title": "Prompt injection and invented evidence",
+      "result": "Passed",
+      "tests": [
+        "T14_UntrustedJobText.test_an_injected_instruction_cannot_create_facts_or_evidence",
+        "T14_UntrustedJobText.test_tailoring_cannot_add_a_credential",
+        "T14_UntrustedJobText.test_the_extractive_pack_never_contains_text_outside_the_ledger"
+      ],
+      "note": "Controlled adversarial examples with a model that obeys the injection."
+    },
+    {
+      "case": "T15",
+      "priority": "P0",
+      "title": "Human-labelled 50-JD essential evaluation",
+      "result": "Not run",
+      "tests": [],
+      "note": "Needs 50 human-labelled job descriptions. None were supplied and a developer cannot label them as the applicant would."
+    },
+    {
+      "case": "T16",
+      "priority": "P0",
+      "title": "Unreviewed extraction blocks; review opens it, no new permission",
+      "result": "Passed",
+      "tests": [
+        "T16_ExtractionReview.test_review_refuses_an_incomplete_extraction",
+        "T16_ExtractionReview.test_unreviewed_extraction_blocks_and_review_alone_opens_it_without_new_permission"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T17",
+      "priority": "P0",
+      "title": "Country rights and sponsorship eligibility",
+      "result": "Passed",
+      "tests": [
+        "T17_CountryRights.test_supplied_eligibility_scenarios",
+        "T17_CountryRights.test_uk_rights_and_relocation_do_not_give_france"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T18",
+      "priority": "P0",
+      "title": "Revocation after fill: zero clicks",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T18_revoked_after_fill_before_click_means_zero_clicks",
+        "T18_T19_FinalCheck.test_revocation_exclusion_or_changed_inputs_after_fill_mean_no_click",
+        "T18_T19_FinalCheck.test_standing_authorisation_needs_the_current_scope_and_no_revocation"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T19",
+      "priority": "P0",
+      "title": "Exclusion added mid-cycle",
+      "result": "Passed",
+      "tests": [
+        "T18_T19_FinalCheck.test_revocation_exclusion_or_changed_inputs_after_fill_mean_no_click",
+        "T18_T19_FinalCheck.test_standing_authorisation_needs_the_current_scope_and_no_revocation"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T20",
+      "priority": "P0",
+      "title": "Cap race at 19/20 and London midnight",
+      "result": "Passed",
+      "tests": [
+        "T20_T27_Claims.test_cap_race_at_19_of_20_and_london_midnight"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T21",
+      "priority": "P0",
+      "title": "Fill, select, upload; exact bytes; changed question blocks",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T21_a_form_that_changed_since_certification_blocks_and_T43_quarantines_the_route",
+        "Routes.test_T21_exact_values_and_bytes_are_submitted_once_without_approval"
+      ],
+      "note": "Ticking a \"confirmed declaration\" is decided against (CLAUDE.md rule 1): the agent never ticks a declaration."
+    },
+    {
+      "case": "T22",
+      "priority": "P0",
+      "title": "Redirect, iframe, multi-step, unsupported routes",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T22_multistep_frame_and_redirect_routes"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T23",
+      "priority": "P0",
+      "title": "Unknown mandatory answers never invented",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T23_unknown_required_answers_are_never_invented"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T24",
+      "priority": "P0",
+      "title": "Demographics, defaults, new declaration",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T24_sensitive_questions_and_preselected_answers_hold_the_form"
+      ],
+      "note": "Required consent \"from a confirmed mapping\" is decided against: consent boxes are always the applicant's."
+    },
+    {
+      "case": "T25",
+      "priority": "P0",
+      "title": "Documents: searchable text, complete, truthful",
+      "result": "Passed",
+      "tests": [
+        "T25_Documents.test_pdf_text_is_searchable_complete_and_truthful"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T26",
+      "priority": "P0",
+      "title": "Edits invalidate packs; sent files untouched",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T26_T30_T31_sealed_materials_survive_regeneration_and_export",
+        "Trial.test_reviewed_route_passes_and_pack_tampering_is_caught"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T27",
+      "priority": "P0",
+      "title": "Two actors, one atomic claim",
+      "result": "Passed",
+      "tests": [
+        "T20_T27_Claims.test_two_connections_racing_get_exactly_one_claim_and_one_event",
+        "T28_SingleExecution.test_the_extension_cannot_claim_what_the_worker_holds"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T28",
+      "priority": "P0",
+      "title": "Second worker, stale lock, active extension",
+      "result": "Passed",
+      "tests": [
+        "T28_SingleExecution.test_a_claim_without_a_click_after_a_crash_is_failed_not_uncertain",
+        "T28_SingleExecution.test_a_second_worker_is_refused_and_a_stale_lock_is_reconciled",
+        "T28_SingleExecution.test_the_extension_cannot_claim_what_the_worker_holds"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T29",
+      "priority": "P0",
+      "title": "Crash before, during and after the click",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T29_crash_before_during_and_after_the_click",
+        "T28_SingleExecution.test_a_claim_without_a_click_after_a_crash_is_failed_not_uncertain"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T30",
+      "priority": "P0",
+      "title": "Already submitted or uncertain: no second click",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T21_exact_values_and_bytes_are_submitted_once_without_approval",
+        "Routes.test_T26_T30_T31_sealed_materials_survive_regeneration_and_export",
+        "Trial.test_restart_no_duplicate"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T31",
+      "priority": "P0",
+      "title": "Full application record reconstructable",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T26_T30_T31_sealed_materials_survive_regeneration_and_export"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T32",
+      "priority": "P0",
+      "title": "Discovery to submit with no per-job click",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T32_discovery_to_submit_without_any_per_job_click"
+      ],
+      "note": "Against a local simulated employer server, not a real employer."
+    },
+    {
+      "case": "T33",
+      "priority": "P0",
+      "title": "Receipt rules and correlation",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T33_no_receipt_after_the_click_is_uncertain",
+        "Routes.test_T33_only_a_new_correlated_receipt_counts"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T34",
+      "priority": "P0",
+      "title": "Screenshot failure keeps a proven receipt",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T34_a_proven_receipt_survives_a_screenshot_failure"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T35",
+      "priority": "P0",
+      "title": "09:00 London, not before",
+      "result": "Passed",
+      "tests": [
+        "T35_T37_Schedule.test_T35_sent_at_09_00_not_before_with_recipient_and_links"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T36",
+      "priority": "P0",
+      "title": "DST: 25 Oct 2026 and 28 Mar 2027",
+      "result": "Passed",
+      "tests": [
+        "T35_T37_Schedule.test_T36_09_00_london_across_both_clock_changes_once_per_day"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T37",
+      "priority": "P0",
+      "title": "Host off at 09:00: one labelled catch-up",
+      "result": "Passed",
+      "tests": [
+        "T35_T37_Schedule.test_T37_a_host_off_at_09_00_sends_one_labelled_catch_up"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T38",
+      "priority": "P0",
+      "title": "Mail refused, ambiguous, succeeded",
+      "result": "Passed",
+      "tests": [
+        "T38_Outbox.test_refused_is_retried_ambiguous_is_never_resent_and_can_be_reconciled"
+      ],
+      "note": "Fake transports. A real inbox delivery is part of T52."
+    },
+    {
+      "case": "T39",
+      "priority": "P0",
+      "title": "Event counts across digest boundaries",
+      "result": "Passed",
+      "tests": [
+        "T39_EventCounts.test_a_submission_and_its_interview_count_once_each_and_not_again_next_day"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T40",
+      "priority": "P0",
+      "title": "Dashboard disconnected and connected",
+      "result": "Passed",
+      "tests": [
+        "T40_T48_Dashboard.test_disconnected_is_explicit_connected_shows_backend_receipts_and_practice_falls_back_to_typing"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T41",
+      "priority": "P0",
+      "title": "API tokens and optimistic versions",
+      "result": "Passed",
+      "tests": [
+        "API.test_T41_tokens_versions_and_validation",
+        "API.test_claim_is_idempotent_and_results_need_a_correlated_receipt"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T42",
+      "priority": "P0",
+      "title": "LLM budget: limit, unknown price, timeout",
+      "result": "Passed",
+      "tests": [
+        "T42_Budget.test_no_call_past_the_limit_unknown_prices_reserved_timeouts_charged_no_retry"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T43",
+      "priority": "P0",
+      "title": "Failing route quarantined; others continue",
+      "result": "Passed",
+      "tests": [
+        "Routes.test_T21_a_form_that_changed_since_certification_blocks_and_T43_quarantines_the_route"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T44",
+      "priority": "P0",
+      "title": "Unsafe URLs, paths, ids; secret scan",
+      "result": "Passed",
+      "tests": [
+        "T44_Safety.test_no_secret_or_personal_file_is_tracked",
+        "T44_Safety.test_unsafe_urls_paths_and_ids_are_blocked"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T45",
+      "priority": "P0",
+      "title": "Preflight fails with fixes; launch refuses",
+      "result": "Passed",
+      "tests": [
+        "T45_T46_Operations.test_T45_preflight_fails_with_specific_fixes_and_launch_refuses"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T46",
+      "priority": "P0",
+      "title": "Contention, disk full, partial start, backup/restore",
+      "result": "Passed",
+      "tests": [
+        "T45_T46_Operations.test_T46_contention_disk_full_and_backup_restore",
+        "T45_T46_Operations.test_T46_partial_start_leaves_no_orphans"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T47",
+      "priority": "P1",
+      "title": "Interview from the actual pack",
+      "result": "Passed",
+      "tests": [
+        "T47_Interview.test_questions_come_from_the_actual_pack_and_unsupported_claims_are_flagged"
+      ],
+      "note": "Deterministic checks; a real LLM coaching call was not made."
+    },
+    {
+      "case": "T48",
+      "priority": "P1",
+      "title": "Practice with speech unavailable or refused",
+      "result": "Passed",
+      "tests": [
+        "T40_T48_Dashboard.test_disconnected_is_explicit_connected_shows_backend_receipts_and_practice_falls_back_to_typing"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T49",
+      "priority": "P1",
+      "title": "Salary history is not a floor",
+      "result": "Passed",
+      "tests": [
+        "T49_SalaryHistory.test_history_and_targets_never_become_a_floor_or_an_answer",
+        "T49_SalaryHistory.test_packages_are_compared_component_by_component"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T50",
+      "priority": "P1",
+      "title": "Style vs factual edits",
+      "result": "Passed",
+      "tests": [
+        "API.test_T50_style_edits_keep_packs_factual_edits_need_confirmation",
+        "T04_Versions.test_changing_profile_or_policy_invalidates_and_narrative_edits_do_not",
+        "T04_Versions.test_versions_are_recorded_in_the_ledger"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T51",
+      "priority": "P1",
+      "title": "Coverage matrix by market",
+      "result": "Passed",
+      "tests": [
+        "T51_Coverage.test_the_matrix_measures_markets_and_claims_nothing_more"
+      ],
+      "note": ""
+    },
+    {
+      "case": "T52",
+      "priority": "P0",
+      "title": "Live release: genuine application and real report",
+      "result": "Not run",
+      "tests": [],
+      "note": "Needs the applicant's certified route on a real, relevant, open vacancy, the real SMTP account and inbox. Not possible from this build environment."
+    },
+    {
+      "case": "T53",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    },
+    {
+      "case": "T54",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    },
+    {
+      "case": "T55",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    },
+    {
+      "case": "T56",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    },
+    {
+      "case": "T57",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    },
+    {
+      "case": "T58",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    },
+    {
+      "case": "T59",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    },
+    {
+      "case": "T60",
+      "priority": "Commercial",
+      "title": "Commercial acceptance",
+      "result": "Not run (commercial off)",
+      "tests": [],
+      "note": "B20-B22 are out of the personal release by decision; no other applicants, no Stripe."
+    }
+  ],
+  "source_manifest": {
+    "agent/__init__.py": "0739fee33d3e53ce4c42e4df375d0f265d80fd19b9c7c71e2ab5e5d8accd7031",
+    "agent/answers.py": "4621a825404ee363bb770f48ebb8c1964a87d404dab8bdbbc3c03e3c6fe40647",
+    "agent/authorize.py": "db54489ffe569650c09a8a513e224b6ac25354e4461743076362847f676c3b46",
+    "agent/budget.py": "de373ecb95ce9fb60dd688135043b7a816c96c026b64e6618ccb02f809e1de55",
+    "agent/cli.py": "23096fececfc417dc7325f8cb02f8d414165839f052e26fa70823aa94ae0cf7b",
+    "agent/contracts.py": "f6bc91af44cfcef03c5133d330dfbeb062b65ea44f4dd73a76e0e1bb3e430175",
+    "agent/core.py": "ff48bcef173529225c6e7a8fb5fea9a15304dade95cc70f94b7937988922b8a8",
+    "agent/coverage.py": "a87917e59e0610de98ada1cf5d07895254caf7585101d412b4e9f0f12b456311",
+    "agent/discovery.py": "b32da245212df12ab148c7e2739d6f3331e089138faf564d233a7188c85d6148",
+    "agent/documents.py": "d14a7a1a634c7f78e3194bbaa938b2cde44713ba67dea27b38c8fe00dc2cb616",
+    "agent/identity.py": "e6865619aea295b3bca1e6896ff5b86213207115c9f5ca150e29fe3b5867cb87",
+    "agent/interview.py": "9561466117984125773310cf653aa81570e16a6371c70ab0fa0654ceb05502f6",
+    "agent/launch.py": "e1d12fef55c5c4238b6d5afd8f98f4ac6843585db7d1d0b2cbb422af271a70b8",
+    "agent/llm.py": "58c87c6f5c46c774f96606119fd5113d3189df9874d1b10e50e6027f5615eb0b",
+    "agent/normalize.py": "58a879421ca564ce4f75e334411ff2ae66dc52926c051dc15316efb1edc38f79",
+    "agent/offers.py": "bcb5092a4c62f23fe547d8556f9db3ff123b9ebf7352649899091f5c43ebcccf",
+    "agent/ops.py": "777ed898c7542b8aee81c91fcb4cd585c281bf6dc378a37409c5ba2d60a1ea18",
+    "agent/outcomes.py": "47cafdcbf67756045b7b158a0c12abda7301b5991d253996d3522fefc1cb8da0",
+    "agent/paths.py": "9abeef33d8c8db13991f954586b0be6993debcba80cf9246298b50edfba921f1",
+    "agent/policy.py": "8d49a0d942d579168aa904dfabc5fb109cf1990510ccf3f1c8e532c0f2941192",
+    "agent/profiles.py": "0e05bd208eb6406d838b1be99ef11ff7ff22076c1a89aca65f82a0e9a9d9c078",
+    "agent/report.py": "3e3ce68d3f8752d373e62aa297d8cd805228ab980a37155030a69a1696fd5aa5",
+    "agent/review.py": "5b684eb41a4907b1fd5b2b16b0fd6f27b4a37c0cc7ab8c9ba34028b69659c5f4",
+    "agent/rights.py": "4b78422d3cba7cb74ac5473a54390f42aba31e41f49ca3a966a15a21b12382c5",
+    "agent/routes.py": "dc7d1798e160197f724368c02303e24dfe47fa8eee2d4299466054efdffa8b99",
+    "agent/scoring.py": "e1d712459cd8e2b8550519fd2292b9fd16cab3ca05867a818edc645ef1d80046",
+    "agent/server.py": "9280925b5fee03e4c1c06ebdf0ff7b19ea714ab498f85d1c30527b80bc00bd60",
+    "agent/snapshot.py": "f14d7fe0ed2c6945a99f9f6ade76a847fea1a07275677003f1cb7f7a2dfa508e",
+    "agent/sources.py": "ac9805e314522eb8b20ee73f9dc0e6bdee9abef5e9635fa53812ad967390a943",
+    "agent/store.py": "0a651f7c9605fae5b646a0fab0987e48a66b5f9bdce897bfc794490719012dd0",
+    "agent/versions.py": "13ce48eeb4ed2d4d712163695ca8c8353423471497daf3e3755bb6c9b9e3c092",
+    "agent/worker.py": "a8b1ea8a92a04e62d791527783fb5868a14e192ae93acc781005f68b95ef1008",
+    "contracts/README.md": "df6f9d0caa250bdcab6861ab7edd54a24eab0e4f4a537f3e8ee50e6f57f23f73",
+    "contracts/attempt-snapshot.example.json": "30d64fee4c6751ba993f89a8251061d64637f9102d11be2b271edd2b70d9e2ca",
+    "contracts/attempt-snapshot.schema.json": "ed75f301c9445cbce057a0bbb92b6f10f67fa06a5f7c77b6ebfd61d5eda54ca7",
+    "dashboard/app.js": "0ddafd22a5d850c278980d9e9ee962cdb35e044b064f2c96e65f7d03c34cc396",
+    "dashboard/connect.js": "29de8a77532e087083133e196ff6dec891d9e095c8570e27480d95c6434a438c",
+    "dashboard/data.example.json": "490595e61cfdb34d2913fd85f78e0b24e80d50f1d182aa2c6c2f09a5c62b225f",
+    "dashboard/index.html": "74f9488490880d880ba0915f63762ae4f6fce1d8cbead73cabc07ff000d4ab0e",
+    "dashboard/style.css": "08ddfed1a58a60791385aca5ae10f1191a38a2830b38e4647e03d926556ca79e",
+    "extension/manifest.json": "86cea1d232fb4718ed150df04989d405cab1b674bb579fb56b01089b9963912a",
+    "extension/popup.html": "b240921c353abd9b7e2749a47e1d3f5c8015999b119e735c4388445410efaff8",
+    "extension/popup.js": "04a7e331e5e5854da46609613ca63f0d1295de5074109b4c1786b6e863dc0f15",
+    "scripts/release_gate.py": "df3a43fb65f4aefba0f6720e1bdcc962c01abd405a632c25e4e40a099c065365",
+    "scripts/verify.sh": "b5557293dd3247d531287abf763c93d734d6c3c904484ec8e07b5550a521ec33",
+    "requirements.txt": "7c6fe809f9577c93a1133d60fd93e74886f0017c7cdd826ef42a8b2382e10418",
+    "requirements.lock": "d5f73341e533c7ffaad45aab6d29116020f1243d1406060a72b6eda879d97443"
+  }
+}

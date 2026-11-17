@@ -122,15 +122,27 @@ export const KNOWN_CITIES: Readonly<Record<string, string>> = {
 
 const CITY_LOOKUP = new Map(Object.entries(KNOWN_CITIES).map(([city, code]) => [foldPlace(city), code]));
 
-/** "Lille, FR" -> { city: "Lille", country: "FR" }; "Lyon" -> { city: "Lyon", country: "FR" }; unknown -> country undefined. */
+/**
+ * "Lille, FR" -> { city: "Lille", country: "FR" }; "Lyon" -> { city: "Lyon", country: "FR" };
+ * unknown -> country undefined. The part after the last comma may be an ISO code ("FR"), a country
+ * name ("France") or a common alias ("UK", "England", "USA"): people write "Stafford, UK", not "GB".
+ */
 export function parseCity(value: string): { city: string; country: string | undefined } {
-  const m = /^(.*?),\s*([A-Za-z]{2})\s*$/.exec(value.trim());
-  if (m) {
-    const country = normaliseCountryCode(m[2]);
-    if (country) return { city: (m[1] as string).trim(), country };
+  const trimmed = value.trim();
+  const comma = trimmed.lastIndexOf(',');
+  if (comma > 0) {
+    const country = resolveCountry(trimmed.slice(comma + 1));
+    if (country) return { city: trimmed.slice(0, comma).trim(), country };
   }
-  const city = value.trim();
-  return { city, country: CITY_LOOKUP.get(foldPlace(city)) };
+  const folded = foldPlace(trimmed);
+  // A UK town OpennJob can place by its postcode area (CITY_POSTCODE_AREAS) belongs to GB, so a
+  // person who picks "Leeds" or "Bristol" (not just a picker city) still narrows the United Kingdom.
+  return { city: trimmed, country: CITY_LOOKUP.get(folded) ?? (CITY_POSTCODE_AREAS[folded] ? 'GB' : undefined) };
+}
+
+/** An ISO alpha-2 code ("GB"), a country name ("United Kingdom") or a common alias ("UK") -> its code. */
+export function resolveCountry(value: string): string | undefined {
+  return normaliseCountryCode(value) ?? NAME_MAP.get(foldPlace(value));
 }
 
 /** Which country a preference city belongs to, or undefined when OpennJob cannot tell. */
@@ -138,14 +150,124 @@ export function cityCountry(value: string): string | undefined {
   return parseCity(value).country;
 }
 
-export const sameCity = (a: string, b: string): boolean => foldPlace(parseCity(a).city) === foldPlace(parseCity(b).city);
+/**
+ * The area letters of a UK postcode in a free-text location ("B24 6BF" -> "B", "CV1 2AB" -> "CV",
+ * "WV10 7EH" -> "WV"). Adverts usually give a postcode, not a town name, so this lets a city
+ * preference match them. Undefined when no postcode-looking token is present.
+ */
+export function ukPostcodeArea(value: string | undefined): string | undefined {
+  const m = /(?:^|[\s,(])([A-Za-z]{1,2})\d/u.exec((value ?? '').trim());
+  return m?.[1] ? m[1].toUpperCase() : undefined;
+}
+
+/**
+ * UK postcode areas for the towns OpennJob can place, so a city preference also catches adverts
+ * that give only a postcode. Coarse on purpose (one area covers neighbouring towns): Solihull and
+ * West Bromwich sit in Birmingham's "B"; Stafford shares "ST" with Stoke-on-Trent. Keyed by folded
+ * city name.
+ */
+export const CITY_POSTCODE_AREAS: Readonly<Record<string, readonly string[]>> = {
+  // West Midlands region (metropolitan county + Staffordshire, Warwickshire, Worcestershire,
+  // Herefordshire, Shropshire): neighbouring towns share one area, so the mapping is coarse.
+  birmingham: ['B'], solihull: ['B'], 'west bromwich': ['B'], 'sutton coldfield': ['B'], redditch: ['B'],
+  bromsgrove: ['B'], tamworth: ['B'], coventry: ['CV'], nuneaton: ['CV'], rugby: ['CV'], warwick: ['CV'],
+  wolverhampton: ['WV'], walsall: ['WS'], cannock: ['WS'], dudley: ['DY'], kidderminster: ['DY'],
+  stafford: ['ST'], 'stoke-on-trent': ['ST'], telford: ['TF'], shrewsbury: ['SY'], shropshire: ['SY', 'TF'],
+  worcester: ['WR'], hereford: ['HR'],
+  // East Midlands
+  derby: ['DE'], 'burton-on-trent': ['DE'], leicester: ['LE'], nottingham: ['NG'], northampton: ['NN'],
+  lincoln: ['LN'], peterborough: ['PE'],
+  // Yorkshire and the North East
+  leeds: ['LS'], sheffield: ['S'], barnsley: ['S'], rotherham: ['S'], bradford: ['BD'], wakefield: ['WF'],
+  huddersfield: ['HD'], halifax: ['HX'], harrogate: ['HG'], york: ['YO'], hull: ['HU'], doncaster: ['DN'],
+  newcastle: ['NE'], sunderland: ['SR'], middlesbrough: ['TS'], teesside: ['TS'], durham: ['DH'],
+  darlington: ['DL'], carlisle: ['CA'],
+  // North West
+  manchester: ['M'], stockport: ['SK'], bolton: ['BL'], oldham: ['OL'], wigan: ['WN'], warrington: ['WA'],
+  liverpool: ['L'], chester: ['CH'], crewe: ['CW'], preston: ['PR'], blackburn: ['BB'], blackpool: ['FY'],
+  lancaster: ['LA'],
+  // Scotland
+  glasgow: ['G'], edinburgh: ['EH'], aberdeen: ['AB'], dundee: ['DD'], perth: ['PH'], inverness: ['IV'],
+  paisley: ['PA'], kilmarnock: ['KA'], motherwell: ['ML'], falkirk: ['FK'], kirkcaldy: ['KY'], dumfries: ['DG'],
+  // Wales
+  cardiff: ['CF'], swansea: ['SA'], newport: ['NP'], wrexham: ['LL'],
+  // South West
+  bristol: ['BS'], bath: ['BA'], gloucester: ['GL'], swindon: ['SN'], plymouth: ['PL'], exeter: ['EX'],
+  torquay: ['TQ'], truro: ['TR'], taunton: ['TA'], bournemouth: ['BH'], dorchester: ['DT'], salisbury: ['SP'],
+  // South and South East
+  southampton: ['SO'], portsmouth: ['PO'], brighton: ['BN'], guildford: ['GU'], oxford: ['OX'],
+  'milton keynes': ['MK'], bedford: ['MK'], luton: ['LU'], basingstoke: ['RG'], reading: ['RG'], slough: ['SL'],
+  maidstone: ['ME'], canterbury: ['CT'], 'tunbridge wells': ['TN'], chelmsford: ['CM'], colchester: ['CO'],
+  southend: ['SS'], ipswich: ['IP'], norwich: ['NR'], cambridge: ['CB'],
+  // London and its outer areas
+  london: ['E', 'EC', 'N', 'NW', 'SE', 'SW', 'W', 'WC'], watford: ['WD'], bromley: ['BR'], croydon: ['CR'],
+  dartford: ['DA'], enfield: ['EN'], harrow: ['HA'], ilford: ['IG'], kingston: ['KT'], romford: ['RM'],
+  sutton: ['SM'], twickenham: ['TW'], uxbridge: ['UB'],
+};
+
+/** Does a job location (its city or free-text place) fall in the given town, by name or postcode area? */
+export function placeInCity(jobCity: string | undefined, jobLocation: string | undefined, cityName: string): boolean {
+  const target = foldPlace(cityName);
+  if (jobCity && foldPlace(jobCity) === target) return true;
+  const areas = CITY_POSTCODE_AREAS[target];
+  if (!areas) return false;
+  const area = ukPostcodeArea(jobCity) ?? ukPostcodeArea(jobLocation);
+  return area !== undefined && areas.includes(area);
+}
+
 
 const NAME_LOOKUP: ReadonlyArray<[string, string]> = [
   ...COUNTRIES.map((c): [string, string] => [foldPlace(c.name), c.code]),
   ['uk', 'GB'], ['great britain', 'GB'], ['england', 'GB'], ['scotland', 'GB'], ['wales', 'GB'], ['northern ireland', 'GB'],
   ['usa', 'US'], ['united states of america', 'US'], ['uae', 'AE'], ['drc', 'CD'], ['democratic republic of the congo', 'CD'],
   ['ivory coast', 'CI'], ['turkey', 'TR'], ['czech republic', 'CZ'], ['republic of ireland', 'IE'],
+  ['britain', 'GB'], ['united states', 'US'], ['holland', 'NL'], ['the netherlands', 'NL'],
 ];
+
+/** Country names and aliases (folded) -> ISO alpha-2 code. Used by resolveCountry. */
+const NAME_MAP = new Map<string, string>(NAME_LOOKUP);
+
+/**
+ * A wider place gazetteer used ONLY to infer a job advert's country (inferPlace), so a worldwide
+ * careers site cannot pass its foreign jobs off as the site's country. It is deliberately NOT the
+ * city picker (KNOWN_CITIES): it holds common UK towns (so UK jobs are confirmed) and the foreign
+ * cities, US states and global hubs that otherwise resolve to nothing. Folded place -> ISO code.
+ */
+const WORLD_PLACES: Readonly<Record<string, string>> = {
+  // UK towns and cities beyond the picker list, so a UK job is confirmed rather than guessed.
+  stafford: 'GB', stone: 'GB', warwick: 'GB', rugby: 'GB', bristol: 'GB', leeds: 'GB', sheffield: 'GB', liverpool: 'GB',
+  newcastle: 'GB', nottingham: 'GB', leicester: 'GB', reading: 'GB', cardiff: 'GB', edinburgh: 'GB', aberdeen: 'GB', bath: 'GB',
+  oxford: 'GB', cambridge: 'GB', york: 'GB', watford: 'GB', amersham: 'GB', wakefield: 'GB', bridgwater: 'GB', prescot: 'GB',
+  stirling: 'GB', portsmouth: 'GB', southampton: 'GB', brighton: 'GB', hull: 'GB', preston: 'GB', bolton: 'GB', swindon: 'GB',
+  worcester: 'GB', hereford: 'GB', shrewsbury: 'GB', telford: 'GB', dudley: 'GB', walsall: 'GB', cannock: 'GB',
+  kidderminster: 'GB', redditch: 'GB', tamworth: 'GB', nuneaton: 'GB', 'sutton coldfield': 'GB', bromsgrove: 'GB',
+  'west bromwich': 'GB', 'stoke-on-trent': 'GB', doncaster: 'GB', bradford: 'GB', huddersfield: 'GB', halifax: 'GB',
+  harrogate: 'GB', middlesbrough: 'GB', sunderland: 'GB', durham: 'GB', darlington: 'GB', carlisle: 'GB',
+  stockport: 'GB', oldham: 'GB', wigan: 'GB', warrington: 'GB', chester: 'GB', crewe: 'GB', blackburn: 'GB',
+  blackpool: 'GB', lancaster: 'GB', dundee: 'GB', perth: 'GB', inverness: 'GB', paisley: 'GB', swansea: 'GB',
+  newport: 'GB', wrexham: 'GB', plymouth: 'GB', exeter: 'GB', torquay: 'GB', truro: 'GB', taunton: 'GB',
+  gloucester: 'GB', bournemouth: 'GB', salisbury: 'GB', guildford: 'GB', 'milton keynes': 'GB', luton: 'GB',
+  basingstoke: 'GB', maidstone: 'GB', canterbury: 'GB', chelmsford: 'GB', colchester: 'GB', ipswich: 'GB',
+  norwich: 'GB', northampton: 'GB', lincoln: 'GB', peterborough: 'GB', bedford: 'GB',
+  // United States: all states, plus common GE Vernova / industry hubs that appear as bare city names.
+  alabama: 'US', alaska: 'US', arizona: 'US', arkansas: 'US', california: 'US', colorado: 'US', connecticut: 'US', delaware: 'US',
+  florida: 'US', hawaii: 'US', idaho: 'US', illinois: 'US', indiana: 'US', iowa: 'US', kansas: 'US', kentucky: 'US',
+  louisiana: 'US', maine: 'US', maryland: 'US', massachusetts: 'US', michigan: 'US', minnesota: 'US', mississippi: 'US', missouri: 'US',
+  montana: 'US', nebraska: 'US', nevada: 'US', ohio: 'US', oklahoma: 'US', oregon: 'US', pennsylvania: 'US', tennessee: 'US',
+  texas: 'US', utah: 'US', vermont: 'US', virginia: 'US', washington: 'US', wisconsin: 'US', wyoming: 'US',
+  'niagara falls': 'US', schenectady: 'US', greenville: 'US', pensacola: 'US', 'oakbrook terrace': 'US', duquoin: 'US',
+  'findlay township': 'US', mckinney: 'US', atlanta: 'US', houston: 'US', 'new york': 'US', chicago: 'US', boston: 'US', dallas: 'US',
+  // Canada
+  markham: 'CA', toronto: 'CA', montreal: 'CA', calgary: 'CA', ottawa: 'CA',
+  // India
+  noida: 'IN', vadodara: 'IN', bengaluru: 'IN', bangalore: 'IN', chennai: 'IN', mumbai: 'IN', hyderabad: 'IN', pune: 'IN', 'new delhi': 'IN', delhi: 'IN',
+  // Europe (non-UK) and MENA hubs that show up on energy careers sites.
+  berlin: 'DE', munich: 'DE', hamburg: 'DE', milan: 'IT', rome: 'IT', madrid: 'ES', barcelona: 'ES', kirkkonummi: 'FI', helsinki: 'FI',
+  'new cairo': 'EG', cairo: 'EG', doha: 'QA', riyadh: 'SA', dubai: 'AE', 'abu dhabi': 'AE',
+  // East Asia / Pacific
+  shanghai: 'CN', beijing: 'CN', singapore: 'SG', tokyo: 'JP', sydney: 'AU', melbourne: 'AU',
+};
+const WORLD_PLACE_MAP = new Map<string, string>(Object.entries(WORLD_PLACES).map(([k, v]) => [foldPlace(k), v]));
 
 /**
  * Best-effort guess at a job's country and city from a free-text location such as
@@ -158,10 +280,17 @@ export function inferPlace(location: string | undefined): { country?: string; ci
   let city: string | undefined;
   let country: string | undefined;
   for (const part of parts) {
-    const hit = Object.keys(KNOWN_CITIES).find((c) => foldPlace(c) === foldPlace(part));
+    const folded = foldPlace(part);
+    const hit = Object.keys(KNOWN_CITIES).find((c) => foldPlace(c) === folded);
     if (hit) {
       city = hit;
       country = KNOWN_CITIES[hit];
+      break;
+    }
+    const world = WORLD_PLACE_MAP.get(folded);
+    if (world) {
+      city = part;
+      country = world;
       break;
     }
   }

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "NSEYA Career Agent Trial",
+  "version": "0.1.0",
+  "description": "Fill reviewed 80%+ applications from your local agent. You answer declarations and click submit yourself.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8765/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

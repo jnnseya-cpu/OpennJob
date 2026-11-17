@@ -2,7 +2,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { HttpException, Inject, Injectable, SetMetadata, UnauthorizedException, createParamDecorator } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RateLimiter, verifyAccessToken } from './auth';
+import { passwordVersion, verifyAccessToken } from './auth';
+import type { Limiter } from './auth';
 import { DEPS } from './deps';
 import type { OpennJobDeps } from './deps';
 
@@ -17,6 +18,10 @@ const IS_EMPLOYER = 'opennjob:employer';
  * candidate's token does not open employer routes.
  */
 export const EmployerRoute = () => SetMetadata(IS_EMPLOYER, true);
+
+const IS_OPERATOR = 'opennjob:operator';
+/** Opened by OPENNJOB_OPERATOR_KEY only. No user token opens it, and the operator key opens no user route. */
+export const OperatorRoute = () => SetMetadata(IS_OPERATOR, true);
 
 interface AuthedRequest {
   headers: Record<string, string | string[] | undefined>;
@@ -69,6 +74,13 @@ export class AccessTokenGuard implements CanActivate {
       return true;
     }
 
+    if (this.reflector.getAllAndOverride<boolean>(IS_OPERATOR, targets) === true) {
+      const expected = this.deps.config.operatorKey ?? '';
+      if (!expected) throw new UnauthorizedException('OPENNJOB_OPERATOR_KEY is not configured on the server');
+      if (!token || !timingSafeEqual(digest(token), digest(expected))) throw new UnauthorizedException('Missing or invalid bearer token');
+      return true;
+    }
+
     const secret = this.deps.config.jwtSecret;
     if (!secret) throw new UnauthorizedException('OPENNJOB_JWT_SECRET is not configured on the server');
     if (!token) throw new UnauthorizedException('Missing or invalid bearer token');
@@ -80,6 +92,11 @@ export class AccessTokenGuard implements CanActivate {
     // A deleted account's tokens stop working at once, not when they expire.
     const user = await this.deps.repository.getUserById(check.userId);
     if (!user) throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', message: 'Missing or invalid bearer token', code: 'token_invalid' });
+    // A token issued before the password was last changed no longer works (ACC-3).
+    // A token without the claim was not issued by this API's sign-in and is refused.
+    if (check.pwv !== passwordVersion(user.passwordHash)) {
+      throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', message: 'Missing or invalid bearer token', code: 'token_invalid' });
+    }
     request.opennjobUserId = user.id;
     return true;
   }
@@ -88,21 +105,32 @@ export class AccessTokenGuard implements CanActivate {
 export const AUTH_RATE_LIMITER = Symbol('OPENNJOB_AUTH_RATE_LIMITER');
 
 /**
- * Rate limit for /auth/*. Counts attempts per client address, and per email address
- * when the body names one, so one address cannot hammer many accounts and many addresses
- * cannot hammer one account. Replies 429 with Retry-After.
+ * Rate limit for /auth/*. Counts attempts per client address, so one address cannot hammer many
+ * accounts. When the body names an e-mail address it also counts that account from that client
+ * address, and that account from everywhere with a limit ACCOUNT_WIDE_FACTOR times higher: many
+ * addresses cannot hammer one account, and someone guessing at an account from their own machine
+ * does not lock its owner out on theirs. Replies 429 with Retry-After.
  */
+export const ACCOUNT_WIDE_FACTOR = 10;
+
 @Injectable()
 export class AuthRateLimitGuard implements CanActivate {
-  constructor(@Inject(AUTH_RATE_LIMITER) private readonly limiter: RateLimiter) {}
+  constructor(
+    @Inject(AUTH_RATE_LIMITER) private readonly limiter: Limiter,
+    @Inject(DEPS) private readonly deps: OpennJobDeps,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const http = context.switchToHttp();
     const request = http.getRequest<AuthedRequest>();
-    const keys = [`ip:${request.ip ?? 'unknown'}`];
+    const ip = request.ip ?? 'unknown';
+    const checks: [string, number | undefined][] = [[`ip:${ip}`, undefined]];
     const email = (request.body as { email?: unknown } | undefined)?.email;
-    if (typeof email === 'string' && email.length <= 254) keys.push(`email:${email.trim().toLowerCase()}`);
-    const results = keys.map((k) => this.limiter.take(k));
+    if (typeof email === 'string' && email.length <= 254) {
+      const account = email.trim().toLowerCase();
+      checks.push([`email-ip:${account}|${ip}`, undefined], [`email:${account}`, this.deps.config.authRateLimitMax * ACCOUNT_WIDE_FACTOR]);
+    }
+    const results = await Promise.all(checks.map(([k, max]) => this.limiter.take(k, max)));
     const blocked = results.filter((r) => !r.allowed);
     if (blocked.length > 0) {
       const retryAfter = Math.max(...blocked.map((r) => r.retryAfterSeconds));

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "answers": {
+    "name": {
+      "value": "Alex Example",
+      "confirmed": true,
+      "kind": "fact"
+    },
+    "email": {
+      "value": "alex.example@example.org",
+      "confirmed": true,
+      "kind": "fact"
+    },
+    "phone": {
+      "value": "07700 900123",
+      "confirmed": true,
+      "kind": "fact"
+    },
+    "location": {
+      "value": "Birmingham, UK",
+      "confirmed": true,
+      "kind": "fact"
+    },
+    "uk_right_to_work": {
+      "value": true,
+      "confirmed": true,
+      "kind": "declaration"
+    },
+    "notice_period": {
+      "value": null,
+      "confirmed": false,
+      "kind": "fact"
+    },
+    "expected_permanent_salary": {
+      "value": null,
+      "confirmed": false,
+      "kind": "preference"
+    }
+  },
+  "rules": [
+    "Never substitute last salary for expected salary.",
+    "Declarations (work rights, sponsorship, clearance, convictions, consent) are recorded for matching only and are never filled into a form: you answer them yourself."
+  ]
+}

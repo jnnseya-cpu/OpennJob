@@ -1,0 +1,56 @@
+[
+  {
+    "company": "Turner & Townsend",
+    "type": "smartrecruiters",
+    "board": "TurnerTownsend",
+    "query": "project manager",
+    "max_details": 30,
+    "title_keywords": [
+      "construction",
+      "senior project manager",
+      "programme",
+      "program manager",
+      "epc",
+      "subcontract",
+      "site manager",
+      "package manager",
+      "project director"
+    ]
+  },
+  {
+    "company": "AECOM",
+    "type": "smartrecruiters",
+    "board": "AECOM2",
+    "query": "construction",
+    "max_details": 30,
+    "title_keywords": [
+      "construction",
+      "senior project manager",
+      "programme",
+      "program manager",
+      "epc",
+      "subcontract",
+      "site manager",
+      "package manager",
+      "project director"
+    ]
+  },
+  {
+    "company": "Egis",
+    "type": "smartrecruiters",
+    "board": "EgisGroup",
+    "query": "construction",
+    "max_details": 30,
+    "title_keywords": [
+      "construction",
+      "senior project manager",
+      "programme",
+      "program manager",
+      "epc",
+      "subcontract",
+      "site manager",
+      "package manager",
+      "project director"
+    ]
+  }
+]

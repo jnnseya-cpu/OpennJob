@@ -1,0 +1,32 @@
+[
+  {
+    "id": "synthetic-uk-pass",
+    "coverage": "95",
+    "essential_met": true,
+    "uk_rights": true,
+    "expected": "eligible subject to remaining live gates"
+  },
+  {
+    "id": "synthetic-essential-unknown",
+    "coverage": "95",
+    "essential_met": null,
+    "uk_rights": true,
+    "expected": "blocked"
+  },
+  {
+    "id": "synthetic-france-unknown",
+    "coverage": "95",
+    "essential_met": true,
+    "uk_rights": true,
+    "relocation": true,
+    "france_rights": null,
+    "sponsor_eligibility": null,
+    "expected": "blocked"
+  },
+  {
+    "id": "synthetic-revoked",
+    "coverage": "95",
+    "authorization_enabled": false,
+    "expected": "no submit click"
+  }
+]

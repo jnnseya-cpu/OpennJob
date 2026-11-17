@@ -18,56 +18,87 @@ export interface LlmPort {
 }
 
 /**
- * !!! PLACEHOLDER - DEVELOPER MUST CONFIRM !!!
- * This is only used when the OPENNJOB_MODEL environment variable is not set.
- * Model names change. Check Anthropic's current model list
- * (https://docs.anthropic.com/en/docs/about-claude/models) and set OPENNJOB_MODEL explicitly.
- * Do not ship relying on this value.
+ * The model used when OPENNJOB_MODEL is not set: Claude Opus 5.5, the current default Claude
+ * model (checked against Anthropic's model list on 6 October 2026). Set OPENNJOB_MODEL to choose
+ * another one.
  */
-export const PLACEHOLDER_MODEL_CONFIRM_BEFORE_USE = 'claude-sonnet-4-5';
+export const DEFAULT_MODEL = 'claude-opus-5-5';
 
-/** The slice of the Anthropic SDK client we use. Lets tests substitute a stub without network. */
+export type LlmEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+const EFFORTS: readonly LlmEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/**
+ * Models that accept the server-side refusal fallback (`fallbacks: "default"`). A request one of
+ * them declines is re-run on another model inside the same call instead of failing.
+ */
+const FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5']);
+const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+
+/**
+ * Current models always think before they answer, and the thinking counts towards max_tokens.
+ * OpennJob's prompts ask for short answers (600-1,200 tokens), so the request leaves this much room
+ * on top for the thinking. Only the tokens actually used are billed and metered.
+ */
+export const THINKING_HEADROOM_TOKENS = 15_000;
+
+/** The request body we send. The slice of the SDK we use, so tests can substitute a stub. */
+export interface AnthropicRequestBody {
+  model: string;
+  max_tokens: number;
+  system: string;
+  messages: { role: 'user'; content: string }[];
+  output_config: { effort: LlmEffort };
+  betas?: string[];
+  fallbacks?: 'default';
+}
+
 export interface AnthropicMessagesClient {
-  messages: {
-    create(body: {
-      model: string;
-      max_tokens: number;
-      system: string;
-      messages: { role: 'user'; content: string }[];
-    }): Promise<{
-      content: ReadonlyArray<{ type: string; text?: string }>;
-      usage: { input_tokens: number; output_tokens: number };
-    }>;
+  beta: {
+    messages: {
+      create(body: AnthropicRequestBody): Promise<{
+        content: ReadonlyArray<{ type: string; text?: string }>;
+        stop_reason?: string | null;
+        usage: { input_tokens: number; output_tokens: number };
+      }>;
+    };
   };
 }
 
 export interface AnthropicLlmOptions {
   apiKey?: string;
   model?: string;
+  /** How hard the model works on each answer. Default: OPENNJOB_LLM_EFFORT, else "medium". */
+  effort?: LlmEffort;
   client?: AnthropicMessagesClient;
   warn?: (message: string) => void;
 }
 
+/** Thrown when the model declines a request. Callers fall back to the no-AI path. Holds no content. */
+export class LlmRefusalError extends Error {
+  constructor() {
+    super('The AI model declined this request');
+    this.name = 'LlmRefusalError';
+  }
+}
+
 /**
  * LlmPort backed by the official @anthropic-ai/sdk.
- * Reads ANTHROPIC_API_KEY and OPENNJOB_MODEL from the environment unless passed in.
- * NOT exercised against the live API in this repository's tests (the sandbox has no network
- * access and no key); the request/response mapping is unit-tested with a stub client.
+ * Reads ANTHROPIC_API_KEY, OPENNJOB_MODEL and OPENNJOB_LLM_EFFORT from the environment unless passed in.
+ * Its request and response mapping is unit-tested with a stub client; no live call is made by the tests.
  */
 export class AnthropicLlm implements LlmPort {
   readonly model: string;
+  readonly effort: LlmEffort;
   private readonly client: AnthropicMessagesClient;
 
   constructor(options: AnthropicLlmOptions = {}) {
     const envModel = process.env.OPENNJOB_MODEL?.trim();
-    const model = options.model?.trim() || envModel;
-    if (!model) {
-      (options.warn ?? console.warn)(
-        `[opennjob] OPENNJOB_MODEL is not set; falling back to placeholder "${PLACEHOLDER_MODEL_CONFIRM_BEFORE_USE}". ` +
-          'Confirm the model name against Anthropic\'s current model list and set OPENNJOB_MODEL.',
-      );
+    this.model = options.model?.trim() || envModel || DEFAULT_MODEL;
+    const envEffort = process.env.OPENNJOB_LLM_EFFORT?.trim() as LlmEffort | undefined;
+    if (envEffort && !EFFORTS.includes(envEffort)) {
+      (options.warn ?? console.warn)(`[opennjob] OPENNJOB_LLM_EFFORT must be one of ${EFFORTS.join(', ')}; using "medium".`);
     }
-    this.model = model || PLACEHOLDER_MODEL_CONFIRM_BEFORE_USE;
+    this.effort = options.effort ?? (envEffort && EFFORTS.includes(envEffort) ? envEffort : 'medium');
     if (options.client) {
       this.client = options.client;
     } else {
@@ -78,12 +109,16 @@ export class AnthropicLlm implements LlmPort {
   }
 
   async complete(request: LlmRequest): Promise<LlmResponse> {
-    const res = await this.client.messages.create({
+    const body: AnthropicRequestBody = {
       model: this.model,
-      max_tokens: request.maxTokens,
+      max_tokens: request.maxTokens + THINKING_HEADROOM_TOKENS,
       system: request.system,
       messages: [{ role: 'user', content: request.prompt }],
-    });
+      output_config: { effort: this.effort },
+      ...(FALLBACK_MODELS.has(this.model) ? { betas: [FALLBACK_BETA], fallbacks: 'default' as const } : {}),
+    };
+    const res = await this.client.beta.messages.create(body);
+    if (res.stop_reason === 'refusal') throw new LlmRefusalError();
     const text = res.content
       .filter((block) => block.type === 'text' && typeof block.text === 'string')
       .map((block) => block.text as string)

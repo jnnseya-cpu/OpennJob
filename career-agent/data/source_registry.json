@@ -1,0 +1,610 @@
+{
+  "_note": "Target sources for the initial role families (construction, grid/energy, infrastructure, mission-critical, francophone Africa). A target is used for discovery only after its board identifier is verified and its terms allow automated reading. This list is not a claim of coverage.",
+  "sources": [
+    {
+      "company": "Turner & Townsend",
+      "sectors": [
+        "construction",
+        "infrastructure",
+        "client-side"
+      ],
+      "markets": [
+        "United Kingdom",
+        "United Arab Emirates",
+        "Saudi Arabia",
+        "Ireland"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": "smartrecruiters",
+      "board": "TurnerTownsend",
+      "board_verified": true,
+      "terms_checked": false,
+      "status": "seeded in boards.json; reported reachable by the handoff smoke test of 6 October 2026, not re-checked by this build; terms not yet recorded"
+    },
+    {
+      "company": "AECOM",
+      "sectors": [
+        "construction",
+        "infrastructure",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "United States",
+        "United Arab Emirates",
+        "Saudi Arabia"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": "smartrecruiters",
+      "board": "AECOM2",
+      "board_verified": true,
+      "terms_checked": false,
+      "status": "seeded in boards.json; reported reachable by the handoff smoke test of 6 October 2026, not re-checked by this build; terms not yet recorded"
+    },
+    {
+      "company": "Egis",
+      "sectors": [
+        "infrastructure",
+        "rail",
+        "energy"
+      ],
+      "markets": [
+        "France",
+        "United Kingdom",
+        "United Arab Emirates",
+        "Côte d'Ivoire",
+        "Senegal"
+      ],
+      "languages": [
+        "fr",
+        "en"
+      ],
+      "platform": "smartrecruiters",
+      "board": "EgisGroup",
+      "board_verified": true,
+      "terms_checked": false,
+      "status": "seeded in boards.json; reported reachable by the handoff smoke test of 6 October 2026, not re-checked by this build; terms not yet recorded"
+    },
+    {
+      "company": "Jacobs",
+      "sectors": [
+        "infrastructure",
+        "energy",
+        "water"
+      ],
+      "markets": [
+        "United Kingdom",
+        "United States",
+        "Australia"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Arcadis",
+      "sectors": [
+        "infrastructure",
+        "client-side"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Netherlands",
+        "United Arab Emirates"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Mott MacDonald",
+      "sectors": [
+        "infrastructure",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "United Arab Emirates",
+        "Saudi Arabia"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "WSP",
+      "sectors": [
+        "infrastructure",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Canada",
+        "United Arab Emirates"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "AtkinsRéalis",
+      "sectors": [
+        "infrastructure",
+        "nuclear",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Canada",
+        "Saudi Arabia"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Balfour Beatty",
+      "sectors": [
+        "construction",
+        "infrastructure",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Kier",
+      "sectors": [
+        "construction",
+        "infrastructure"
+      ],
+      "markets": [
+        "United Kingdom"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Morgan Sindall",
+      "sectors": [
+        "construction",
+        "infrastructure"
+      ],
+      "markets": [
+        "United Kingdom"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Laing O'Rourke",
+      "sectors": [
+        "construction",
+        "mission-critical"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Australia"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Mace",
+      "sectors": [
+        "construction",
+        "data centres",
+        "client-side"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Ireland",
+        "United Arab Emirates"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Skanska",
+      "sectors": [
+        "construction",
+        "infrastructure"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Sweden",
+        "United States"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Costain",
+      "sectors": [
+        "infrastructure",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "National Grid",
+      "sectors": [
+        "grid",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "United States"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "SSE",
+      "sectors": [
+        "grid",
+        "renewables"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Ireland"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Siemens Energy",
+      "sectors": [
+        "grid",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Germany",
+        "Saudi Arabia"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Hitachi Energy",
+      "sectors": [
+        "grid",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Sweden",
+        "Switzerland"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "GE Vernova",
+      "sectors": [
+        "grid",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "France",
+        "United States"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Bechtel",
+      "sectors": [
+        "EPC",
+        "infrastructure",
+        "energy"
+      ],
+      "markets": [
+        "United Kingdom",
+        "Saudi Arabia",
+        "United States"
+      ],
+      "languages": [
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Vinci Construction",
+      "sectors": [
+        "construction",
+        "infrastructure"
+      ],
+      "markets": [
+        "France",
+        "United Kingdom",
+        "Morocco"
+      ],
+      "languages": [
+        "fr",
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Bouygues Construction",
+      "sectors": [
+        "construction",
+        "infrastructure"
+      ],
+      "markets": [
+        "France",
+        "United Kingdom",
+        "Côte d'Ivoire"
+      ],
+      "languages": [
+        "fr",
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Colas",
+      "sectors": [
+        "infrastructure",
+        "rail"
+      ],
+      "markets": [
+        "France",
+        "United Kingdom",
+        "Morocco"
+      ],
+      "languages": [
+        "fr",
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Eiffage",
+      "sectors": [
+        "construction",
+        "energy"
+      ],
+      "markets": [
+        "France",
+        "Senegal"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Equans",
+      "sectors": [
+        "energy",
+        "mission-critical"
+      ],
+      "markets": [
+        "France",
+        "United Kingdom"
+      ],
+      "languages": [
+        "fr",
+        "en"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Rio Tinto",
+      "sectors": [
+        "mining",
+        "infrastructure"
+      ],
+      "markets": [
+        "Australia",
+        "Canada",
+        "Guinea"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Glencore",
+      "sectors": [
+        "mining"
+      ],
+      "markets": [
+        "Democratic Republic of the Congo",
+        "Switzerland"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "Ivanhoe Mines",
+      "sectors": [
+        "mining"
+      ],
+      "markets": [
+        "Democratic Republic of the Congo",
+        "South Africa"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    },
+    {
+      "company": "UNOPS",
+      "sectors": [
+        "infrastructure",
+        "humanitarian"
+      ],
+      "markets": [
+        "International"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ],
+      "platform": null,
+      "board": null,
+      "board_verified": false,
+      "terms_checked": false,
+      "status": "target: board identifier and terms not yet checked"
+    }
+  ]
+}
