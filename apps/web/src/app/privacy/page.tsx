@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       </p>
 
       <h3>Who controls your data</h3>
-      <p>JNN Global, [registered address] is the data controller. Data-protection contact: <a href="mailto:privacy@opennjob.com">privacy@opennjob.com</a>. Registered with the UK Information Commissioner&rsquo;s Office (ICO), registration number <b>C2089949</b>.</p>
+      <p>JNN Global, 30 Fairford Road, Birmingham B44 8DJ, United Kingdom is the data controller. Data-protection contact: <a href="mailto:privacy@opennjob.com">privacy@opennjob.com</a>. Registered with the UK Information Commissioner&rsquo;s Office (ICO), registration number <b>C2089949</b>.</p>
 
       <h3>What we collect</h3>
       <ul>
